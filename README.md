@@ -1,16 +1,80 @@
-# React + Vite
+# HR / ERP System (Frontend)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+واجهة أمامية عربية (RTL) لنظام موارد بشرية متصل بـ REST API.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 18 + TypeScript
+- Vite 6
+- Tailwind CSS
+- Axios + React Router
 
-## React Compiler
+## Quick Start
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev
+```
 
-## Expanding the ESLint configuration
+يفتح التطبيق على `http://localhost:5173` ويوجّه طلبات `/api/*` إلى السيرفر عبر Vite proxy.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Environment
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_BASE_URL` | `/api/v1` | Base path for API calls (proxy in dev) |
+| `VITE_API_PROXY_TARGET` | `http://mag-erp-system.runasp.net` | Upstream server for Vite proxy |
+| `VITE_API_HOST` | `http://mag-erp-system.runasp.net` | Public API host (docs links) |
+
+Configuration is centralized in `src/config/env.ts`.
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Development server with HMR |
+| `npm run build` | Type-check + production build |
+| `npm run typecheck` | TypeScript validation only |
+| `npm run preview` | Preview production build |
+
+## Project Structure
+
+```
+src/
+├── config/           # Environment & app configuration
+├── constants/        # Shared constants (API URLs, defaults)
+├── types/            # Domain TypeScript types
+├── services/
+│   ├── api.ts        # Axios instance + interceptors
+│   ├── authApi.ts    # Authentication
+│   ├── hrApi.ts      # Departments, contracts, attendance, skills
+│   └── employees/    # Employee CRUD (mapper, form builder, service)
+├── hooks/            # Reusable React hooks
+├── components/
+│   ├── ui/           # Shared UI primitives (PageHeader, FormField, …)
+│   ├── employees/    # Employee feature components
+│   ├── departments/  # Department feature components
+│   └── projects/     # Project & invitation management
+├── pages/            # Route-level pages
+├── layouts/          # App shell
+├── context/          # React context (auth)
+└── utils/            # API response helpers
+```
+
+## Architecture Notes
+
+- **Services layer**: HTTP calls live in `services/`. Employee logic is split into `mapper`, `form`, and `service` for clarity.
+- **Types**: Domain models in `src/types/`; `hrApi.ts` re-exports them for backward compatibility.
+- **Forms with files**: Employee create/update uses `FormData`; the Axios interceptor removes `Content-Type` so the browser sets the multipart boundary.
+- **Delete employee**: Backend exposes `POST /employees/{id}/archive` (no HTTP DELETE).
+- **Reference data**: Modals use `useReferenceOptions` to load departments, contract types, and/or employees on demand.
+- **Project management**: Core module at `/projects` with projects, invitations, tasks, and sections. Data persists in `localStorage` until backend APIs are available.
+
+## Authentication
+
+Login stores JWT in `localStorage`. Protected routes require an active session (`ProtectedRoute` + `AuthContext`).
+
+## API Documentation
+
+- Scalar UI: `http://mag-erp-system.runasp.net/scalar/`
+- OpenAPI: `http://mag-erp-system.runasp.net/openapi/v1.json`
