@@ -1,5 +1,5 @@
-/assets/* /assets/:splat 200
-/api/* /api/:splat 200
+/api/* http://mag-erp-system.runasp.net/api/:splat 200
 /* /index.html 200
+
 
 
