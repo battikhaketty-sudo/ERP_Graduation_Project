@@ -5,9 +5,19 @@
 @layer base {
   html {
     @apply antialiased;
+    direction: rtl;
   }
 
   body {
-    @apply bg-hr-bg font-sans text-hr-text;
+    background-color: #F4F6F9;
+    color: #333333;
+    font-family: Tajawal, ui-sans-serif, system-ui, sans-serif;
+    direction: rtl;
+  }
+
+  /* Define missing Tailwind utilities to avoid runtime build crash */
+  .bg-hr-bg {
+    background-color: #F4F6F9;
   }
 }
+
