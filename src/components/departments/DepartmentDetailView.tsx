@@ -123,10 +123,7 @@ export function DepartmentDetailView({
       className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6"
       dir="rtl"
     >
-      <DetailBackButton
-        label="العودة إلى قائمة الأقسام"
-        onClick={onBack}
-      />
+      <DetailBackButton label="العودة إلى قائمة الأقسام" onClick={onBack} />
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
