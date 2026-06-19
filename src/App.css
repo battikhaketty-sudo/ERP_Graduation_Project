@@ -1,0 +1,176 @@
+/* ===== RESET ===== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+body {
+  background: #0a0f1f;
+  color: #e5e7eb;
+}
+
+/* ===== APP LAYOUT ===== */
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 260px;
+  background: #0f172a;
+  padding: 25px;
+  border-right: 1px solid rgba(255,255,255,0.05);
+}
+
+.logo {
+  font-size: 26px;
+  font-weight: 800;
+  color: #60a5fa;
+  margin-bottom: 30px;
+}
+
+.langBtn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: #1e293b;
+  color: white;
+  margin-bottom: 20px;
+  cursor: pointer;
+}
+
+/* nav */
+.navItem {
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #94a3b8;
+  transition: 0.2s;
+}
+
+.navItem:hover {
+  background: #1e293b;
+  color: white;
+}
+
+.navItem.active {
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+}
+
+/* ===== MAIN ===== */
+.main {
+  flex: 1;
+  padding: 30px;
+}
+
+/* HEADER */
+.header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 25px;
+}
+
+.header h1 {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+/* actions */
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.actions input {
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: #111827;
+  color: white;
+  outline: none;
+  width: 220px;
+}
+
+.actions button {
+  padding: 10px 14px;
+  border: none;
+  border-radius: 10px;
+  background: #22c55e;
+  color: white;
+  cursor: pointer;
+}
+
+/* ===== STATS ===== */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.card {
+  background: #111827;
+  padding: 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.card h3 {
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.card p {
+  font-size: 24px;
+  margin-top: 10px;
+  font-weight: bold;
+}
+
+/* ===== TABLE ===== */
+.tableBox {
+  background: #111827;
+  padding: 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: right;
+  padding: 12px;
+  color: #60a5fa;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+tr:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+/* badge */
+.badge {
+  background: #22c55e;
+  color: black;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: bold;
+}
+* {
+  font-family: "Almarai", sans-serif !important;
+}
