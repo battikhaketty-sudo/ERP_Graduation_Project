@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Proxy API to backend server
+[[redirects]]
+  from = "/api/*"
+  to = "https://mag-erp-system.runasp.net/api/:splat"
+  status = 200
+  force = true
+
+# React Router — client-side routes
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -1,0 +1,5 @@
+# Proxy API requests to the backend (avoids CORS in production)
+/api/*  https://mag-erp-system.runasp.net/api/:splat  200!
+
+# SPA fallback — all routes serve index.html for React Router
+/*      /index.html  200
