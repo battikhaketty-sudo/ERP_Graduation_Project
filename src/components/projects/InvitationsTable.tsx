@@ -1,4 +1,6 @@
 import { Pagination } from "../Pagination";
+import { CopyableIdCell } from "../ui/CopyableIdCell";
+import { TableRowIndex } from "../ui/TableRowIndex";
 import { EmptyState } from "../EmptyState";
 import { InvitationStatusBadge } from "./ProjectBadges";
 import type { ProjectInvitation } from "../../types/project";
@@ -39,6 +41,8 @@ export function InvitationsTable({
         <table className="w-full min-w-[920px] table-fixed border-collapse text-sm">
           <thead>
             <tr className="bg-[#F5FAFD] text-hr-muted">
+              <th className="px-3 py-3 text-center font-medium">#</th>
+              <th className="px-3 py-3 text-center font-medium">id</th>
               <th className="px-3 py-3 text-center font-medium">اسم المشروع</th>
               <th className="px-3 py-3 text-center font-medium">رقم المشروع</th>
               <th className="px-3 py-3 text-center font-medium">اسم الموظف</th>
@@ -58,6 +62,12 @@ export function InvitationsTable({
                   index % 2 ? "bg-[#FAFCFE]" : "bg-white",
                 ].join(" ")}
               >
+                <td className="px-3 py-3 text-center text-hr-muted">
+                  <TableRowIndex index={index} page={currentPage} pageSize={PAGE_SIZE} />
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <CopyableIdCell value={invitation.id} />
+                </td>
                 <td className="px-3 py-3 text-center font-medium">{invitation.projectName}</td>
                 <td className="px-3 py-3 text-center">{invitation.projectNumber}</td>
                 <td className="px-3 py-3 text-center">{invitation.employeeName}</td>

@@ -1,5 +1,6 @@
-import { ChevronRight, Loader, UserRound } from "lucide-react";
+import { Loader, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
+import { DetailBackButton } from "../ui/DetailBackButton";
 import type { Employee } from "../../types/employee";
 import { getEmployeeById, updateEmployee } from "../../services/employeeApi";
 import { getContractTypes, getDepartments } from "../../services/hrApi";
@@ -101,15 +102,14 @@ export function EmployeeDetailView({
   );
 
   return (
-    <main className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6" dir="rtl">
-      <button
-        type="button"
+    <main
+      className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6"
+      dir="rtl"
+    >
+      <DetailBackButton
+        label="العودة إلى قائمة الموظفين"
         onClick={onBack}
-        className="mb-4 inline-flex items-center gap-2 text-sm text-hr-muted transition hover:text-hr-text"
-      >
-        <ChevronRight className="size-4" />
-        العودة إلى قائمة الموظفين
-      </button>
+      />
 
       <div className="mb-5">
         <h1 className="text-xl font-bold text-hr-primary sm:text-[22px]">
@@ -165,7 +165,9 @@ export function EmployeeDetailView({
                     <input
                       type="date"
                       value={editData.birthDate || ""}
-                      onChange={(e) => handleChange("birthDate", e.target.value)}
+                      onChange={(e) =>
+                        handleChange("birthDate", e.target.value)
+                      }
                       className={inputClass}
                     />
                   </EmployeeField>
@@ -233,7 +235,11 @@ export function EmployeeDetailView({
                   </EmployeeField>
                   <EmployeeField label="المدير">
                     <input
-                      value={selectedDepartment?.managerName || editData.managerName || "-"}
+                      value={
+                        selectedDepartment?.managerName ||
+                        editData.managerName ||
+                        "-"
+                      }
                       readOnly
                       className={readOnlyClass}
                     />
@@ -275,7 +281,9 @@ export function EmployeeDetailView({
                       onChange={(e) =>
                         setEditData((prev) => ({
                           ...prev,
-                          salary: e.target.value ? Number(e.target.value) : undefined,
+                          salary: e.target.value
+                            ? Number(e.target.value)
+                            : undefined,
                         }))
                       }
                       className={inputClass}
@@ -286,13 +294,17 @@ export function EmployeeDetailView({
                       <input
                         type="date"
                         value={editData.joiningDate || ""}
-                        onChange={(e) => handleChange("joiningDate", e.target.value)}
+                        onChange={(e) =>
+                          handleChange("joiningDate", e.target.value)
+                        }
                         className={inputClass}
                       />
                       <input
                         type="date"
                         value={editData.contractEndDate || ""}
-                        onChange={(e) => handleChange("contractEndDate", e.target.value)}
+                        onChange={(e) =>
+                          handleChange("contractEndDate", e.target.value)
+                        }
                         className={inputClass}
                       />
                     </div>
@@ -305,7 +317,9 @@ export function EmployeeDetailView({
                   <EmployeeField label="الجنسية">
                     <input
                       value={editData.nationality || ""}
-                      onChange={(e) => handleChange("nationality", e.target.value)}
+                      onChange={(e) =>
+                        handleChange("nationality", e.target.value)
+                      }
                       className={inputClass}
                     />
                   </EmployeeField>
@@ -321,7 +335,9 @@ export function EmployeeDetailView({
             </div>
 
             <div className="flex flex-col items-center">
-              <p className="mb-3 self-start text-sm font-medium text-hr-text">صورة الموظف</p>
+              <p className="mb-3 self-start text-sm font-medium text-hr-text">
+                صورة الموظف
+              </p>
               <img
                 src={editData.avatar}
                 alt={editData.name}

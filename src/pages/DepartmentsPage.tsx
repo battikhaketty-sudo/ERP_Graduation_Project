@@ -18,7 +18,8 @@ export function DepartmentsPage() {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
+  const [selectedDepartment, setSelectedDepartment] =
+    useState<Department | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,9 +46,12 @@ export function DepartmentsPage() {
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      fetchDepartments();
-    }, search ? 300 : 0);
+    const timer = window.setTimeout(
+      () => {
+        fetchDepartments();
+      },
+      search ? 300 : 0,
+    );
     return () => window.clearTimeout(timer);
   }, [currentPage, search]);
 

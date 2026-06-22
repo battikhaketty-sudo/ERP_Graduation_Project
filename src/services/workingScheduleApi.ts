@@ -1,4 +1,5 @@
 import api from "./api";
+import { sortNewestFirst } from "../utils/listOrder";
 import {
   assertSuccess,
   unwrapData,
@@ -79,7 +80,9 @@ export const getWorkingSchedules = async (filters: {
   if (name?.trim()) params.Name = name.trim();
 
   const res = await api.get("/working-schedules", { params });
-  const records = unwrapPage<Record<string, unknown>>(res.data).map(normalizeSchedule);
+  const records = sortNewestFirst(
+    unwrapPage<Record<string, unknown>>(res.data).map(normalizeSchedule),
+  );
   const meta = unwrapPagedMeta(res.data);
 
   return { records, meta };
@@ -169,7 +172,7 @@ export const apiTimeToLabel = (value: string) => {
   if (parts.length < 2) return value;
 
   let hours = Number(parts[0]);
-  const minutes = parts[1];
+  const minutes = parts[1]?.slice(0, 2) ?? "00";
   if (Number.isNaN(hours)) return value;
 
   const meridiem = hours >= 12 ? "PM" : "AM";
@@ -178,6 +181,8 @@ export const apiTimeToLabel = (value: string) => {
 
   return `${hours}:${minutes} ${meridiem}`;
 };
+
+export { apiTimeToInputValue } from "../utils/timeInput";
 
 export const labelToApiTime = (value: string) => {
   const trimmed = value.trim();

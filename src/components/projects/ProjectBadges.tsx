@@ -53,3 +53,24 @@ export function PriorityBadge({ priority }: { priority: TaskPriority }) {
     </span>
   );
 }
+
+const memberRoleClasses: Record<string, string> = {
+  "مدير مشروع": "bg-sky-100 text-sky-700",
+  "مطور واجهات": "bg-amber-100 text-amber-700",
+  "محلل نظم": "bg-violet-100 text-violet-700",
+  "مصمم UI/UX": "bg-pink-100 text-pink-700",
+  مراقب: "bg-gray-100 text-gray-600",
+  عضو: "bg-slate-100 text-slate-600",
+};
+
+export function MemberRoleBadge({ role }: { role: string }) {
+  return (
+    <span
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+        memberRoleClasses[role] ?? "bg-slate-100 text-slate-600"
+      }`}
+    >
+      {role}
+    </span>
+  );
+}

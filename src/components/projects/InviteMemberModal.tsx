@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
+import { getAllProjects, PROJECT_MEMBER_ROLES } from "../../services/projects";
 import type { InvitationFormPayload, Project } from "../../types/project";
-import { inputClass, modalCardClass, modalOverlayClass, textareaClass } from "./project-ui";
+import {
+  inputClass,
+  modalCardClass,
+  modalOverlayClass,
+  textareaClass,
+} from "./project-ui";
 
 type InviteMemberModalProps = {
   isOpen: boolean;
@@ -10,8 +16,6 @@ type InviteMemberModalProps = {
   onClose: () => void;
   onSubmit: (payload: InvitationFormPayload) => Promise<void>;
 };
-
-const roleOptions = ["مطور واجهات", "مطور خلفية", "محلل نظم", "مدير مشروع", "مصمم UI/UX"];
 
 export function InviteMemberModal({
   isOpen,
@@ -29,24 +33,32 @@ export function InviteMemberModal({
   const [form, setForm] = useState({
     projectId: "",
     employeeId: "",
-    role: "",
+    role: PROJECT_MEMBER_ROLES[0]?.label ?? "",
     message: "",
     expiresAt: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [projectOptions, setProjectOptions] = useState<Project[]>(projects);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    void getAllProjects()
+      .then(setProjectOptions)
+      .catch(() => setProjectOptions(projects));
+  }, [isOpen, projects]);
 
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
     setForm({
-      projectId: defaultProjectId ?? projects[0]?.id ?? "",
+      projectId: defaultProjectId ?? projectOptions[0]?.id ?? "",
       employeeId: "",
-      role: "",
+      role: PROJECT_MEMBER_ROLES[0]?.label ?? "",
       message: "",
       expiresAt: "",
     });
-  }, [defaultProjectId, isOpen, projects]);
+  }, [defaultProjectId, isOpen, projectOptions]);
 
   if (!isOpen) return null;
 
@@ -67,11 +79,17 @@ export function InviteMemberModal({
         employeeName: employee?.name ?? "",
         role: form.role,
         message: form.message.trim() || undefined,
-        expiresAt: form.expiresAt || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+        expiresAt:
+          form.expiresAt ||
+          new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
       });
       onClose();
     } catch (err) {
-      setError(err && typeof err === "object" && "message" in err ? String(err.message) : "فشل إرسال الدعوة");
+      setError(
+        err && typeof err === "object" && "message" in err
+          ? String(err.message)
+          : "فشل إرسال الدعوة",
+      );
     } finally {
       setSaving(false);
     }
@@ -85,20 +103,25 @@ export function InviteMemberModal({
         </div>
 
         <div className="mb-6 rounded-xl border border-dashed border-[#9FD4EF] bg-[#E9F6FC] px-4 py-3 text-sm text-[#3A6E86]">
-          أدخل بيانات الموظف الذي تريد دعوته للانضمام إلى المشروع. سيتم إرسال رابط الدعوة إليه عبر
-          البريد الإلكتروني.
+          أدخل بيانات الموظف الذي تريد دعوته للانضمام إلى المشروع. سيتم إرسال
+          رابط الدعوة إليه عبر البريد الإلكتروني.
         </div>
 
-        <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
+        <form
+          onSubmit={(event) => void handleSubmit(event)}
+          className="space-y-4"
+        >
           <div>
             <label className="mb-2 block text-sm text-hr-text">المشروع</label>
             <select
               value={form.projectId}
-              onChange={(event) => setForm((prev) => ({ ...prev, projectId: event.target.value }))}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, projectId: event.target.value }))
+              }
               className={inputClass}
             >
               <option value="">اختر المشروع</option>
-              {projects.map((project) => (
+              {projectOptions.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
                 </option>
@@ -107,10 +130,14 @@ export function InviteMemberModal({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-hr-text">رقم الموظف المراد دعوته</label>
+            <label className="mb-2 block text-sm text-hr-text">
+              رقم الموظف المراد دعوته
+            </label>
             <select
               value={form.employeeId}
-              onChange={(event) => setForm((prev) => ({ ...prev, employeeId: event.target.value }))}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, employeeId: event.target.value }))
+              }
               disabled={loading}
               className={inputClass}
             >
@@ -121,44 +148,60 @@ export function InviteMemberModal({
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-hr-muted">يجب أن يكون الموظف موجوداً في النظام</p>
+            <p className="mt-1 text-xs text-hr-muted">
+              يجب أن يكون الموظف موجوداً في النظام
+            </p>
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-hr-text">دور الموظف المراد دعوته</label>
+            <label className="mb-2 block text-sm text-hr-text">
+              دور الموظف المراد دعوته
+            </label>
             <select
               value={form.role}
-              onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value }))}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, role: event.target.value }))
+              }
               className={inputClass}
             >
               <option value="">اختر دور الموظف</option>
-              {roleOptions.map((role) => (
-                <option key={role} value={role}>
-                  {role}
+              {PROJECT_MEMBER_ROLES.map((role) => (
+                <option key={role.id} value={role.label}>
+                  {role.label}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-hr-text">الرسالة (اختياري)</label>
+            <label className="mb-2 block text-sm text-hr-text">
+              الرسالة (اختياري)
+            </label>
             <textarea
               value={form.message}
-              onChange={(event) => setForm((prev) => ({ ...prev, message: event.target.value }))}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, message: event.target.value }))
+              }
               className={textareaClass}
               placeholder="أضف رسالة شخصية للموظف"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-hr-text">تاريخ انتهاء صلاحية الدعوة</label>
+            <label className="mb-2 block text-sm text-hr-text">
+              تاريخ انتهاء صلاحية الدعوة
+            </label>
             <input
               type="date"
               value={form.expiresAt}
-              onChange={(event) => setForm((prev) => ({ ...prev, expiresAt: event.target.value }))}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, expiresAt: event.target.value }))
+              }
               className={inputClass}
             />
-            <p className="mt-1 text-xs text-hr-muted">بعد هذا التاريخ لن تكون الدعوة صالحة</p>
+            <p className="mt-1 text-xs text-hr-muted">
+              بعد هذا التاريخ لن تكون الدعوة صالحة
+            </p>
           </div>
 
           {error && (

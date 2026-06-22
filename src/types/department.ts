@@ -6,6 +6,7 @@ export type Department = {
   parentName?: string;
   managerName?: string;
   description: string;
+  rowNumber?: number;
 };
 
 export type DepartmentFilters = {

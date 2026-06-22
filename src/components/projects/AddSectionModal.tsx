@@ -4,20 +4,25 @@ import { inputClass, modalCardClass, modalOverlayClass } from "./project-ui";
 
 type AddSectionModalProps = {
   isOpen: boolean;
+  section?: { id: string; name: string; displayOrder: number } | null;
   onClose: () => void;
   onSubmit: (payload: SectionFormPayload) => Promise<void>;
 };
 
-export function AddSectionModal({ isOpen, onClose, onSubmit }: AddSectionModalProps) {
+export function AddSectionModal({ isOpen, section, onClose, onSubmit }: AddSectionModalProps) {
   const [form, setForm] = useState({ name: "", displayOrder: "1" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isEditing = Boolean(section);
 
   useEffect(() => {
     if (!isOpen) return;
-    setForm({ name: "", displayOrder: "1" });
+    setForm({
+      name: section?.name ?? "",
+      displayOrder: String(section?.displayOrder ?? 1),
+    });
     setError(null);
-  }, [isOpen]);
+  }, [isOpen, section]);
 
   if (!isOpen) return null;
 
@@ -46,7 +51,9 @@ export function AddSectionModal({ isOpen, onClose, onSubmit }: AddSectionModalPr
     <div className={modalOverlayClass} dir="rtl">
       <div className={`${modalCardClass} max-w-lg`}>
         <div className="mb-6 text-center">
-          <h2 className="text-xl font-bold text-[#1B91C4]">إضافة قسم جديد</h2>
+          <h2 className="text-xl font-bold text-[#1B91C4]">
+            {isEditing ? "تعديل القسم" : "إضافة قسم جديد"}
+          </h2>
         </div>
 
         <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
@@ -88,7 +95,7 @@ export function AddSectionModal({ isOpen, onClose, onSubmit }: AddSectionModalPr
               disabled={saving}
               className="rounded-xl bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
             >
-              {saving ? "جاري الإضافة…" : "إضافة القسم"}
+              {saving ? "جاري الحفظ…" : isEditing ? "حفظ التعديلات" : "إضافة القسم"}
             </button>
             <button
               type="button"

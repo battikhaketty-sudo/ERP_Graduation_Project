@@ -1,15 +1,27 @@
 export {
+  acceptInvitation,
   addInvitation,
   addProject,
   addSection,
   addTask,
+  deleteMember,
   deleteProject,
+  deleteSection,
   deleteTask,
   getAllInvitations,
   getAllProjects,
   getProjectById,
+  getProjectInvitations,
+  getProjectMembers,
+  getProjectSections,
   getProjectStats,
+  getProjects,
   getTaskStats,
+  rejectInvitation,
   updateInvitationStatus,
+  updateMember,
   updateProject,
-} from "./projectStorage";
+  updateSection,
+} from "./project.service";
+
+export { PROJECT_MEMBER_ROLES } from "./project.enums";

@@ -1,12 +1,24 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
-import type { Project, ProjectSection, TaskFormPayload, TaskPriority } from "../../types/project";
-import { inputClass, modalCardClass, modalOverlayClass, PRIORITY_LABELS, textareaClass } from "./project-ui";
+import type {
+  Project,
+  ProjectSection,
+  TaskFormPayload,
+  TaskPriority,
+} from "../../types/project";
+import {
+  inputClass,
+  modalCardClass,
+  modalOverlayClass,
+  PRIORITY_LABELS,
+  textareaClass,
+} from "./project-ui";
 
 type AddTaskModalProps = {
   isOpen: boolean;
   project: Project;
+  defaultSectionId?: string;
   onClose: () => void;
   onSubmit: (payload: TaskFormPayload) => Promise<void>;
 };
@@ -20,7 +32,13 @@ const priorityButtonClass: Record<TaskPriority, string> = {
   urgent: "bg-red-100 text-red-700 border-red-200",
 };
 
-export function AddTaskModal({ isOpen, project, onClose, onSubmit }: AddTaskModalProps) {
+export function AddTaskModal({
+  isOpen,
+  project,
+  defaultSectionId,
+  onClose,
+  onSubmit,
+}: AddTaskModalProps) {
   const { employees, loading } = useReferenceOptions(isOpen, {
     departments: true,
     contractTypes: false,
@@ -35,7 +53,9 @@ export function AddTaskModal({ isOpen, project, onClose, onSubmit }: AddTaskModa
     dueDate: "",
     priority: "medium" as TaskPriority,
   });
-  const [assignees, setAssignees] = useState<Array<{ id: string; name: string }>>([]);
+  const [assignees, setAssignees] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,19 +64,20 @@ export function AddTaskModal({ isOpen, project, onClose, onSubmit }: AddTaskModa
     setForm({
       title: "",
       description: "",
-      departmentId: project.sections[0]?.id ?? "",
+      departmentId: defaultSectionId ?? project.sections[0]?.id ?? "",
       expectedHours: "",
       dueDate: "",
       priority: "medium",
     });
     setAssignees([]);
     setError(null);
-  }, [isOpen, project]);
+  }, [defaultSectionId, isOpen, project]);
 
   if (!isOpen) return null;
 
   const addAssignee = () => {
-    const employee = employees[assignees.length % Math.max(employees.length, 1)];
+    const employee =
+      employees[assignees.length % Math.max(employees.length, 1)];
     if (!employee || assignees.some((item) => item.id === employee.id)) return;
     setAssignees((prev) => [...prev, employee]);
   };
@@ -90,7 +111,11 @@ export function AddTaskModal({ isOpen, project, onClose, onSubmit }: AddTaskModa
       });
       onClose();
     } catch (err) {
-      setError(err && typeof err === "object" && "message" in err ? String(err.message) : "فشل إضافة المهمة");
+      setError(
+        err && typeof err === "object" && "message" in err
+          ? String(err.message)
+          : "فشل إضافة المهمة",
+      );
     } finally {
       setSaving(false);
     }
@@ -103,14 +128,21 @@ export function AddTaskModal({ isOpen, project, onClose, onSubmit }: AddTaskModa
           <h2 className="text-xl font-bold text-[#1B91C4]">إضافة مهمة جديدة</h2>
         </div>
 
-        <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
+        <form
+          onSubmit={(event) => void handleSubmit(event)}
+          className="space-y-4"
+        >
           <h3 className="text-sm font-bold text-hr-text">المعلومات الأساسية</h3>
 
           <div>
-            <label className="mb-2 block text-sm text-hr-text">عنوان المهمة</label>
+            <label className="mb-2 block text-sm text-hr-text">
+              عنوان المهمة
+            </label>
             <input
               value={form.title}
-              onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, title: event.target.value }))
+              }
               className={inputClass}
             />
           </div>
@@ -120,7 +152,10 @@ export function AddTaskModal({ isOpen, project, onClose, onSubmit }: AddTaskModa
             <textarea
               value={form.description}
               onChange={(event) =>
-                setForm((prev) => ({ ...prev, description: event.target.value }))
+                setForm((prev) => ({
+                  ...prev,
+                  description: event.target.value,
+                }))
               }
               className={textareaClass}
             />
@@ -128,11 +163,16 @@ export function AddTaskModal({ isOpen, project, onClose, onSubmit }: AddTaskModa
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm text-hr-text">القسم (المشروع)</label>
+              <label className="mb-2 block text-sm text-hr-text">
+                القسم (المشروع)
+              </label>
               <select
                 value={form.departmentId}
                 onChange={(event) =>
-                  setForm((prev) => ({ ...prev, departmentId: event.target.value }))
+                  setForm((prev) => ({
+                    ...prev,
+                    departmentId: event.target.value,
+                  }))
                 }
                 className={inputClass}
               >
@@ -144,13 +184,18 @@ export function AddTaskModal({ isOpen, project, onClose, onSubmit }: AddTaskModa
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-sm text-hr-text">عدد الساعات المتوقعة</label>
+              <label className="mb-2 block text-sm text-hr-text">
+                عدد الساعات المتوقعة
+              </label>
               <input
                 type="number"
                 min={0}
                 value={form.expectedHours}
                 onChange={(event) =>
-                  setForm((prev) => ({ ...prev, expectedHours: event.target.value }))
+                  setForm((prev) => ({
+                    ...prev,
+                    expectedHours: event.target.value,
+                  }))
                 }
                 className={inputClass}
               />
@@ -158,11 +203,15 @@ export function AddTaskModal({ isOpen, project, onClose, onSubmit }: AddTaskModa
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-hr-text">تاريخ الاستحقاق</label>
+            <label className="mb-2 block text-sm text-hr-text">
+              تاريخ الاستحقاق
+            </label>
             <input
               type="date"
               value={form.dueDate}
-              onChange={(event) => setForm((prev) => ({ ...prev, dueDate: event.target.value }))}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, dueDate: event.target.value }))
+              }
               className={inputClass}
             />
           </div>
@@ -190,7 +239,9 @@ export function AddTaskModal({ isOpen, project, onClose, onSubmit }: AddTaskModa
 
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <label className="text-sm text-hr-text">الأعضاء المسئولون للمهمة</label>
+              <label className="text-sm text-hr-text">
+                الأعضاء المسئولون للمهمة
+              </label>
               <button
                 type="button"
                 onClick={addAssignee}
@@ -219,7 +270,9 @@ export function AddTaskModal({ isOpen, project, onClose, onSubmit }: AddTaskModa
                   </div>
                 ))
               ) : (
-                <p className="px-4 py-6 text-center text-sm text-hr-muted">لم يتم تعيين أعضاء بعد</p>
+                <p className="px-4 py-6 text-center text-sm text-hr-muted">
+                  لم يتم تعيين أعضاء بعد
+                </p>
               )}
             </div>
           </div>

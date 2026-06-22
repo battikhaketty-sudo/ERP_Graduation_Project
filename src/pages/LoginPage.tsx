@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { ROUTES } from "../constants/routes";
 
 export function LoginPage() {
@@ -9,11 +9,14 @@ export function LoginPage() {
   const location = useLocation();
   const from =
     (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ||
-    ROUTES.employees;
+    ROUTES.projects;
+  const sessionExpiredMessage = (
+    location.state as { sessionExpired?: boolean; message?: string } | null
+  )?.message;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(sessionExpiredMessage ?? "");
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {

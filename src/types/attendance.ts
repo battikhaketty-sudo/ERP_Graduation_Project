@@ -9,6 +9,7 @@ export type AttendanceRecord = {
   status: string;
   totalWorkHours?: number;
   requiredWorkHours?: number;
+  rowNumber?: number;
 };
 
 export type AttendanceFilters = {

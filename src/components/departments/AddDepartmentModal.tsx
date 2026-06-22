@@ -13,7 +13,11 @@ type AddDepartmentModalProps = {
   onSubmit: (data: DepartmentFormPayload) => Promise<void>;
 };
 
-export function AddDepartmentModal({ isOpen, onClose, onSubmit }: AddDepartmentModalProps) {
+export function AddDepartmentModal({
+  isOpen,
+  onClose,
+  onSubmit,
+}: AddDepartmentModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -61,7 +65,9 @@ export function AddDepartmentModal({ isOpen, onClose, onSubmit }: AddDepartmentM
   }, [optionsError]);
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -150,7 +156,10 @@ export function AddDepartmentModal({ isOpen, onClose, onSubmit }: AddDepartmentM
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5">
+        <form
+          onSubmit={handleSubmit}
+          className="flex-1 overflow-y-auto px-6 py-5"
+        >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <DepartmentField label="اسم القسم" required>
               <input
@@ -160,7 +169,9 @@ export function AddDepartmentModal({ isOpen, onClose, onSubmit }: AddDepartmentM
                 className={inputClass}
                 placeholder="Front_End"
               />
-              {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+              )}
             </DepartmentField>
 
             <DepartmentField label="القسم الأب">

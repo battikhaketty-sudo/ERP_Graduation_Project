@@ -1,3 +1,8 @@
+export type Skill = {
+  id?: string;
+  name: string;
+};
+
 export type SkillLevel = {
   id?: string;
   name: string;
@@ -7,6 +12,6 @@ export type SkillLevel = {
 export type SkillGroup = {
   id: string;
   name: string;
-  skills: string[];
+  skills: Skill[];
   levels: SkillLevel[];
 };

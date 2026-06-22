@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, CheckCircle, Loader, Plus, Trash2, Upload, X } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Loader,
+  Plus,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { DEFAULT_EMPLOYEE_PASSWORD } from "../../constants/defaults";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
 import type { Employee, WorkRole } from "../../types/employee";
@@ -35,7 +43,11 @@ const WORK_ROLES: Array<{ value: WorkRole; label: string }> = [
 
 const emptySkill = { name: "", type: "", level: "" };
 
-export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModalProps) {
+export function AddEmployeeModal({
+  isOpen,
+  onClose,
+  onSubmit,
+}: AddEmployeeModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>("personal");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -89,7 +101,9 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
   }, [optionsError]);
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -122,7 +136,8 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
     }
     if (!formData.phone.trim()) nextErrors.phone = "رقم الهاتف مطلوب";
     if (!formData.departmentId) nextErrors.departmentId = "يرجى اختيار القسم";
-    if (!formData.contractTypeId) nextErrors.contractTypeId = "يرجى اختيار نوع العقد";
+    if (!formData.contractTypeId)
+      nextErrors.contractTypeId = "يرجى اختيار نوع العقد";
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -162,7 +177,8 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
         wage: formData.salary ? Number(formData.salary) : undefined,
         idNumber: formData.idNumber,
         resumeSkills: formData.skills.filter(
-          (skill) => skill.name.trim() || skill.type.trim() || skill.level.trim(),
+          (skill) =>
+            skill.name.trim() || skill.type.trim() || skill.level.trim(),
         ),
       });
 
@@ -229,7 +245,11 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
           ))}
         </div>
 
-        <form id="add-employee-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5">
+        <form
+          id="add-employee-form"
+          onSubmit={handleSubmit}
+          className="flex-1 overflow-y-auto px-6 py-5"
+        >
           {activeTab === "personal" && (
             <div className="space-y-5">
               <div className="flex items-center gap-2 text-hr-text">
@@ -246,7 +266,9 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
                     className={inputClass}
                   />
                   {errors.fullName && (
-                    <p className="mt-1 text-sm text-red-600">{errors.fullName}</p>
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.fullName}
+                    </p>
                   )}
                 </EmployeeField>
 
@@ -268,7 +290,9 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
                     onChange={handleChange}
                     className={inputClass}
                   />
-                  {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
+                  {errors.email && (
+                    <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                  )}
                 </EmployeeField>
 
                 <EmployeeField label="رقم الهاتف" required>
@@ -278,7 +302,9 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
                     onChange={handleChange}
                     className={inputClass}
                   />
-                  {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone}</p>}
+                  {errors.phone && (
+                    <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
+                  )}
                 </EmployeeField>
 
                 <EmployeeField label="الجنس">
@@ -344,7 +370,9 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
                   ) : (
                     <Upload className="mb-2 size-8 text-hr-muted" />
                   )}
-                  <span className="text-sm text-hr-muted">انقر لرفع الصورة</span>
+                  <span className="text-sm text-hr-muted">
+                    انقر لرفع الصورة
+                  </span>
                 </button>
               </EmployeeField>
             </div>
@@ -376,7 +404,9 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
                     ))}
                   </select>
                   {errors.departmentId && (
-                    <p className="mt-1 text-sm text-red-600">{errors.departmentId}</p>
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.departmentId}
+                    </p>
                   )}
                 </EmployeeField>
 
@@ -424,7 +454,10 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
                         value={skill.name}
                         onChange={(e) => {
                           const next = [...formData.skills];
-                          next[index] = { ...next[index], name: e.target.value };
+                          next[index] = {
+                            ...next[index],
+                            name: e.target.value,
+                          };
                           setFormData((prev) => ({ ...prev, skills: next }));
                         }}
                         className={inputClass}
@@ -435,7 +468,10 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
                         value={skill.type}
                         onChange={(e) => {
                           const next = [...formData.skills];
-                          next[index] = { ...next[index], type: e.target.value };
+                          next[index] = {
+                            ...next[index],
+                            type: e.target.value,
+                          };
                           setFormData((prev) => ({ ...prev, skills: next }));
                         }}
                         className={inputClass}
@@ -446,7 +482,10 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
                         value={skill.level}
                         onChange={(e) => {
                           const next = [...formData.skills];
-                          next[index] = { ...next[index], level: e.target.value };
+                          next[index] = {
+                            ...next[index],
+                            level: e.target.value,
+                          };
                           setFormData((prev) => ({ ...prev, skills: next }));
                         }}
                         className={inputClass}
@@ -513,7 +552,9 @@ export function AddEmployeeModal({ isOpen, onClose, onSubmit }: AddEmployeeModal
                     ))}
                   </select>
                   {errors.contractTypeId && (
-                    <p className="mt-1 text-sm text-red-600">{errors.contractTypeId}</p>
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.contractTypeId}
+                    </p>
                   )}
                 </EmployeeField>
 

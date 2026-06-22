@@ -17,6 +17,17 @@ export const resolveAvatarUrl = (path?: string | null) => {
   return `${env.apiHost}${path}`;
 };
 
+export const isArchivedEmployeeRecord = (item: Record<string, unknown>) => {
+  const archived = item.isArchived ?? item.IsArchived ?? item.archived;
+  if (typeof archived === "boolean") return archived;
+
+  const status = String(item.status ?? item.Status ?? item.employeeStatus ?? "")
+    .trim()
+    .toLowerCase();
+
+  return status === "archived" || status === "inactive";
+};
+
 export const normalizeEmployee = (
   item: Record<string, unknown>,
   isDetail = false,

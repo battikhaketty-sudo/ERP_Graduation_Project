@@ -1,4 +1,4 @@
-import type { ProjectStats, TaskStats } from "../../types/project";
+import type { ProjectDetailStats, ProjectStats, TaskStats } from "../../types/project";
 
 type ProjectStatsCardsProps = {
   stats: ProjectStats;
@@ -12,6 +12,38 @@ export function ProjectStatsCards({ stats }: ProjectStatsCardsProps) {
     {
       label: "عدد الموظفين المكلفين",
       value: stats.assignedEmployeesCount,
+      border: "border-[#FF6B6B]",
+      text: "text-[#E04545]",
+    },
+  ];
+
+  return (
+    <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {cards.map((card) => (
+        <div
+          key={card.label}
+          className={`rounded-2xl border-b-4 bg-white p-4 shadow-card ${card.border}`}
+        >
+          <p className={`text-2xl font-bold ${card.text}`}>{card.value}</p>
+          <p className="mt-1 text-sm text-hr-muted">{card.label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type ProjectDetailStatsCardsProps = {
+  stats: ProjectDetailStats;
+};
+
+export function ProjectDetailStatsCards({ stats }: ProjectDetailStatsCardsProps) {
+  const cards = [
+    { label: "عدد الأعضاء", value: stats.membersCount, border: "border-[#5BB8E8]", text: "text-[#2F80ED]" },
+    { label: "عدد المهمات", value: stats.tasksCount, border: "border-[#7ED321]", text: "text-[#5BA818]" },
+    { label: "عدد الأقسام", value: stats.sectionsCount, border: "border-[#F5A623]", text: "text-[#E8940A]" },
+    {
+      label: "عدد المهام المكتملة",
+      value: stats.completedTasksCount,
       border: "border-[#FF6B6B]",
       text: "text-[#E04545]",
     },

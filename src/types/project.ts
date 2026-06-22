@@ -9,6 +9,17 @@ export type ProjectSection = {
   projectId: string;
   name: string;
   displayOrder: number;
+  createdAt?: string;
+};
+
+export type ProjectMember = {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  role: string;
+  joinedAt: string;
+  leftAt: string;
+  rowNumber?: number;
 };
 
 export type ProjectTask = {
@@ -44,6 +55,17 @@ export type Project = {
   goals: string[];
   sections: ProjectSection[];
   tasks: ProjectTask[];
+  tasksCount?: number;
+  sectionsCount?: number;
+  membersCount?: number;
+  createdAt?: string;
+};
+
+export type ProjectDetailStats = {
+  membersCount: number;
+  tasksCount: number;
+  sectionsCount: number;
+  completedTasksCount: number;
 };
 
 export type ProjectInvitation = {
@@ -112,4 +134,8 @@ export type TaskStats = {
   inProgress: number;
   completed: number;
   late: number;
+};
+
+export type MemberFormPayload = {
+  role: string;
 };

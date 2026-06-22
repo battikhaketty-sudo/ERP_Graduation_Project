@@ -8,6 +8,7 @@ export type Employee = {
   role: WorkRole;
   address: string;
   avatar: string;
+  rowNumber?: number;
   birthDate?: string;
   gender?: "male" | "female";
   genderName?: string;

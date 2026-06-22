@@ -1,5 +1,7 @@
 import { Pencil, Trash2 } from "lucide-react";
 import { Pagination } from "../Pagination";
+import { CopyableIdCell } from "../ui/CopyableIdCell";
+import { TableRowIndex } from "../ui/TableRowIndex";
 import { EmptyState } from "../EmptyState";
 import { ProjectStatusBadge } from "./ProjectBadges";
 import type { Project } from "../../types/project";
@@ -40,6 +42,7 @@ export function ProjectsTable({
           <thead>
             <tr className="bg-[#F5FAFD] text-hr-muted">
               <th className="px-3 py-3 text-center font-medium">#</th>
+              <th className="px-3 py-3 text-center font-medium">id</th>
               <th className="px-3 py-3 text-center font-medium">اسم المشروع</th>
               <th className="px-3 py-3 text-center font-medium">المدير المباشر</th>
               <th className="px-3 py-3 text-center font-medium">الموظف المكلف</th>
@@ -61,7 +64,10 @@ export function ProjectsTable({
                 onClick={() => onProjectClick(project)}
               >
                 <td className="px-3 py-3 text-center text-hr-muted">
-                  {(currentPage - 1) * PAGE_SIZE + index + 1}
+                  <TableRowIndex index={index} page={currentPage} pageSize={PAGE_SIZE} />
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <CopyableIdCell value={project.id} />
                 </td>
                 <td className="truncate px-3 py-3 text-center font-medium text-hr-text">
                   {project.name}

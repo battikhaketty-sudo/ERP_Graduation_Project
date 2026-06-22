@@ -1,12 +1,16 @@
-import { Clock, FileText, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { FileText, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DetailBackButton } from "./ui/DetailBackButton";
+import { useConfirmDialog } from "../context/ConfirmDialogContext";
+import { TimeInput } from "./ui/TimeInput";
+import { CopyableIdCell } from "./ui/CopyableIdCell";
+import { TableRowIndex } from "./ui/TableRowIndex";
 import type { WorkScheduleStatsSnapshot } from "./WorkScheduleStatsBanner";
 import { WorkScheduleStatsBanner } from "./WorkScheduleStatsBanner";
-import { getThrownErrorMessage } from "../utils/apiResponse";
+import { apiTimeToInputValue, timeInputToMinutes } from "../utils/timeInput";
 import {
   addWorkingPeriod,
   addWorkingSchedule,
-  apiTimeToLabel,
   deleteWorkingPeriod,
   deleteWorkingSchedule,
   formatHoursLabel,
@@ -21,7 +25,7 @@ import {
   updateWorkingPeriod,
   updateWorkingSchedule,
 } from "../services/workingScheduleApi";
-
+import { getThrownErrorMessage } from "../utils/apiResponse";
 const resolveEnumId = (value: unknown, options: EnumOption[], fallback = 0) => {
   const numeric = Number(value);
   if (!Number.isNaN(numeric) && options.some((option) => option.id === numeric)) {
@@ -34,10 +38,9 @@ const resolveEnumId = (value: unknown, options: EnumOption[], fallback = 0) => {
 };
 
 const periodHours = (row: PeriodRow) => {
-  const minutes = timeToMinutes(row.timeTo) - timeToMinutes(row.timeFrom);
+  const minutes = timeInputToMinutes(row.timeTo) - timeInputToMinutes(row.timeFrom);
   return Math.max(0, minutes / 60);
 };
-
 const roundHours = (value: number) =>
   Number.isInteger(value) ? value : Number(value.toFixed(1));
 
@@ -78,29 +81,14 @@ type PeriodRow = {
 };
 
 const DEFAULT_PERIOD_NAME = "الفترة الصباحية الأولى";
-const DEFAULT_TIME_FROM = "08:00 AM";
-const DEFAULT_TIME_TO = "04:00 PM";
-
-const timeToMinutes = (value: string) => {
-  const apiTime = labelToApiTime(value);
-  const [hours, minutes] = apiTime.split(":").map((part) => Number(part));
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) return 0;
-  return hours * 60 + minutes;
-};
+const DEFAULT_TIME_FROM = "08:00";
+const DEFAULT_TIME_TO = "16:00";
 
 const validatePeriodRows = (rows: PeriodRow[]) => {
   const activeRows = rows.filter((row) => row.name.trim());
-
   if (!activeRows.length) {
     return "يرجى إضافة فترة عمل واحدة على الأقل.";
   }
-
-  for (const row of activeRows) {
-    if (timeToMinutes(row.timeFrom) >= timeToMinutes(row.timeTo)) {
-      return `وقت النهاية يجب أن يكون بعد وقت البداية في فترة "${row.name.trim()}".`;
-    }
-  }
-
   return null;
 };
 
@@ -129,6 +117,7 @@ const PERIOD_PAGE_SIZE = 5;
 const WEEKLY_DAY_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
 
 export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
+  const { confirm } = useConfirmDialog();
   const [view, setView] = useState<PanelView>("list");
   const [schedules, setSchedules] = useState<WorkingSchedule[]>([]);
   const [focusedScheduleId, setFocusedScheduleId] = useState<string | null>(null);
@@ -266,9 +255,8 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
               name: period.name,
               day: resolveEnumId(period.day, days),
               period: resolveEnumId(period.period, periods, 1),
-              timeFrom: apiTimeToLabel(period.timeFrom),
-              timeTo: apiTimeToLabel(period.timeTo),
-            }))
+              timeFrom: apiTimeToInputValue(period.timeFrom, DEFAULT_TIME_FROM),
+              timeTo: apiTimeToInputValue(period.timeTo, DEFAULT_TIME_TO),            }))
           : buildRowsForWeeklyDays(5, days, periods),
       );
       setPeriodPage(1);
@@ -279,7 +267,10 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
   };
 
   const handleDeleteSchedule = async (id: string) => {
-    if (!window.confirm("هل أنت متأكد من حذف جدول العمل؟")) return;
+    const confirmed = await confirm({
+      message: "هل أنت متأكد من حذف جدول العمل؟",
+    });
+    if (!confirmed) return;
 
     try {
       await deleteWorkingSchedule(id);
@@ -400,14 +391,15 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
   if (view === "form") {
     return (
       <section className="rounded-xl border border-[#B8E4F2] bg-white p-4 shadow-card sm:p-5">
+        <DetailBackButton
+          label="العودة إلى قائمة جداول العمل"
+          onClick={() => setView("list")}
+        />
+
         <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-hr-muted">
-          <button
-            type="button"
-            onClick={() => setView("list")}
-            className="font-medium text-hr-primary transition hover:underline"
-          >
+          <span className="font-medium text-hr-primary">
             إدارة جدول العمل ({totalCount}) جدول
-          </button>
+          </span>
           <span>›</span>
           <span className="text-hr-text">
             {editingId ? "تعديل جدول عمل" : "إضافة جدول عمل جديد"}
@@ -470,7 +462,8 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
             <table className="min-w-[900px] w-full text-sm">
               <thead className="bg-[#F5FAFD] text-hr-muted">
                 <tr>
-                  <th className="px-3 py-3 text-center font-medium">رقم</th>
+                  <th className="px-3 py-3 text-center font-medium">#</th>
+                  <th className="px-3 py-3 text-center font-medium">id</th>
                   <th className="px-3 py-3 text-center font-medium">اسم الفترة</th>
                   <th className="px-3 py-3 text-center font-medium">اليوم</th>
                   <th className="px-3 py-3 text-center font-medium">نوع الفترة</th>
@@ -486,7 +479,14 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                     className={idx % 2 ? "border-t border-hr-border bg-[#F5FAFD]" : "border-t border-hr-border bg-white"}
                   >
                     <td className="px-3 py-3 text-center text-hr-muted">
-                      {(periodPage - 1) * PERIOD_PAGE_SIZE + idx + 1}
+                      <TableRowIndex
+                        index={idx}
+                        page={periodPage}
+                        pageSize={PERIOD_PAGE_SIZE}
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <CopyableIdCell value={row.id ?? row.localId} />
                     </td>
                     <td className="px-3 py-3">
                       <input
@@ -530,32 +530,19 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                       </select>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="relative">
-                        <Clock className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-hr-muted" />
-                        <input
-                          value={row.timeFrom}
-                          onChange={(e) =>
-                            updatePeriodRow(row.localId, { timeFrom: e.target.value })
-                          }
-                          aria-label="من الوقت"
-                          className="h-10 w-full min-w-[130px] rounded-lg border border-hr-border pe-3 ps-10 text-center outline-none focus:border-hr-primary"
-                        />
-                      </div>
+                      <TimeInput
+                        value={row.timeFrom}
+                        onChange={(value) => updatePeriodRow(row.localId, { timeFrom: value })}
+                        aria-label="من الوقت"
+                      />
                     </td>
                     <td className="px-3 py-3">
-                      <div className="relative">
-                        <Clock className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-hr-muted" />
-                        <input
-                          value={row.timeTo}
-                          onChange={(e) =>
-                            updatePeriodRow(row.localId, { timeTo: e.target.value })
-                          }
-                          aria-label="إلى الوقت"
-                          className="h-10 w-full min-w-[130px] rounded-lg border border-hr-border pe-3 ps-10 text-center outline-none focus:border-hr-primary"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-center">
+                      <TimeInput
+                        value={row.timeTo}
+                        onChange={(value) => updatePeriodRow(row.localId, { timeTo: value })}
+                        aria-label="إلى الوقت"
+                      />
+                    </td>                    <td className="px-3 py-3 text-center">
                       <button
                         type="button"
                         onClick={() => removePeriodRow(row.localId)}
@@ -658,7 +645,8 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
           </colgroup>
           <thead className="bg-[#F5FAFD] text-hr-muted">
             <tr>
-              <th className="px-3 py-3 text-center font-medium">رقم</th>
+              <th className="px-3 py-3 text-center font-medium">#</th>
+              <th className="px-3 py-3 text-center font-medium">id</th>
               <th className="px-3 py-3 text-center font-medium">اسم الجدول</th>
               <th className="px-3 py-3 text-center font-medium">عدد الفترات</th>
               <th className="px-3 py-3 text-center font-medium">عدد أيام العمل</th>
@@ -670,7 +658,7 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-hr-muted">
+                <td colSpan={8} className="px-3 py-8 text-center text-hr-muted">
                   جاري التحميل…
                 </td>
               </tr>
@@ -686,7 +674,10 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                   onClick={() => void openEditForm(item)}
                 >
                   <td className="px-3 py-3 text-center text-hr-muted">
-                    {(page - 1) * PAGE_SIZE + idx + 1}
+                    <TableRowIndex index={idx} page={page} pageSize={PAGE_SIZE} />
+                  </td>
+                  <td className="px-3 py-3 text-center">
+                    <CopyableIdCell value={item.id} />
                   </td>
                   <td className="truncate px-3 py-3 text-center font-medium text-hr-text">
                     {item.name}
@@ -730,7 +721,7 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
             )}
             {!loading && !schedules.length && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-hr-muted">
+                <td colSpan={8} className="px-3 py-8 text-center text-hr-muted">
                   لا توجد جداول عمل
                 </td>
               </tr>

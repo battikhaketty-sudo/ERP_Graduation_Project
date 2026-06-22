@@ -1,16 +1,26 @@
 import api from "./api";
-import { setRefreshToken, setToken } from "./tokenStorage";
+import { clearSession, setRefreshToken, setToken } from "./tokenStorage";
 import type { AuthUser, LoginCredentials, LoginResult } from "../types/auth";
 import { assertSuccess, unwrapData } from "../utils/apiResponse";
 
 type LoginData = {
   accessToken?: string;
   refreshToken?: string;
+  AccessToken?: string;
+  RefreshToken?: string;
 };
 
+const readAccessToken = (data: LoginData | null) =>
+  data?.accessToken ?? data?.AccessToken ?? null;
+
+const readRefreshToken = (data: LoginData | null) =>
+  data?.refreshToken ?? data?.RefreshToken ?? null;
+
 export const login = async (credentials: LoginCredentials): Promise<LoginResult> => {
+  clearSession();
+
   const res = await api.post("/auth/login", {
-    email: credentials.email,
+    email: credentials.email.trim(),
     password: credentials.password,
   });
 
@@ -18,7 +28,7 @@ export const login = async (credentials: LoginCredentials): Promise<LoginResult>
   assertSuccess(payload);
 
   const data = unwrapData<LoginData>(payload);
-  const token = data?.accessToken;
+  const token = readAccessToken(data);
 
   if (!token) {
     throw {
@@ -26,8 +36,8 @@ export const login = async (credentials: LoginCredentials): Promise<LoginResult>
     };
   }
 
-  if (data?.refreshToken) {
-    setRefreshToken(data.refreshToken);
+  if (readRefreshToken(data)) {
+    setRefreshToken(readRefreshToken(data)!);
   }
 
   const user: AuthUser = {

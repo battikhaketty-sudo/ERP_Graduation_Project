@@ -8,14 +8,26 @@ import {
   unwrapPage,
   unwrapPagedMeta,
 } from "../../utils/apiResponse";
+import { extractRowNumber } from "../../utils/tableRowNumber";
+import { sortNewestFirst } from "../../utils/listOrder";
 import { buildEmployeeFormData } from "./employee.form";
-import { normalizeEmployee } from "./employee.mapper";
+import { isArchivedEmployeeRecord, normalizeEmployee } from "./employee.mapper";
 
 export const getEmployees = async (page = 1, limit = 10) => {
-  const response = await api.get("/employees", { params: { Page: page, Limit: limit } });
+  const response = await api.get("/employees", {
+    params: { Page: page, Limit: limit },
+  });
   const meta = unwrapPagedMeta(response.data);
-  const data = unwrapPage<Record<string, unknown>>(response.data).map((item) =>
-    normalizeEmployee(item),
+  const data = sortNewestFirst(
+    unwrapPage<Record<string, unknown>>(response.data)
+      .filter((item) => !isArchivedEmployeeRecord(item))
+      .map((item) => {
+        const employee = normalizeEmployee(item);
+        return {
+          ...employee,
+          rowNumber: extractRowNumber(item),
+        };
+      }),
   );
 
   return { data, totalPages: meta.totalPages, totalCount: meta.totalItems };
@@ -28,7 +40,10 @@ export const getEmployeeCount = async () => {
 
 export const getEmployeeById = async (id: string) => {
   const response = await api.get(`/employees/${id}`);
-  return normalizeEmployee(unwrapEntity(response.data) as Record<string, unknown>, true);
+  return normalizeEmployee(
+    unwrapEntity(response.data) as Record<string, unknown>,
+    true,
+  );
 };
 
 export const addEmployee = async (data: Omit<Employee, "id">) => {
@@ -64,30 +79,17 @@ export const addEmployee = async (data: Omit<Employee, "id">) => {
 };
 
 export const updateEmployee = async (id: string, data: Partial<Employee>) => {
-  const formData = await buildEmployeeFormData({ ...data, id } as Omit<Employee, "id">);
+  const formData = await buildEmployeeFormData({ ...data, id } as Omit<
+    Employee,
+    "id"
+  >);
   const response = await api.put(`/employees/${id}`, formData);
   assertSuccess(response.data);
   return getEmployeeById(id);
 };
 
 export const deleteEmployee = async (id: string) => {
-  try {
-    const response = await api.post(`/employees/${id}/archive`);
-    assertMutationSuccess(response.data, "فشل حذف الموظف من السيرفر.");
-    return { success: true as const };
-  } catch (error: unknown) {
-    const message =
-      error && typeof error === "object" && "message" in error
-        ? String((error as { message?: unknown }).message || "")
-        : "";
-
-    if (message.includes("500") || message.includes("entity changes")) {
-      throw {
-        message:
-          "لا يمكن حذف الموظف لوجود بيانات مرتبطة به. يرجى حذف البيانات المرتبطة أولاً.",
-      };
-    }
-
-    throw error;
-  }
+  const response = await api.post(`/employees/${id}/archive`);
+  assertMutationSuccess(response.data, "فشل حذف الموظف من السيرفر.");
+  return { success: true as const };
 };

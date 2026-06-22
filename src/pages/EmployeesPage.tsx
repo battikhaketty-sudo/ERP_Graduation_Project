@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AddEmployeeModal } from "../components/employees/AddEmployeeModal";
 import { EmployeeDetailView } from "../components/employees/EmployeeDetailView";
 import { EmployeePageHeader } from "../components/employees/EmployeePageHeader";
@@ -6,11 +6,14 @@ import { EmployeeTable } from "../components/employees/EmployeeTable";
 import { EmployeeTableSkeleton } from "../components/employees/EmployeeTableSkeleton";
 import { StatusBanner } from "../components/ui/StatusBanner";
 import { DEFAULT_PAGE_SIZE } from "../constants/defaults";
+import { useConfirmDialog } from "../context/ConfirmDialogContext";
 import { addEmployee, deleteEmployee, getEmployees } from "../services/employees";
 import type { Employee } from "../types/employee";
 import { getThrownErrorMessage } from "../utils/apiResponse";
 
 export function EmployeesPage() {
+  const { confirm } = useConfirmDialog();
+  const removedEmployeeIdsRef = useRef(new Set<string>());
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -31,11 +34,15 @@ export function EmployeesPage() {
 
       const result = await getEmployees(currentPage, DEFAULT_PAGE_SIZE);
 
-      setEmployees(result.data || []);
+      const data = (result.data || []).filter(
+        (employee) => !removedEmployeeIdsRef.current.has(employee.id),
+      );
+
+      setEmployees(data);
       setTotalPages(result.totalPages || 1);
       setTotalCount(result.totalCount || result.data?.length || 0);
 
-      return result.data || [];
+      return data;
     } catch (err) {
       if (!options?.silent) {
         setError(getThrownErrorMessage(err, "فشل تحميل الموظفين"));
@@ -93,21 +100,27 @@ export function EmployeesPage() {
   };
 
   const handleDeleteEmployee = async (employee: Employee) => {
-    if (!window.confirm(`هل أنت متأكد من حذف ${employee.name}؟`)) return;
+    const confirmed = await confirm({
+      message: `هل أنت متأكد من حذف ${employee.name}؟`,
+    });
+    if (!confirmed) return;
 
     try {
       await deleteEmployee(employee.id);
       setError(null);
       setSelectedEmployee(null);
+      removedEmployeeIdsRef.current.add(employee.id);
       setSelectedIds((prev) => {
         const next = new Set(prev);
         next.delete(employee.id);
         return next;
       });
 
-      const refreshed = await fetchEmployees({ silent: true });
+      const remaining = employees.filter((item) => item.id !== employee.id);
+      setEmployees(remaining);
+      setTotalCount((count) => Math.max(0, count - 1));
 
-      if (refreshed && refreshed.length === 0 && currentPage > 1) {
+      if (remaining.length === 0 && currentPage > 1) {
         setCurrentPage((page) => page - 1);
       }
     } catch (err) {

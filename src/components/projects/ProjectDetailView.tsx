@@ -1,9 +1,24 @@
-import { useMemo, useState } from "react";
-import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
-import type { Project, ProjectTask, TaskStats } from "../../types/project";
-import { PriorityBadge, ProjectStatusBadge } from "./ProjectBadges";
-import { TaskStatsCards } from "./ProjectStatsCards";
-import { PROJECT_STATUS_LABELS } from "./project-ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { DetailBackButton } from "../ui/DetailBackButton";
+import { buildProjectDetailStats } from "../../services/projects/project.mapper";
+import { getProjectMembers } from "../../services/projects";
+import type {
+  Project,
+  ProjectDetailStats,
+  ProjectMember,
+  ProjectSection,
+  ProjectTask,
+  TaskStats,
+} from "../../types/project";
+import { EditMemberModal } from "./EditMemberModal";
+import { ProjectKanbanBoard } from "./ProjectKanbanBoard";
+import {
+  MEMBERS_PAGE_SIZE,
+  ProjectMembersTable,
+} from "./ProjectMembersTable";
+import { ProjectStatusBadge } from "./ProjectBadges";
+import { ProjectDetailStatsCards } from "./ProjectStatsCards";
+import { SectionDetailView } from "./SectionDetailView";
 
 type ProjectDetailViewProps = {
   project: Project;
@@ -11,12 +26,17 @@ type ProjectDetailViewProps = {
   onBack: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  onAddTask: () => void;
+  onAddTask: (sectionId?: string) => void;
   onAddSection: () => void;
+  onEditSection: (section: ProjectSection) => void;
+  onDeleteSection: (section: ProjectSection) => void;
   onDeleteTask: (task: ProjectTask) => void;
+  onInviteMember: () => void;
+  onEditMember: (member: ProjectMember, role: string) => Promise<void>;
+  onDeleteMember: (member: ProjectMember) => void;
 };
 
-type DetailTab = "general" | "goals" | "tasks";
+type DetailTab = "general" | "members" | "kanban";
 
 export function ProjectDetailView({
   project,
@@ -26,40 +46,86 @@ export function ProjectDetailView({
   onDelete,
   onAddTask,
   onAddSection,
+  onEditSection,
+  onDeleteSection,
   onDeleteTask,
+  onInviteMember,
+  onEditMember,
+  onDeleteMember,
 }: ProjectDetailViewProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>("general");
+  const [selectedSection, setSelectedSection] = useState<ProjectSection | null>(null);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [membersPage, setMembersPage] = useState(1);
+  const [membersTotalPages, setMembersTotalPages] = useState(1);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [editingMember, setEditingMember] = useState<ProjectMember | null>(null);
+
+  const detailStats: ProjectDetailStats = useMemo(
+    () => buildProjectDetailStats(project, taskStats),
+    [project, taskStats],
+  );
+
+  const loadMembers = useCallback(async () => {
+    setMembersLoading(true);
+    try {
+      const result = await getProjectMembers(project.id, {
+        page: membersPage,
+        limit: MEMBERS_PAGE_SIZE,
+      });
+      setMembers(result.records);
+      setMembersTotalPages(result.meta.totalPages || 1);
+    } catch {
+      setMembers([]);
+      setMembersTotalPages(1);
+    } finally {
+      setMembersLoading(false);
+    }
+  }, [membersPage, project.id]);
+
+  useEffect(() => {
+    void loadMembers();
+  }, [loadMembers]);
 
   const tabs: Array<{ key: DetailTab; label: string }> = [
     { key: "general", label: "معلومات عامة" },
-    { key: "goals", label: "الأهداف" },
-    { key: "tasks", label: "قائمة المهام" },
+    { key: "members", label: "الأعضاء" },
+    { key: "kanban", label: "لوحة كانبان" },
   ];
 
-  const sectionCards = useMemo(
-    () =>
-      project.sections.map((section) => ({
-        ...section,
-        tasks: project.tasks.filter((task) => task.sectionId === section.id),
-      })),
-    [project],
-  );
+  if (selectedSection) {
+    return (
+      <SectionDetailView
+        project={project}
+        section={selectedSection}
+        onBack={() => setSelectedSection(null)}
+        onEditSection={() => onEditSection(selectedSection)}
+        onDeleteSection={() => {
+          onDeleteSection(selectedSection);
+          setSelectedSection(null);
+        }}
+        onAddTask={() => onAddTask(selectedSection.id)}
+        onDeleteTask={onDeleteTask}
+      />
+    );
+  }
+
+  const showMembersTable = activeTab === "general" || activeTab === "members";
+  const showKanban = activeTab === "general" || activeTab === "members" || activeTab === "kanban";
 
   return (
     <main className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-hr-primary px-5 py-4 text-white">
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <DetailBackButton
+            variant="onPrimary"
+            label="العودة إلى قائمة المشاريع"
             onClick={onBack}
-            className="rounded-lg bg-white/15 p-2 transition hover:bg-white/25"
-            aria-label="رجوع"
-          >
-            <ArrowRight className="size-5" />
-          </button>
+            className="mb-0"
+          />
           <div>
             <h1 className="text-xl font-bold">{project.name}</h1>
-            <p className="text-sm text-white/80">رقم المشروع: {project.number}</p>
+            <p className="text-sm text-white/80">{project.description || "تفاصيل المشروع"}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -73,178 +139,88 @@ export function ProjectDetailView({
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-xl border border-white px-5 py-2 text-sm font-bold text-white"
+            className="rounded-xl bg-white px-5 py-2 text-sm font-bold text-red-500"
           >
             حذف
           </button>
         </div>
       </div>
 
-      <TaskStatsCards stats={taskStats} />
-
-      <div className="mb-5 flex flex-wrap gap-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            className={[
-              "rounded-xl px-5 py-2.5 text-sm font-bold transition",
-              activeTab === tab.key
-                ? "bg-hr-primary text-white"
-                : "bg-white text-hr-muted shadow-card hover:text-hr-text",
-            ].join(" ")}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="mb-5 overflow-hidden rounded-2xl bg-[#EEF2F6] shadow-card">
+        <div className="flex flex-wrap">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={[
+                "relative px-6 py-3.5 text-sm font-bold transition",
+                activeTab === tab.key ? "text-hr-primary" : "text-hr-muted hover:text-hr-text",
+              ].join(" ")}
+            >
+              {tab.label}
+              {activeTab === tab.key && (
+                <span className="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-hr-primary" />
+              )}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {(activeTab === "general" || activeTab === "members") && (
+        <ProjectDetailStatsCards stats={detailStats} />
+      )}
 
       {activeTab === "general" && (
         <section className="mb-5 rounded-2xl bg-white p-5 shadow-card">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <InfoItem label="الرقم" value={String(project.number)} />
             <InfoItem label="الاسم" value={project.name} />
-            <InfoItem label="التقييم" value={String(project.rating || "—")} />
-            <InfoItem label="الميزانية" value={`${project.budget.toLocaleString("ar-SY")} ريال`} />
-            <InfoItem label="تاريخ البداية" value={project.startDate} />
-            <InfoItem label="تاريخ النهاية" value={project.endDate} />
-            <InfoItem label="المدير" value={project.managerName} />
-            <InfoItem label="الموظف المكلف" value={project.assignedEmployeeName} />
+            <InfoItem label="الوصف" value={project.description || "—"} />
+            <InfoItem label="رقم المدير" value={project.managerId || "—"} />
+            <InfoItem label="اسم المدير" value={project.managerName} />
             <div>
               <p className="mb-1 text-xs text-hr-muted">الحالة</p>
               <ProjectStatusBadge status={project.status} />
             </div>
-            <InfoItem label="الوصف" value={project.description} />
+            <InfoItem label="تاريخ البداية" value={project.startDate || "—"} />
+            <InfoItem label="تاريخ النهاية" value={project.endDate || "—"} />
+            <InfoItem label="تاريخ الإضافة" value={project.createdAt || "—"} />
           </div>
         </section>
       )}
 
-      {activeTab === "goals" && (
-        <section className="mb-5 rounded-2xl bg-white p-5 shadow-card">
-          {project.goals.length ? (
-            <ul className="space-y-3">
-              {project.goals.map((goal) => (
-                <li
-                  key={goal}
-                  className="rounded-xl border border-hr-border bg-[#FAFCFE] px-4 py-3 text-sm"
-                >
-                  {goal}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-center text-sm text-hr-muted">لا توجد أهداف محددة بعد</p>
-          )}
-        </section>
+      {showMembersTable && (
+        <div className="mb-5">
+          <ProjectMembersTable
+            members={members}
+            currentPage={membersPage}
+            totalPages={membersTotalPages}
+            loading={membersLoading}
+            onPageChange={setMembersPage}
+            onEdit={setEditingMember}
+            onDelete={onDeleteMember}
+            showAddButton
+            onAddClick={onInviteMember}
+          />
+        </div>
       )}
 
-      {activeTab === "tasks" && (
-        <section className="rounded-2xl bg-white p-5 shadow-card">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-bold text-hr-text">مهام المشروع</h2>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onAddSection}
-                className="rounded-xl border border-hr-primary px-4 py-2 text-sm font-bold text-hr-primary"
-              >
-                + إضافة قسم
-              </button>
-              <button
-                type="button"
-                onClick={onAddTask}
-                className="inline-flex items-center gap-2 rounded-xl bg-hr-primary px-4 py-2 text-sm font-bold text-white"
-              >
-                <Plus className="size-4" />
-                إضافة مهمة جديدة
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-hr-border">
-            <table className="min-w-[1100px] w-full text-sm">
-              <thead className="bg-[#F5FAFD] text-hr-muted">
-                <tr>
-                  <th className="px-3 py-3 text-center font-medium">رقم المهمة</th>
-                  <th className="px-3 py-3 text-center font-medium">اسم المهمة</th>
-                  <th className="px-3 py-3 text-center font-medium">الأولوية</th>
-                  <th className="px-3 py-3 text-center font-medium">عنوان المهمة</th>
-                  <th className="px-3 py-3 text-center font-medium">وصف المهمة</th>
-                  <th className="px-3 py-3 text-center font-medium">عدد الساعات المتوقعة</th>
-                  <th className="px-3 py-3 text-center font-medium">تاريخ البدء</th>
-                  <th className="px-3 py-3 text-center font-medium">تاريخ الاستحقاق</th>
-                  <th className="px-3 py-3 text-center font-medium">عدد الموظفين</th>
-                  <th className="px-3 py-3 text-center font-medium">إجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {project.tasks.length ? (
-                  project.tasks.map((task, index) => (
-                    <tr key={task.id} className={index % 2 ? "bg-[#FAFCFE]" : "bg-white"}>
-                      <td className="px-3 py-3 text-center">{task.number}</td>
-                      <td className="px-3 py-3 text-center">{task.name}</td>
-                      <td className="px-3 py-3 text-center">
-                        <PriorityBadge priority={task.priority} />
-                      </td>
-                      <td className="px-3 py-3 text-center font-medium">{task.title}</td>
-                      <td className="max-w-[220px] truncate px-3 py-3 text-center text-hr-muted">
-                        {task.description}
-                      </td>
-                      <td className="px-3 py-3 text-center">{task.expectedHours}</td>
-                      <td className="px-3 py-3 text-center">{task.startDate}</td>
-                      <td className="px-3 py-3 text-center">{task.dueDate}</td>
-                      <td className="px-3 py-3 text-center">{task.assigneeNames.length}</td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <button type="button" className="text-amber-500" aria-label="تعديل">
-                            <Pencil className="size-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onDeleteTask(task)}
-                            className="text-red-400"
-                            aria-label="حذف"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={10} className="px-3 py-8 text-center text-hr-muted">
-                      لا توجد مهام في هذا المشروع
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+      {showKanban && (
+        <ProjectKanbanBoard
+          project={project}
+          onAddSection={onAddSection}
+          onAddTask={() => onAddTask()}
+          onSectionClick={setSelectedSection}
+        />
       )}
 
-      <div className="mt-5 grid gap-4 md:grid-cols-3">
-        {sectionCards.map((section) => (
-          <div key={section.id} className="rounded-2xl bg-white p-4 shadow-card">
-            <h3 className="mb-3 text-sm font-bold text-hr-text">{section.name}</h3>
-            <ul className="space-y-2">
-              {section.tasks.slice(0, 3).map((task) => (
-                <li key={task.id} className="rounded-lg bg-[#FAFCFE] px-3 py-2 text-xs text-hr-muted">
-                  {task.title}
-                </li>
-              ))}
-              {!section.tasks.length && (
-                <li className="text-xs text-hr-muted">لا توجد مهام</li>
-              )}
-            </ul>
-          </div>
-        ))}
-      </div>
-
-      <p className="mt-4 text-xs text-hr-muted">
-        الحالة: {PROJECT_STATUS_LABELS[project.status]}
-      </p>
+      <EditMemberModal
+        isOpen={Boolean(editingMember)}
+        member={editingMember}
+        onClose={() => setEditingMember(null)}
+        onSubmit={onEditMember}
+      />
     </main>
   );
 }

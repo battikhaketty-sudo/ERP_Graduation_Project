@@ -9,11 +9,18 @@ export type ApiEnvelope<T> = {
 
 const API_ERROR_MESSAGES: Record<string, string> = {
   "Auth.Error.InvalidEmailOrPassword": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+  "Auth.Error.InvalidEmailOrToken": "انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجدداً.",
+  "Auth.Error.EmailNotVerified": "البريد الإلكتروني غير مفعّل. راجع بريدك لتأكيد الحساب.",
   "SkillType.Error.Name.Duplicate": "اسم نوع المهارة موجود مسبقاً.",
   "ContractType.Error.Name.Duplicate": "اسم نوع العقد موجود مسبقاً.",
   "Department.Error.Name.Duplicate": "اسم القسم موجود مسبقاً.",
   "WorkingSchedule.Error.Name.Duplicate": "اسم جدول العمل موجود مسبقاً.",
   "WorkingSchedule.Error.InvalidPeriod": "فترة العمل غير صالحة. تأكد من الأوقات والأيام.",
+  "Project.Error.Name.Duplicate": "اسم المشروع موجود مسبقاً.",
+  "Project.Error.NotFound": "المشروع غير موجود.",
+  "ProjectInvitation.Error.NotFound": "الدعوة غير موجودة.",
+  "ProjectInvitation.Error.AlreadyResponded": "تم الرد على هذه الدعوة مسبقاً.",
+  "ProjectSection.Error.Name.Duplicate": "اسم القسم موجود مسبقاً في هذا المشروع.",
   "Employee.Error.Email.Duplicate": "البريد الإلكتروني مستخدم مسبقاً.",
   "User.Error.Email.Duplicate":
     "البريد الإلكتروني مستخدم مسبقاً. قد يكون لموظف موجود أو مؤرشف — استخدم بريداً مختلفاً.",
@@ -26,10 +33,12 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   "Employee.Error.Password.Invalid": "كلمة المرور لا تستوفي متطلبات النظام.",
   "Employee.Error.AlreadyArchived": "هذا الموظف مؤرشف مسبقاً.",
   "Employee.Error.NotFound":
-    "معرّف موظف مرجعي غير موجود (غالباً مدير القسم). عيّن مديراً نشطاً للقسم ثم أعد المحاولة.",
+    "حسابك غير مرتبط بسجل موظف. لتسجيل حضور موظف آخر استخدم «إضافة سجل حضور».",
   "Global.Error.InternalServerError": "خطأ داخلي في السيرفر. تحقق من البيانات أو جرّب بريداً مختلفاً.",
   "Global.Error.Deletion.YouCannotDeleteThisEntityBecauseItIsReferencedByOtherEntities":
     "لا يمكن الحذف لأن هذا القسم مرتبط بأقسام فرعية أو بيانات أخرى.",
+  "Attendence.Error.CannotEditApproved":
+    "لا يمكن تعديل سجل حضور مقبول.",
 };
 
 const humanizeErrorCode = (code: string) => {
@@ -199,15 +208,29 @@ export const assertSuccess = (payload: unknown) => {
   }
 };
 
+const normalizeApiPayload = (payload: unknown): unknown => {
+  if (typeof payload === "string") {
+    try {
+      return JSON.parse(payload) as unknown;
+    } catch {
+      return payload;
+    }
+  }
+
+  return payload;
+};
+
 export const assertMutationSuccess = (
   payload: unknown,
   fallback = "فشل تنفيذ العملية.",
 ) => {
-  if (!payload || typeof payload !== "object") {
+  const normalized = normalizeApiPayload(payload);
+
+  if (!normalized || typeof normalized !== "object") {
     throw { message: fallback };
   }
 
-  const envelope = payload as ApiEnvelope<unknown>;
+  const envelope = normalized as ApiEnvelope<unknown>;
   const success = envelope.success ?? envelope.Success;
 
   if (success !== true) {

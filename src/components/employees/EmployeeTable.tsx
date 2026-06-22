@@ -1,7 +1,10 @@
 import { MoreVertical, Trash2 } from "lucide-react";
+import { DEFAULT_PAGE_SIZE } from "../../constants/defaults";
 import type { Employee } from "../../types/employee";
 import { RoleBadge } from "../RoleBadge";
 import { Pagination } from "../Pagination";
+import { CopyableIdCell } from "../ui/CopyableIdCell";
+import { TableRowIndex } from "../ui/TableRowIndex";
 import { EmptyState } from "../EmptyState";
 
 type EmployeeTableProps = {
@@ -39,6 +42,7 @@ export function EmployeeTable({
           <table className="w-full min-w-[920px] table-fixed border-collapse text-sm">
             <colgroup>
               <col className="w-12" />
+              <col className="w-10" />
               <col className="w-20" />
               <col />
               <col className="w-32" />
@@ -58,6 +62,8 @@ export function EmployeeTable({
                     aria-label="تحديد الكل"
                   />
                 </th>
+                <th className="px-3 py-3 text-center font-medium">#</th>
+                <th className="px-3 py-3 text-center font-medium">id</th>
                 <th className="px-3 py-3 text-center font-medium">صورة الموظف</th>
                 <th className="px-3 py-3 text-start font-medium">اسم الموظف</th>
                 <th className="px-3 py-3 text-start font-medium">رقم الموبايل</th>
@@ -72,7 +78,11 @@ export function EmployeeTable({
                 <tr
                   key={employee.id}
                   className={`${index % 2 ? "bg-[#FAFCFE]" : "bg-white"} cursor-pointer transition hover:bg-blue-50/60`}
-                  onClick={() => onEmployeeClick(employee)}
+                  onClick={(event) => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest("button, input, a, label")) return;
+                    onEmployeeClick(employee);
+                  }}
                 >
                   <td className="px-3 py-3 text-center">
                     <input
@@ -83,6 +93,16 @@ export function EmployeeTable({
                       aria-label={`تحديد ${employee.name}`}
                       onClick={(e) => e.stopPropagation()}
                     />
+                  </td>
+                  <td className="px-3 py-3 text-center text-hr-muted">
+                    <TableRowIndex
+                      index={index}
+                      page={currentPage}
+                      pageSize={DEFAULT_PAGE_SIZE}
+                    />
+                  </td>
+                  <td className="px-3 py-3 text-center">
+                    <CopyableIdCell value={employee.id} />
                   </td>
                   <td className="px-3 py-3 text-center">
                     <img
@@ -104,15 +124,18 @@ export function EmployeeTable({
                     <RoleBadge role={employee.role} />
                   </td>
                   <td className="truncate px-3 py-3 text-hr-text">{employee.address}</td>
-                  <td className="px-3 py-3">
+                  <td
+                    className="px-3 py-3"
+                    onClick={(event) => event.stopPropagation()}
+                  >
                     <div className="flex items-center justify-center gap-2">
                       <button
                         type="button"
-                        className="text-red-400 transition hover:text-red-600"
+                        className="rounded-lg p-1.5 text-red-400 transition hover:bg-red-50 hover:text-red-600"
                         aria-label={`حذف ${employee.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteEmployee(employee);
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void onDeleteEmployee(employee);
                         }}
                       >
                         <Trash2 className="size-4" />

@@ -4,12 +4,15 @@ import type { ContractType } from "../types/contract";
 import type { Department, DepartmentFilters } from "../types/department";
 import type { SkillGroup } from "../types/skill";
 import {
+  assertMutationSuccess,
   assertSuccess,
   unwrapData,
   unwrapEntity,
   unwrapPage,
   unwrapPagedMeta,
 } from "../utils/apiResponse";
+import { extractRowNumber } from "../utils/tableRowNumber";
+import { sortNewestFirst } from "../utils/listOrder";
 
 export type { AttendanceFilters, AttendancePayload, AttendanceRecord } from "../types/attendance";
 export type { ContractType } from "../types/contract";
@@ -31,6 +34,7 @@ const formatDateTime = (value?: string | null) => {
 const normalizeContract = (item: Record<string, unknown>): ContractType => ({
   id: String(item.id ?? crypto.randomUUID()),
   name: String(item.name ?? "بدون اسم"),
+  rowNumber: extractRowNumber(item),
 });
 
 const normalizeDepartment = (item: Record<string, unknown>): Department => ({
@@ -41,6 +45,7 @@ const normalizeDepartment = (item: Record<string, unknown>): Department => ({
   parentName: typeof item.parentName === "string" ? item.parentName : undefined,
   managerName: typeof item.managerName === "string" ? item.managerName : undefined,
   description: String(item.description ?? ""),
+  rowNumber: extractRowNumber(item),
 });
 
 const normalizeAttendance = (item: Record<string, unknown>): AttendanceRecord => {
@@ -58,14 +63,19 @@ const normalizeAttendance = (item: Record<string, unknown>): AttendanceRecord =>
     status: String(item.statusName ?? item.status ?? "-"),
     totalWorkHours: Number(item.totalWorkHours ?? 0) || undefined,
     requiredWorkHours: Number(item.requiredWorkHours ?? 8) || undefined,
+    rowNumber: extractRowNumber(item),
   };
 };
 
 const normalizeSkillGroup = (item: Record<string, unknown>): SkillGroup => {
   const skills = Array.isArray(item.skills)
-    ? item.skills.map((skill) =>
-        String((skill as Record<string, unknown>).name ?? skill),
-      )
+    ? item.skills.map((skill) => {
+        const entry = skill as Record<string, unknown>;
+        return {
+          id: typeof entry.id === "string" ? entry.id : undefined,
+          name: String(entry.name ?? skill),
+        };
+      })
     : [];
 
   const levels = Array.isArray(item.skillLevels)
@@ -89,13 +99,24 @@ const normalizeSkillGroup = (item: Record<string, unknown>): SkillGroup => {
 
 export const getContractTypes = async (page = 1, limit = 50) => {
   const res = await api.get("/contract-types", { params: { Page: page, Limit: limit } });
-  return unwrapPage<Record<string, unknown>>(res.data).map(normalizeContract);
+  return sortNewestFirst(
+    unwrapPage<Record<string, unknown>>(res.data).map((item) =>
+      normalizeContract(item),
+    ),
+  );
 };
 
 export const addContractType = async (name: string) => {
   const res = await api.post("/contract-types", { name });
   const data = unwrapEntity<Record<string, unknown>>(res.data);
   return normalizeContract(data);
+};
+
+export const updateContractType = async (id: string, name: string) => {
+  const trimmed = name.trim();
+  const res = await api.put(`/contract-types/${id}`, { name: trimmed });
+  assertSuccess(res.data);
+  return { id, name: trimmed };
 };
 
 export const deleteContractType = async (id: string) => {
@@ -112,10 +133,23 @@ export const getDepartments = async (filters: DepartmentFilters = {}) => {
   if (managerName?.trim()) params.ManagerName = managerName.trim();
 
   const res = await api.get("/departments", { params });
-  const records = unwrapPage<Record<string, unknown>>(res.data).map(normalizeDepartment);
+  const records = sortNewestFirst(
+    unwrapPage<Record<string, unknown>>(res.data).map((item) =>
+      normalizeDepartment(item),
+    ),
+  );
   const meta = unwrapPagedMeta(res.data);
 
-  return { records, meta };
+  return {
+    records,
+    meta: {
+      ...meta,
+      currentPage: page,
+      totalPages: meta.totalItems
+        ? Math.max(1, Math.ceil(meta.totalItems / limit))
+        : meta.totalPages,
+    },
+  };
 };
 
 export const addDepartment = async (data: {
@@ -214,10 +248,23 @@ export const getAttendences = async (filters: AttendanceFilters = {}) => {
   if (status !== undefined) params.Status = status;
 
   const res = await api.get("/attendences", { params });
-  const records = unwrapPage<Record<string, unknown>>(res.data).map(normalizeAttendance);
+  const records = sortNewestFirst(
+    unwrapPage<Record<string, unknown>>(res.data).map((item) =>
+      normalizeAttendance(item),
+    ),
+  );
   const meta = unwrapPagedMeta(res.data);
 
-  return { records, meta };
+  return {
+    records,
+    meta: {
+      ...meta,
+      currentPage: page,
+      totalPages: meta.totalItems
+        ? Math.max(1, Math.ceil(meta.totalItems / limit))
+        : meta.totalPages,
+    },
+  };
 };
 
 export const addAttendence = async (data: {
@@ -253,6 +300,12 @@ export const refuseAttendence = async (id: string) => {
 
 export const checkInAttendence = async () => {
   const res = await api.post("/attendences/check-in");
+  assertMutationSuccess(res.data, "فشل تسجيل الدخول.");
+  return res.data;
+};
+
+export const checkOutAttendence = async (id: string) => {
+  const res = await api.post(`/attendences/${id}/check-out`);
   assertSuccess(res.data);
   return res.data;
 };
@@ -265,7 +318,9 @@ export const deleteAttendence = async (id: string) => {
 
 export const getSkillTypes = async (page = 1, limit = 50) => {
   const res = await api.get("/skill-types", { params: { page, limit } });
-  return unwrapPage<Record<string, unknown>>(res.data).map(normalizeSkillGroup);
+  return sortNewestFirst(
+    unwrapPage<Record<string, unknown>>(res.data).map(normalizeSkillGroup),
+  );
 };
 
 export const addSkillType = async (data: {
@@ -286,4 +341,130 @@ export const deleteSkillType = async (id: string) => {
   const res = await api.delete(`/skill-types/${id}`);
   assertSuccess(res.data);
   return res.data;
+};
+
+export const updateSkillType = async (id: string, name: string) => {
+  const res = await api.put(`/skill-types/${id}`, { name: name.trim() });
+  assertSuccess(res.data);
+};
+
+export const addSkillToType = async (skillTypeId: string, name: string) => {
+  const res = await api.post(`/skill-types/${skillTypeId}/skills`, { name: name.trim() });
+  assertSuccess(res.data);
+};
+
+export const updateSkillInType = async (skillTypeId: string, skillId: string, name: string) => {
+  const res = await api.put(`/skill-types/${skillTypeId}/skills/${skillId}`, {
+    name: name.trim(),
+  });
+  assertSuccess(res.data);
+};
+
+export const deleteSkillFromType = async (skillTypeId: string, skillId: string) => {
+  const res = await api.delete(`/skill-types/${skillTypeId}/skills/${skillId}`);
+  assertSuccess(res.data);
+};
+
+export const addSkillLevelToType = async (
+  skillTypeId: string,
+  data: { name: string; progress: number },
+) => {
+  const res = await api.post(`/skill-types/${skillTypeId}/skill-levels`, data);
+  assertSuccess(res.data);
+};
+
+export const updateSkillLevelInType = async (
+  skillTypeId: string,
+  skillLevelId: string,
+  data: { name: string; progress: number },
+) => {
+  const res = await api.put(`/skill-types/${skillTypeId}/skill-levels/${skillLevelId}`, data);
+  assertSuccess(res.data);
+};
+
+export const deleteSkillLevelFromType = async (skillTypeId: string, skillLevelId: string) => {
+  const res = await api.delete(`/skill-types/${skillTypeId}/skill-levels/${skillLevelId}`);
+  assertSuccess(res.data);
+};
+
+export type SkillDraftPayload = {
+  apiId?: string;
+  name: string;
+};
+
+export type SkillLevelDraftPayload = {
+  apiId?: string;
+  name: string;
+  progress: number;
+};
+
+export const syncSkillTypeDetails = async (
+  skillTypeId: string,
+  original: SkillGroup,
+  nextName: string,
+  nextSkills: SkillDraftPayload[],
+  nextLevels: SkillLevelDraftPayload[],
+) => {
+  if (original.name.trim() !== nextName.trim()) {
+    await updateSkillType(skillTypeId, nextName);
+  }
+
+  const nextSkillIds = new Set(
+    nextSkills.map((skill) => skill.apiId).filter(Boolean) as string[],
+  );
+
+  await Promise.all(
+    original.skills
+      .filter((skill) => skill.id && !nextSkillIds.has(skill.id))
+      .map((skill) => deleteSkillFromType(skillTypeId, skill.id!)),
+  );
+
+  await Promise.all(
+    nextSkills.map(async (skill) => {
+      const trimmedName = skill.name.trim();
+      if (!trimmedName) return;
+
+      if (skill.apiId) {
+        const originalSkill = original.skills.find((item) => item.id === skill.apiId);
+        if (originalSkill && originalSkill.name !== trimmedName) {
+          await updateSkillInType(skillTypeId, skill.apiId, trimmedName);
+        }
+        return;
+      }
+
+      await addSkillToType(skillTypeId, trimmedName);
+    }),
+  );
+
+  const nextLevelIds = new Set(
+    nextLevels.map((level) => level.apiId).filter(Boolean) as string[],
+  );
+
+  await Promise.all(
+    original.levels
+      .filter((level) => level.id && !nextLevelIds.has(level.id))
+      .map((level) => deleteSkillLevelFromType(skillTypeId, level.id!)),
+  );
+
+  await Promise.all(
+    nextLevels.map(async (level) => {
+      const trimmedName = level.name.trim();
+      if (!trimmedName) return;
+
+      const payload = { name: trimmedName, progress: level.progress };
+
+      if (level.apiId) {
+        const originalLevel = original.levels.find((item) => item.id === level.apiId);
+        if (
+          originalLevel &&
+          (originalLevel.name !== trimmedName || originalLevel.progress !== level.progress)
+        ) {
+          await updateSkillLevelInType(skillTypeId, level.apiId, payload);
+        }
+        return;
+      }
+
+      await addSkillLevelToType(skillTypeId, payload);
+    }),
+  );
 };

@@ -25,5 +25,5 @@ export const PRIORITY_LABELS = {
   low: "منخفضة",
   medium: "متوسطة",
   high: "عالية",
-  urgent: "عاجلة",
+  urgent: "حرجة",
 } as const;

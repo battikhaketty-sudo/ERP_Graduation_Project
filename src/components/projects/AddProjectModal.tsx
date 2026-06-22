@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
-import type { Project, ProjectFormPayload, ProjectStatus } from "../../types/project";
+import type {
+  Project,
+  ProjectFormPayload,
+  ProjectStatus,
+} from "../../types/project";
 import {
   inputClass,
   modalCardClass,
@@ -17,9 +21,18 @@ type AddProjectModalProps = {
   onSubmit: (payload: ProjectFormPayload) => Promise<void>;
 };
 
-const statusOptions: ProjectStatus[] = ["not_started", "in_progress", "completed"];
+const statusOptions: ProjectStatus[] = [
+  "not_started",
+  "in_progress",
+  "completed",
+];
 
-export function AddProjectModal({ isOpen, project, onClose, onSubmit }: AddProjectModalProps) {
+export function AddProjectModal({
+  isOpen,
+  project,
+  onClose,
+  onSubmit,
+}: AddProjectModalProps) {
   const isEditing = Boolean(project);
   const { employees, loading } = useReferenceOptions(isOpen, {
     departments: false,
@@ -30,12 +43,10 @@ export function AddProjectModal({ isOpen, project, onClose, onSubmit }: AddProje
   const [form, setForm] = useState({
     name: "",
     managerId: "",
-    assignedEmployeeId: "",
     description: "",
     startDate: "",
     endDate: "",
     status: "in_progress" as ProjectStatus,
-    budget: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,12 +57,10 @@ export function AddProjectModal({ isOpen, project, onClose, onSubmit }: AddProje
     setForm({
       name: project?.name ?? "",
       managerId: project?.managerId ?? "",
-      assignedEmployeeId: project?.assignedEmployeeId ?? "",
       description: project?.description ?? "",
       startDate: project?.startDate ?? "",
       endDate: project?.endDate ?? "",
       status: project?.status ?? "in_progress",
-      budget: project?.budget ? String(project.budget) : "",
     });
   }, [isOpen, project]);
 
@@ -63,13 +72,12 @@ export function AddProjectModal({ isOpen, project, onClose, onSubmit }: AddProje
       setError("اسم المشروع مطلوب");
       return;
     }
-    if (!form.managerId || !form.assignedEmployeeId) {
-      setError("يرجى اختيار المدير والموظف المكلف");
+    if (!form.managerId) {
+      setError("يرجى اختيار مدير المشروع");
       return;
     }
 
     const manager = employees.find((item) => item.id === form.managerId);
-    const assignee = employees.find((item) => item.id === form.assignedEmployeeId);
 
     setSaving(true);
     setError(null);
@@ -78,13 +86,13 @@ export function AddProjectModal({ isOpen, project, onClose, onSubmit }: AddProje
         name: form.name,
         managerId: form.managerId,
         managerName: manager?.name ?? "",
-        assignedEmployeeId: form.assignedEmployeeId,
-        assignedEmployeeName: assignee?.name ?? form.assignedEmployeeId,
+        assignedEmployeeId: project?.assignedEmployeeId ?? "",
+        assignedEmployeeName: project?.assignedEmployeeName ?? "",
         description: form.description,
         startDate: form.startDate,
         endDate: form.endDate,
         status: form.status,
-        budget: Number(form.budget) || 0,
+        budget: project?.budget ?? 0,
       });
       onClose();
     } catch (err) {
@@ -105,19 +113,28 @@ export function AddProjectModal({ isOpen, project, onClose, onSubmit }: AddProje
           <h2 className="text-xl font-bold text-[#1B91C4]">
             {isEditing ? "تعديل المشروع" : "إضافة مشروع جديد"}
           </h2>
-          <button type="button" onClick={onClose} className="text-hr-muted hover:text-hr-text">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-hr-muted hover:text-hr-text"
+          >
             <X className="size-5" />
           </button>
         </div>
 
-        <form onSubmit={(event) => void handleSubmit(event)} className="space-y-6">
+        <form
+          onSubmit={(event) => void handleSubmit(event)}
+          className="space-y-6"
+        >
           <section>
             <h3 className="mb-4 border-b border-hr-border pb-2 text-sm font-bold text-hr-text">
               المعلومات الأساسية
             </h3>
             <div className="space-y-4">
               <div>
-                <label className="mb-2 block text-sm text-hr-text">الرقم (غير قابل للتعديل)</label>
+                <label className="mb-2 block text-sm text-hr-text">
+                  الرقم (غير قابل للتعديل)
+                </label>
                 <input
                   value={project?.number ?? "يتم إنشاء الرقم تلقائياً"}
                   disabled
@@ -131,17 +148,24 @@ export function AddProjectModal({ isOpen, project, onClose, onSubmit }: AddProje
                   </label>
                   <input
                     value={form.name}
-                    onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, name: event.target.value }))
+                    }
                     className={inputClass}
                     placeholder="أدخل اسم المشروع"
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm text-hr-text">رقم المدير</label>
+                  <label className="mb-2 block text-sm text-hr-text">
+                    مدير المشروع <span className="text-red-500">*</span>
+                  </label>
                   <select
                     value={form.managerId}
                     onChange={(event) =>
-                      setForm((prev) => ({ ...prev, managerId: event.target.value }))
+                      setForm((prev) => ({
+                        ...prev,
+                        managerId: event.target.value,
+                      }))
                     }
                     disabled={loading}
                     className={inputClass}
@@ -162,7 +186,10 @@ export function AddProjectModal({ isOpen, project, onClose, onSubmit }: AddProje
                 <textarea
                   value={form.description}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, description: event.target.value }))
+                    setForm((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
                   }
                   className={textareaClass}
                   placeholder="أدخل وصفاً مفصلاً للمشروع"
@@ -172,26 +199,38 @@ export function AddProjectModal({ isOpen, project, onClose, onSubmit }: AddProje
           </section>
 
           <section>
-            <h3 className="mb-4 border-b border-hr-border pb-2 text-sm font-bold text-hr-text">التواريخ</h3>
+            <h3 className="mb-4 border-b border-hr-border pb-2 text-sm font-bold text-hr-text">
+              التواريخ
+            </h3>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-2 block text-sm text-hr-text">تاريخ البداية</label>
+                <label className="mb-2 block text-sm text-hr-text">
+                  تاريخ البداية
+                </label>
                 <input
                   type="date"
                   value={form.startDate}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, startDate: event.target.value }))
+                    setForm((prev) => ({
+                      ...prev,
+                      startDate: event.target.value,
+                    }))
                   }
                   className={inputClass}
                 />
               </div>
               <div>
-                <label className="mb-2 block text-sm text-hr-text">تاريخ النهاية</label>
+                <label className="mb-2 block text-sm text-hr-text">
+                  تاريخ النهاية
+                </label>
                 <input
                   type="date"
                   value={form.endDate}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, endDate: event.target.value }))
+                    setForm((prev) => ({
+                      ...prev,
+                      endDate: event.target.value,
+                    }))
                   }
                   className={inputClass}
                 />
@@ -237,7 +276,11 @@ export function AddProjectModal({ isOpen, project, onClose, onSubmit }: AddProje
               disabled={saving}
               className="rounded-xl bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
             >
-              {saving ? "جاري الحفظ…" : isEditing ? "حفظ التعديلات" : "إضافة المشروع"}
+              {saving
+                ? "جاري الحفظ…"
+                : isEditing
+                  ? "حفظ التعديلات"
+                  : "إضافة المشروع"}
             </button>
             <button
               type="button"

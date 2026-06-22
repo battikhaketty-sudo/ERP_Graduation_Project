@@ -1,5 +1,7 @@
-import { ChevronRight, ImagePlus, Loader, Trash2 } from "lucide-react";
+import { ImagePlus, Loader, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { DetailBackButton } from "../ui/DetailBackButton";
+import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 import { getEmployees } from "../../services/employeeApi";
 import {
   deleteDepartment,
@@ -25,6 +27,7 @@ export function DepartmentDetailView({
   onDelete,
   onUpdate,
 }: DepartmentDetailViewProps) {
+  const { confirm } = useConfirmDialog();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +59,9 @@ export function DepartmentDetailView({
       .finally(() => setLoading(false));
   }, [department.id]);
 
-  const parentOptions = allDepartments.filter((item) => item.id !== editData.id);
+  const parentOptions = allDepartments.filter(
+    (item) => item.id !== editData.id,
+  );
 
   const handleSave = async () => {
     if (!editData.name.trim()) {
@@ -90,14 +95,10 @@ export function DepartmentDetailView({
   };
 
   const handleDelete = async () => {
-    const hasChildren = allDepartments.some(
-      (item) => item.parentId === editData.id,
-    );
-    if (hasChildren) {
-      setError("لا يمكن حذف قسم يحتوي على أقسام فرعية.");
-      return;
-    }
-    if (!window.confirm("هل أنت متأكد من حذف هذا القسم؟")) return;
+    const confirmed = await confirm({
+      message: "هل أنت متأكد من حذف هذا القسم؟",
+    });
+    if (!confirmed) return;
 
     try {
       await deleteDepartment(editData.id);
@@ -118,15 +119,11 @@ export function DepartmentDetailView({
   };
 
   return (
-    <main className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6" dir="rtl">
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-4 inline-flex items-center gap-2 text-sm text-hr-muted transition hover:text-hr-text"
-      >
-        <ChevronRight className="size-4" />
-        العودة إلى قائمة الأقسام
-      </button>
+    <main
+      className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6"
+      dir="rtl"
+    >
+      <DetailBackButton label="العودة إلى قائمة الأقسام" onClick={onBack} />
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -177,7 +174,11 @@ export function DepartmentDetailView({
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DepartmentField label="رقم القسم">
-                <input value={editData.id} readOnly className={inputClass + " bg-[#FAFCFE]"} />
+                <input
+                  value={editData.id}
+                  readOnly
+                  className={inputClass + " bg-[#FAFCFE]"}
+                />
               </DepartmentField>
 
               <DepartmentField label="اسم القسم">
