@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { login } from "./Apis/HrApis";
+import { login } from "./apis/HrApis";
 
 const Login = ({ setIsLoggedIn }) => {
   const [email, setEmail] = useState("");

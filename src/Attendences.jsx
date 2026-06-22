@@ -7,7 +7,7 @@ import {
   deleteAttendence,
   approveAttendence,
   refuseAttendence,
-} from "./Apis/HrApis";
+} from "./apis/HrApis";
 
 const Attendences = () => {
   const [data, setData] = useState([]);
