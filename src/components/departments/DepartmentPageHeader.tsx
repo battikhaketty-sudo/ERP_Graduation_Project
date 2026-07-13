@@ -1,10 +1,14 @@
+import { Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ROUTES } from "../../constants/routes";
+import { useTranslation } from "../../i18n";
 import { PageHeader } from "../ui/PageHeader";
 
 type DepartmentPageHeaderProps = {
   totalCount: number;
   search: string;
   onSearchChange: (value: string) => void;
-  onAddClick: () => void;
+  onExport?: () => void;
   subtitle?: string;
 };
 
@@ -12,20 +16,31 @@ export function DepartmentPageHeader({
   totalCount,
   search,
   onSearchChange,
-  onAddClick,
+  onExport,
   subtitle,
 }: DepartmentPageHeaderProps) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+
   return (
     <PageHeader
-      title="الأقسام"
+      title={t("pages.departments.title")}
       count={totalCount}
-      countLabel="قسم"
-      actionLabel="إضافة قسم جديد"
-      onActionClick={onAddClick}
+      countLabel={t("pages.departments.countLabel")}
       search={search}
       onSearchChange={onSearchChange}
-      searchPlaceholder="ابحث عن قسم محدد"
+      searchPlaceholder={t("pages.departments.searchPlaceholder")}
       subtitle={subtitle}
+      onExport={onExport}
+      actions={[
+        {
+          id: "add-project",
+          label: t("pages.projects.addProject"),
+          icon: Plus,
+          onClick: () => navigate(`${ROUTES.projects}?add=1`),
+          primary: true,
+        },
+      ]}
     />
   );
 }

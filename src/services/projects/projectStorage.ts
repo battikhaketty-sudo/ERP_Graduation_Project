@@ -117,7 +117,7 @@ export const addProject = (payload: ProjectFormPayload): Project => {
   const id = crypto.randomUUID();
   const project: Project = {
     id,
-    number: store.nextProjectNumber,
+    number: id,
     name: payload.name.trim(),
     managerId: payload.managerId,
     managerName: payload.managerName,

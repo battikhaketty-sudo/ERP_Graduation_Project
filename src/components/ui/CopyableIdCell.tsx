@@ -1,6 +1,8 @@
 import { Check, Copy } from "lucide-react";
 import { useState, type MouseEvent } from "react";
+import { useTranslation } from "../../i18n";
 import { truncateMiddle } from "../../utils/truncateMiddle";
+import { iconBtnClass } from "./formStyles";
 
 type CopyableIdCellProps = {
   value?: string;
@@ -9,10 +11,11 @@ type CopyableIdCellProps = {
 };
 
 export function CopyableIdCell({ value = "", head = 3, tail = 3 }: CopyableIdCellProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   if (!value) {
-    return <span className="text-hr-muted">—</span>;
+    return <span className="text-hr-muted">{t("common.dash")}</span>;
   }
 
   const display = truncateMiddle(value, head, tail);
@@ -35,8 +38,8 @@ export function CopyableIdCell({ value = "", head = 3, tail = 3 }: CopyableIdCel
       <button
         type="button"
         onClick={handleCopy}
-        aria-label="نسخ المعرف"
-        className="rounded p-0.5 text-hr-muted transition hover:bg-gray-100 hover:text-hr-primary"
+        aria-label={t("common.copyId")}
+        className={`${iconBtnClass} p-0.5 hover:text-hr-primary`}
       >
         {copied ? <Check className="size-3.5 text-green-600" /> : <Copy className="size-3.5" />}
       </button>

@@ -1,20 +1,28 @@
 import {
-  Briefcase,
-  CheckCircle,
-  FileX,
-  MoreVertical,
   Pencil,
   Plus,
   Search,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { useLocation } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
+import hrEmployeeStatsIllustration from "../assets/images/hr-employee-stats.png";
+import { AttendanceRowActions } from "../components/hr/AttendanceRowActions";
+import { TableAddButton, TableToolbar } from "../components/ui/TableToolbar";
 import { useAuth } from "../hooks/useAuth";
 import { DateTimeInput } from "../components/ui/DateTimeInput";
+import { FormField } from "../components/ui/FormField";
+import {
+  alertErrorClass,
+  cancelBtnClass,
+  readOnlyClass,
+  STATUS_BADGE_CLASS,
+  subtlePanelClass,
+} from "../components/ui/formStyles";
+import { SearchableSelect } from "../components/ui/SearchableSelect";
 import { CopyableIdCell } from "../components/ui/CopyableIdCell";
 import { TableRowIndex } from "../components/ui/TableRowIndex";
+import { useToast } from "../context/ToastContext";
 import { useConfirmDialog } from "../context/ConfirmDialogContext";
 import { prependUniqueRecord } from "../utils/listOrder";
 import {
@@ -51,8 +59,17 @@ import {
 } from "../services/hrApi";
 import { getEmployees, getEmployeeCount } from "../services/employeeApi";
 import { getThrownErrorMessage } from "../utils/apiResponse";
-import { WorkSchedulePanel } from "../components/WorkSchedulePanel";
+import { mapNamedOptions } from "../utils/selectOptions";
+import {
+  WorkSchedulePanel,
+  type WorkScheduleHeaderState,
+} from "../components/WorkSchedulePanel";
+import { WorkScheduleStatsBanner } from "../components/WorkScheduleStatsBanner";
+import { AddProjectButton } from "../components/ui/AddProjectButton";
+import { ModalTitleBar } from "../components/ui/ModalTitleBar";
 import { Pagination } from "../components/Pagination";
+import { usePreferences } from "../context/PreferencesContext";
+import { useTranslation } from "../i18n";
 
 type HrSection =
   | "contracts"
@@ -65,38 +82,18 @@ type HrSection =
   | "editDepartmentModal"
   | "addDepartmentModal";
 
-const sectionButtons: { key: HrSection; label: string }[] = [
-  { key: "contracts", label: "إدارة أنواع العقود" },
-  { key: "workSchedules", label: "إدارة جدول العمل" },
-  { key: "skills", label: "إدارة المهارات" },
-  { key: "departments", label: "إدارة الأقسام" },
-  { key: "attendance", label: "الحضور والدوام" },
-];
-
 const attendanceStatusClasses: Record<string, string> = {
-  مقبول: "bg-[#D4F5E2] text-[#1F8A4C]",
-  مرفوض: "bg-[#FDE2E2] text-[#D64545]",
-  معلق: "bg-[#FFF3CD] text-[#B8860B]",
-  متأخر: "bg-[#D4F0F5] text-[#2A8FA8]",
-  Approved: "bg-[#D4F5E2] text-[#1F8A4C]",
-  Refused: "bg-[#FDE2E2] text-[#D64545]",
-  Pending: "bg-[#FFF3CD] text-[#B8860B]",
-  Late: "bg-[#D4F0F5] text-[#2A8FA8]",
-  حاضر: "bg-[#D4F5E2] text-[#1F8A4C]",
-  إجازة: "bg-[#FDE2E2] text-[#D64545]",
+  مقبول: STATUS_BADGE_CLASS.success,
+  مرفوض: STATUS_BADGE_CLASS.error,
+  معلق: STATUS_BADGE_CLASS.warning,
+  متأخر: STATUS_BADGE_CLASS.info,
+  Approved: STATUS_BADGE_CLASS.success,
+  Refused: STATUS_BADGE_CLASS.error,
+  Pending: STATUS_BADGE_CLASS.warning,
+  Late: STATUS_BADGE_CLASS.info,
+  حاضر: STATUS_BADGE_CLASS.success,
+  إجازة: STATUS_BADGE_CLASS.error,
 };
-
-const attendanceStatusFilterOptions = [
-  { value: "", label: "فلترة حسب حالة الحضور" },
-  { value: "0", label: "معلق" },
-  { value: "1", label: "مقبول" },
-  { value: "2", label: "مرفوض" },
-  { value: "3", label: "متأخر" },
-];
-
-const ATTENDANCE_ACTION_MENU_HEIGHT = 176;
-const ATTENDANCE_ACTION_MENU_WIDTH = 170;
-const VIEWPORT_EDGE_PADDING = 8;
 
 const emptyDepartmentForm = {
   departmentId: "",
@@ -114,11 +111,11 @@ const truncateText = (value: string, max = 80) => {
 };
 
 const skillTypePillClasses = [
-  "bg-pink-100 text-pink-700",
-  "bg-orange-100 text-orange-700",
-  "bg-green-100 text-green-700",
-  "bg-purple-100 text-purple-700",
-  "bg-blue-100 text-blue-700",
+  "bg-pink-100 text-pink-700 dark:bg-pink-950/50 dark:text-pink-300",
+  "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
+  "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
+  "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300",
+  "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
 ];
 
 const skillLevelOrder = ["C2", "C1", "B2", "B1", "A2", "A1"];
@@ -155,12 +152,12 @@ const createSkillLevelDraftRow = (
 
 const getSkillTypeClass = (name: string, index: number) => {
   const map: Record<string, string> = {
-    Marketing: "bg-pink-100 text-pink-700",
-    "Programming languages": "bg-orange-100 text-orange-700",
-    "Programming Lanuages": "bg-orange-100 text-orange-700",
-    "Soft skills": "bg-green-100 text-green-700",
-    IT: "bg-purple-100 text-purple-700",
-    Languages: "bg-blue-100 text-blue-700",
+    Marketing: "bg-pink-100 text-pink-700 dark:bg-pink-950/50 dark:text-pink-300",
+    "Programming languages": "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
+    "Programming Lanuages": "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
+    "Soft skills": "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
+    IT: "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300",
+    Languages: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
   };
   return map[name] || skillTypePillClasses[index % skillTypePillClasses.length];
 };
@@ -205,10 +202,75 @@ const displayHour = (value?: string) => {
   return String(date.getHours());
 };
 
+const attendanceStatusLabelKeys: Record<
+  string,
+  "pending" | "approved" | "refused" | "late" | "present" | "leave"
+> = {
+  مقبول: "approved",
+  Approved: "approved",
+  approved: "approved",
+  مرفوض: "refused",
+  Refused: "refused",
+  refused: "refused",
+  معلق: "pending",
+  Pending: "pending",
+  pending: "pending",
+  متأخر: "late",
+  Late: "late",
+  late: "late",
+  حاضر: "present",
+  Present: "present",
+  present: "present",
+  إجازة: "leave",
+  Leave: "leave",
+  leave: "leave",
+};
+
 export function HrPage() {
   const { confirm } = useConfirmDialog();
+  const { showToast } = useToast();
   const { user } = useAuth();
+  const { dir } = usePreferences();
+  const { t } = useTranslation();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const scheduleDetailParam = searchParams.get("schedule");
+  const showEmployeeStats = !scheduleDetailParam;
+  const [scheduleHeader, setScheduleHeader] = useState<WorkScheduleHeaderState | null>(
+    null,
+  );
+
+  const sectionButtons = useMemo(
+    (): { key: HrSection; label: string }[] => [
+      { key: "contracts", label: t("hr.sections.contracts") },
+      { key: "workSchedules", label: t("hr.sections.workSchedules") },
+      { key: "skills", label: t("hr.sections.skills") },
+      { key: "departments", label: t("hr.sections.departments") },
+      { key: "attendance", label: t("hr.sections.attendance") },
+    ],
+    [t],
+  );
+
+  const attendanceStatusFilterOptions = useMemo(
+    () => [
+      { value: "", label: t("hr.attendance.filterLabel") },
+      { value: "0", label: t("badges.attendanceStatus.pending") },
+      { value: "1", label: t("badges.attendanceStatus.approved") },
+      { value: "2", label: t("badges.attendanceStatus.refused") },
+      { value: "3", label: t("badges.attendanceStatus.late") },
+    ],
+    [t],
+  );
+
+  const getAttendanceStatusLabel = useCallback(
+    (status: string) => {
+      const badgeKey = attendanceStatusLabelKeys[status.trim()];
+      return badgeKey
+        ? t(`badges.attendanceStatus.${badgeKey}`)
+        : status;
+    },
+    [t],
+  );
   const [activeSection, setActiveSection] = useState<HrSection>("contracts");
   const [search, setSearch] = useState("");
   const [contractSearch, setContractSearch] = useState("");
@@ -218,6 +280,7 @@ export function HrPage() {
   const [apiNotice, setApiNotice] = useState<string | null>(null);
 
   const [newContractName, setNewContractName] = useState("");
+  const [inlineContractName, setInlineContractName] = useState("");
   const [contractModal, setContractModal] = useState<"add" | "edit" | null>(
     null,
   );
@@ -255,16 +318,10 @@ export function HrPage() {
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState("");
   const [attendanceDateFrom, setAttendanceDateFrom] = useState("");
   const [attendanceDateTo, setAttendanceDateTo] = useState("");
-  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
-  const [actionMenuPosition, setActionMenuPosition] = useState<{
-    top: number;
-    left: number;
-  } | null>(null);
   const [attendancePage, setAttendancePage] = useState(1);
   const [attendanceTotalPages, setAttendanceTotalPages] = useState(1);
   const [checkInSaving, setCheckInSaving] = useState(false);
-  const actionMenuRef = useRef<HTMLDivElement | null>(null);
-  const actionMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [checkOutSavingId, setCheckOutSavingId] = useState<string | null>(null);
 
   const [contracts, setContracts] = useState<ContractType[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -310,14 +367,10 @@ export function HrPage() {
         setDepartmentTotalPages(meta.totalPages || 1);
         setApiNotice(null);
       } catch (err) {
-        const message =
-          err instanceof Error
-            ? err.message
-            : (err as { message?: string })?.message || "تعذر تحميل الأقسام";
-        setApiNotice(message);
+        setApiNotice(getThrownErrorMessage(err, t("hr.page.loadDepartmentsError")));
       }
     },
-    [departmentSearch],
+    [departmentSearch, t],
   );
 
   const loadAttendance = useCallback(
@@ -342,15 +395,10 @@ export function HrPage() {
         setAttendanceTotalPages(meta.totalPages || 1);
         setApiNotice(null);
       } catch (err) {
-        const message =
-          err instanceof Error
-            ? err.message
-            : (err as { message?: string })?.message ||
-              "تعذر تحميل سجلات الحضور";
-        setApiNotice(message);
+        setApiNotice(getThrownErrorMessage(err, t("hr.page.loadAttendanceError")));
       }
     },
-    [attendanceDateFrom, attendanceDateTo, attendanceSearch, attendanceStatusFilter],
+    [attendanceDateFrom, attendanceDateTo, attendanceSearch, attendanceStatusFilter, t],
   );
 
   const loadEmployeeStats = useCallback(async () => {
@@ -409,18 +457,23 @@ export function HrPage() {
       setApiNotice(null);
       await loadEmployeeStats();
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : (err as { message?: string })?.message ||
-            "تعذر تحميل بيانات HR من API";
-      setApiNotice(message);
+      setApiNotice(getThrownErrorMessage(err, t("hr.page.loadError")));
     }
-  }, [loadEmployeeStats]);
+  }, [loadEmployeeStats, t]);
 
   useEffect(() => {
     loadHrData();
   }, [loadHrData]);
+
+  useEffect(() => {
+    const section = searchParams.get("section");
+    if (section === "skills") {
+      setActiveSection("skills");
+    }
+    if (searchParams.get("schedule")) {
+      setActiveSection("workSchedules");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     void loadEmployeeStats();
@@ -504,74 +557,6 @@ export function HrPage() {
     loadAttendance,
   ]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (actionMenuRef.current?.contains(target)) return;
-      if (actionMenuTriggerRef.current?.contains(target)) return;
-      setOpenActionMenuId(null);
-      setActionMenuPosition(null);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    if (!openActionMenuId) return;
-
-    const closeMenu = () => {
-      setOpenActionMenuId(null);
-      setActionMenuPosition(null);
-    };
-
-    window.addEventListener("scroll", closeMenu, true);
-    window.addEventListener("resize", closeMenu);
-    return () => {
-      window.removeEventListener("scroll", closeMenu, true);
-      window.removeEventListener("resize", closeMenu);
-    };
-  }, [openActionMenuId]);
-
-  const closeActionMenu = () => {
-    setOpenActionMenuId(null);
-    setActionMenuPosition(null);
-  };
-
-  const toggleActionMenu = (id: string, button: HTMLButtonElement) => {
-    if (openActionMenuId === id) {
-      closeActionMenu();
-      return;
-    }
-
-    const rect = button.getBoundingClientRect();
-    actionMenuTriggerRef.current = button;
-
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const openAbove =
-      spaceBelow < ATTENDANCE_ACTION_MENU_HEIGHT + VIEWPORT_EDGE_PADDING;
-
-    let top = openAbove
-      ? rect.top - ATTENDANCE_ACTION_MENU_HEIGHT - 4
-      : rect.bottom + 4;
-    top = Math.max(
-      VIEWPORT_EDGE_PADDING,
-      Math.min(
-        top,
-        window.innerHeight -
-          ATTENDANCE_ACTION_MENU_HEIGHT -
-          VIEWPORT_EDGE_PADDING,
-      ),
-    );
-
-    const left = Math.min(
-      Math.max(VIEWPORT_EDGE_PADDING, rect.right - ATTENDANCE_ACTION_MENU_WIDTH),
-      window.innerWidth - ATTENDANCE_ACTION_MENU_WIDTH - VIEWPORT_EDGE_PADDING,
-    );
-
-    setOpenActionMenuId(id);
-    setActionMenuPosition({ top, left });
-  };
-
   const filteredContracts = useMemo(() => {
     const q = contractSearch.trim().toLowerCase();
     if (!q) return contracts;
@@ -593,8 +578,8 @@ export function HrPage() {
     const confirmed = await confirm({
       message:
         ids.length === 1
-          ? "هل أنت متأكد من حذف نوع العقد؟"
-          : `هل أنت متأكد من حذف ${ids.length} أنواع عقود؟`,
+          ? t("hr.contracts.confirms.delete")
+          : t("hr.contracts.confirms.deleteMany", { count: ids.length }),
     });
     if (!confirmed) return;
 
@@ -604,11 +589,7 @@ export function HrPage() {
       setSelectedContractIds(new Set());
       setApiNotice(null);
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : (err as { message?: string })?.message || "فشل حذف نوع العقد";
-      setApiNotice(message);
+      setApiNotice(getThrownErrorMessage(err, t("hr.contracts.errors.delete")));
     }
   };
 
@@ -690,7 +671,7 @@ export function HrPage() {
       .filter((level) => level.name);
 
     if (!trimmedType) {
-      setApiNotice("يرجى إدخال نوع المهارة.");
+      setApiNotice(t("hr.skills.modals.typeRequired"));
       return;
     }
 
@@ -705,7 +686,7 @@ export function HrPage() {
       setApiNotice(null);
       closeSkillModal();
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, "فشل إضافة المهارة"));
+      setApiNotice(getThrownErrorMessage(err, t("hr.skills.errors.add")));
       return;
     } finally {
       setSkillSaving(false);
@@ -728,7 +709,7 @@ export function HrPage() {
       .filter((level) => level.name);
 
     if (!trimmedType) {
-      setApiNotice("يرجى إدخال نوع المهارة.");
+      setApiNotice(t("hr.skills.modals.typeRequired"));
       return;
     }
 
@@ -746,7 +727,7 @@ export function HrPage() {
       setApiNotice(null);
       closeSkillModal();
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, "فشل تعديل نوع المهارة"));
+      setApiNotice(getThrownErrorMessage(err, t("hr.skills.errors.update")));
     } finally {
       setSkillSaving(false);
     }
@@ -754,7 +735,7 @@ export function HrPage() {
 
   const handleDeleteSkillType = async (id: string) => {
     const confirmed = await confirm({
-      message: "هل أنت متأكد من حذف نوع المهارة؟",
+      message: t("hr.skills.confirms.delete"),
     });
     if (!confirmed) return;
 
@@ -766,7 +747,7 @@ export function HrPage() {
       }
       setApiNotice(null);
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, "فشل حذف نوع المهارة"));
+      setApiNotice(getThrownErrorMessage(err, t("hr.skills.errors.delete")));
     }
   };
 
@@ -778,17 +759,33 @@ export function HrPage() {
       const created = await addContractType(name);
       setContracts((prev) => prependUniqueRecord(prev, created));
       setApiNotice(null);
+      showToast(t("hr.contracts.toasts.addSuccess"), "success");
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : (err as { message?: string })?.message || "فشل إضافة نوع العقد";
+      const message = getThrownErrorMessage(err, t("hr.contracts.errors.add"));
       setApiNotice(message);
+      showToast(message, "error");
       return;
     }
 
     setNewContractName("");
     setContractModal(null);
+  };
+
+  const handleQuickAddContract = async () => {
+    const name = inlineContractName.trim();
+    if (!name) return;
+
+    try {
+      const created = await addContractType(name);
+      setContracts((prev) => prependUniqueRecord(prev, created));
+      setInlineContractName("");
+      setApiNotice(null);
+      showToast(t("hr.contracts.toasts.quickAddSuccess", { name: created.name }), "success");
+    } catch (err) {
+      const message = getThrownErrorMessage(err, t("hr.contracts.errors.add"));
+      setApiNotice(message);
+      showToast(message, "error");
+    }
   };
 
   const openEditContract = (contract: ContractType) => {
@@ -817,7 +814,7 @@ export function HrPage() {
       );
       setApiNotice(null);
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, "فشل تحديث نوع العقد"));
+      setApiNotice(getThrownErrorMessage(err, t("hr.contracts.errors.update")));
       return;
     }
 
@@ -830,12 +827,12 @@ export function HrPage() {
     const form = mode === "add" ? addDepartmentForm : departmentForm;
 
     if (!form.name.trim()) {
-      setApiNotice("يرجى إدخال اسم القسم.");
+      setApiNotice(t("hr.departmentsSection.errors.nameRequired"));
       return;
     }
 
     if (!form.managerId.trim()) {
-      setApiNotice("يرجى اختيار مدير القسم.");
+      setApiNotice(t("hr.departmentsSection.errors.managerRequired"));
       return;
     }
 
@@ -871,7 +868,9 @@ export function HrPage() {
       setApiNotice(
         getThrownErrorMessage(
           err,
-          mode === "edit" ? "فشل تحديث القسم" : "فشل إضافة القسم",
+          mode === "edit"
+            ? t("hr.departmentsSection.errors.save")
+            : t("hr.departmentsSection.errors.add"),
         ),
       );
     } finally {
@@ -885,8 +884,8 @@ export function HrPage() {
     const confirmed = await confirm({
       message:
         ids.length === 1
-          ? "هل أنت متأكد من حذف هذا القسم؟"
-          : `هل أنت متأكد من حذف ${ids.length} أقسام؟`,
+          ? t("hr.departmentsSection.confirms.delete")
+          : t("hr.departmentsSection.confirms.deleteMany", { count: ids.length }),
     });
     if (!confirmed) return;
 
@@ -898,7 +897,7 @@ export function HrPage() {
       setApiNotice(null);
       await loadDepartments(departmentPage);
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, "فشل حذف القسم"));
+      setApiNotice(getThrownErrorMessage(err, t("hr.departmentsSection.errors.delete")));
     }
   };
 
@@ -932,11 +931,7 @@ export function HrPage() {
       await loadAttendance(1);
       await loadEmployeeStats();
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : (err as { message?: string })?.message || "فشل إضافة سجل الحضور";
-      setApiNotice(message);
+      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.add")));
       return;
     }
 
@@ -988,22 +983,26 @@ export function HrPage() {
       setApiNotice(null);
       await refreshAttendanceAfterMutation();
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, "فشل تسجيل الدخول"));
+      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.checkIn")));
     } finally {
       setCheckInSaving(false);
     }
   };
 
   const handleCheckOutRecord = async (record: AttendanceRecord) => {
-    if (!record.checkInRaw || record.checkOutRaw) return;
+    if (!record.checkInRaw || record.checkOutRaw || checkOutSavingId) return;
 
+    setCheckOutSavingId(record.id);
     try {
       await checkOutAttendence(record.id);
       setApiNotice(null);
+      showToast(t("hr.attendance.toasts.checkOutSuccess"), "success");
       await loadAttendance(attendancePage);
       await loadEmployeeStats();
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, "فشل تسجيل الخروج"));
+      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.checkOut")));
+    } finally {
+      setCheckOutSavingId(null);
     }
   };
 
@@ -1013,55 +1012,43 @@ export function HrPage() {
     const confirmed = await confirm({
       message:
         ids.length === 1
-          ? "هل أنت متأكد من حذف سجل الحضور؟"
-          : `هل أنت متأكد من حذف ${ids.length} سجلات حضور؟`,
+          ? t("hr.attendance.confirms.delete")
+          : t("hr.attendance.confirms.deleteMany", { count: ids.length }),
     });
     if (!confirmed) return;
 
     try {
       await Promise.all(ids.map((id) => deleteAttendence(id)));
-      setOpenActionMenuId(null);
       setApiNotice(null);
+      showToast(t("hr.attendance.toasts.deleteSuccess"), "success");
       await loadAttendance(attendancePage);
       await loadEmployeeStats();
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : (err as { message?: string })?.message || "فشل حذف سجل الحضور";
-      setApiNotice(message);
+      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.delete")));
     }
   };
 
   const handleApproveAttendance = async (id: string) => {
     try {
       await approveAttendence(id);
-      setOpenActionMenuId(null);
       setApiNotice(null);
+      showToast(t("hr.attendance.toasts.approveSuccess"), "success");
       await loadAttendance(attendancePage);
       await loadEmployeeStats();
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : (err as { message?: string })?.message || "فشل قبول السجل";
-      setApiNotice(message);
+      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.approve")));
     }
   };
 
   const handleRefuseAttendance = async (id: string) => {
     try {
       await refuseAttendence(id);
-      setOpenActionMenuId(null);
       setApiNotice(null);
+      showToast(t("hr.attendance.toasts.refuseSuccess"), "success");
       await loadAttendance(attendancePage);
       await loadEmployeeStats();
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : (err as { message?: string })?.message || "فشل رفض السجل";
-      setApiNotice(message);
+      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.refuse")));
     }
   };
 
@@ -1072,7 +1059,6 @@ export function HrPage() {
       checkInAt: isoToDateTimeInput(record.checkInRaw),
       checkOutAt: isoToDateTimeInput(record.checkOutRaw),
     });
-    setOpenActionMenuId(null);
     setActiveSection("editAttendanceModal");
   };
 
@@ -1092,11 +1078,7 @@ export function HrPage() {
       await loadAttendance(attendancePage);
       await loadEmployeeStats();
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : (err as { message?: string })?.message || "فشل تعديل سجل الحضور";
-      setApiNotice(message);
+      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.update")));
       return;
     }
 
@@ -1119,31 +1101,34 @@ export function HrPage() {
   };
 
   const renderContracts = () => (
-    <section className="rounded-xl border border-[#B8E4F2] bg-white p-4 shadow-card sm:p-5">
-      <div className="mb-4 flex justify-end">
-        <div className="relative w-full max-w-xs">
+    <section className="rounded-xl border border-hr-border bg-hr-surface p-4 shadow-card sm:p-5">
+      <TableToolbar
+        addLabel={t("hr.contracts.addLabel")}
+        onAddClick={() => setContractModal("add")}
+      >
+        <div className="relative w-full max-w-xs sm:min-w-[240px]">
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-hr-muted" />
           <input
             value={contractSearch}
             onChange={(e) => setContractSearch(e.target.value)}
-            placeholder="ابحث عن اسم عقد معين"
-            className="h-9 w-full rounded-lg border border-hr-border bg-white pe-3 ps-9 text-sm outline-none focus:border-hr-primary"
+            placeholder={t("hr.contracts.searchPlaceholder")}
+            className="h-9 w-full rounded-lg border border-hr-border bg-hr-surface pe-3 ps-9 text-sm outline-none focus:border-hr-primary"
           />
         </div>
-      </div>
+      </TableToolbar>
 
       <div className="overflow-hidden rounded-lg border border-hr-border">
         <table className="w-full table-fixed text-sm">
-          <thead className="bg-[#F5FAFD] text-hr-muted">
+          <thead className="bg-hr-table-head text-hr-muted">
             <tr>
-              <th className="px-3 py-3 text-center font-medium">تحديد</th>
-              <th className="px-3 py-3 text-center font-medium">#</th>
-              <th className="px-3 py-3 text-center font-medium">id</th>
-              <th className="px-3 py-3 text-start font-medium">اسم العقد</th>
+              <th className="px-3 py-3 text-center font-medium">{t("table.columns.select")}</th>
+              <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>
+              <th className="px-3 py-3 text-center font-medium">{t("table.columns.id")}</th>
+              <th className="px-3 py-3 text-start font-medium">{t("hr.contracts.columns.name")}</th>
               <th className="px-3 py-3 text-center font-medium">
                 <button
                   type="button"
-                  aria-label="حذف المحدد"
+                  aria-label={t("common.delete")}
                   onClick={() =>
                     handleDeleteContracts([...selectedContractIds])
                   }
@@ -1156,10 +1141,35 @@ export function HrPage() {
             </tr>
           </thead>
           <tbody>
+            <tr className="hr-table-row-highlight">
+              <td className="px-3 py-2" colSpan={3} />
+              <td className="px-3 py-2">
+                <input
+                  value={inlineContractName}
+                  onChange={(event) => setInlineContractName(event.target.value)}
+                  placeholder={t("hr.contracts.quickAddPlaceholder")}
+                  className="h-9 w-full rounded-lg border border-amber-200 bg-hr-surface px-3 text-sm outline-none focus:border-hr-primary"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void handleQuickAddContract();
+                  }}
+                />
+              </td>
+              <td className="px-3 py-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => void handleQuickAddContract()}
+                  disabled={!inlineContractName.trim()}
+                  className="inline-flex items-center gap-1 rounded-lg bg-hr-primary px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+                >
+                  <Plus className="size-3.5" />
+                  {t("common.add")}
+                </button>
+              </td>
+            </tr>
             {filteredContracts.map((item, idx) => (
               <tr
                 key={item.id}
-                className={idx % 2 ? "bg-[#F5FAFD]" : "bg-white"}
+                className={idx % 2 ? "bg-hr-table-head" : "bg-hr-surface"}
               >
                 <td className="px-3 py-3 text-center">
                   <input
@@ -1180,17 +1190,17 @@ export function HrPage() {
                   <div className="flex items-center justify-center gap-3">
                     <button
                       type="button"
-                      aria-label="تعديل"
+                      aria-label={t("common.edit")}
                       onClick={() => openEditContract(item)}
-                      className="rounded p-1 text-amber-500 transition hover:bg-amber-50 hover:text-amber-600"
+                      className="rounded p-1 text-amber-500 transition hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/40"
                     >
                       <Pencil className="size-4" />
                     </button>
                     <button
                       type="button"
-                      aria-label="حذف"
+                      aria-label={t("common.delete")}
                       onClick={() => handleDeleteContracts([item.id])}
-                      className="rounded p-1 text-red-400 transition hover:bg-red-50"
+                      className="rounded p-1 text-red-400 transition hover:bg-red-50 dark:hover:bg-red-950/40"
                     >
                       <Trash2 className="size-4" />
                     </button>
@@ -1201,33 +1211,17 @@ export function HrPage() {
           </tbody>
         </table>
       </div>
-
-      <div className="mt-4 flex justify-start">
-        <button
-          type="button"
-          onClick={() => setContractModal("add")}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#DDF1FA] px-4 py-2 text-sm font-medium text-[#3D7EA6] transition hover:bg-[#C8E9F7]"
-        >
-          <Plus className="size-4" />
-          إضافة نوع عقد جديد
-        </button>
-      </div>
     </section>
   );
 
-  const renderAttendance = () => {
-    const openAttendanceRecord = attendance.find(
-      (record) => record.id === openActionMenuId,
-    );
-
-    return (
+  const renderAttendance = () => (
     <>
       <div className="mb-3 flex flex-wrap items-center gap-2 sm:gap-3">
           <select
             value={attendanceStatusFilter}
             onChange={(e) => setAttendanceStatusFilter(e.target.value)}
-            aria-label="فلترة حسب حالة الحضور"
-            className="h-9 min-w-[190px] rounded-lg border border-hr-border bg-white px-3 text-sm text-hr-text outline-none focus:border-hr-primary"
+            aria-label={t("hr.attendance.filterLabel")}
+            className="h-9 min-w-[190px] rounded-lg border border-hr-border bg-hr-surface px-3 text-sm text-hr-text outline-none focus:border-hr-primary"
           >
             {attendanceStatusFilterOptions.map((option) => (
               <option key={option.value || "all"} value={option.value}>
@@ -1241,87 +1235,87 @@ export function HrPage() {
             <input
               value={attendanceSearch}
               onChange={(e) => setAttendanceSearch(e.target.value)}
-              placeholder="ابحث عن اسم موظف"
-              className="h-9 w-full rounded-lg border border-hr-border bg-white pe-3 ps-9 text-sm outline-none focus:border-hr-primary"
+              placeholder={t("hr.attendance.searchPlaceholder")}
+              className="h-9 w-full rounded-lg border border-hr-border bg-hr-surface pe-3 ps-9 text-sm outline-none focus:border-hr-primary"
             />
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="text-sm text-hr-muted">من</span>
+            <span className="text-sm text-hr-muted">{t("common.from")}</span>
             <input
               type="date"
               value={attendanceDateFrom}
               onChange={(e) => setAttendanceDateFrom(e.target.value)}
-              className="h-9 rounded-lg border border-hr-border bg-white px-2 text-sm outline-none focus:border-hr-primary"
-              aria-label="من"
+              className="h-9 rounded-lg border border-hr-border bg-hr-surface px-2 text-sm outline-none focus:border-hr-primary"
+              aria-label={t("common.from")}
             />
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="text-sm text-hr-muted">إلى</span>
+            <span className="text-sm text-hr-muted">{t("common.to")}</span>
             <input
               type="date"
               value={attendanceDateTo}
               onChange={(e) => setAttendanceDateTo(e.target.value)}
-              className="h-9 rounded-lg border border-hr-border bg-white px-2 text-sm outline-none focus:border-hr-primary"
-              aria-label="إلى"
+              className="h-9 rounded-lg border border-hr-border bg-hr-surface px-2 text-sm outline-none focus:border-hr-primary"
+              aria-label={t("common.to")}
             />
           </div>
       </div>
 
-    <section className="overflow-hidden rounded-xl border border-[#B8E4F2] bg-white shadow-card">
-        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-hr-border px-4 py-3 sm:px-5">
+    <section className="overflow-hidden rounded-xl border border-hr-border bg-hr-surface shadow-card">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 border-b border-hr-border px-4 py-3 sm:px-5">
           <button
             type="button"
             onClick={() => setActiveSection("addAttendanceModal")}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#DDF1FA] px-4 text-sm font-medium text-[#3D7EA6] transition hover:bg-[#C8E9F7]"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-hr-accent-bg px-4 text-sm font-medium text-hr-accent-text transition hover:opacity-90"
           >
             <Plus className="size-4" />
-            إضافة سجل حضور
+            {t("hr.attendance.addRecord")}
           </button>
           <button
             type="button"
             onClick={() => void handleCheckIn()}
             disabled={checkInSaving}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#FFF0D9] px-4 text-sm font-medium text-[#E09512] transition hover:bg-[#FFE8C4] disabled:opacity-60"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#FF7A0036] px-4 text-sm font-medium text-[#FF7A00] transition hover:bg-[#FF7A004D] disabled:opacity-60"
           >
-            {checkInSaving ? "جاري التسجيل…" : "تسجيل دخول"}
+            {checkInSaving ? t("hr.attendance.checkInSaving") : t("hr.attendance.checkIn")}
           </button>
         </div>
 
       <div className="overflow-x-auto">
         <table className="w-full table-auto text-sm">
-          <thead className="bg-[#F5FAFD] text-[11px] leading-tight text-hr-muted">
+          <thead className="bg-hr-table-head text-[11px] leading-tight text-hr-muted">
             <tr>
               <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                تسجيل خروج
+                {t("hr.attendance.checkOut")}
               </th>
               <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                رقم السجل
+                {t("hr.attendance.columns.recordNumber")}
               </th>
               <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                رقم الموظف
+                {t("hr.attendance.columns.employeeNumber")}
               </th>
               <th className="whitespace-nowrap px-2 py-2.5 text-start font-medium">
-                اسم الموظف
+                {t("hr.attendance.columns.employeeName")}
               </th>
               <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                وقت الدخول
+                {t("hr.attendance.columns.checkIn")}
               </th>
               <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                وقت الخروج
+                {t("hr.attendance.columns.checkOut")}
               </th>
               <th className="whitespace-nowrap px-1 py-2.5 text-center font-medium">
-                عدد ساعات العمل الكلي
+                {t("hr.attendance.columns.totalWorkHours")}
               </th>
               <th className="whitespace-nowrap px-1 py-2.5 text-center font-medium">
-                عدد ساعات العمل المطلوب
+                {t("hr.attendance.columns.requiredWorkHours")}
               </th>
               <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                الحالة
+                {t("hr.attendance.columns.status")}
               </th>
-              <th className="whitespace-nowrap px-1 py-2.5 text-center font-medium">
-                <span className="sr-only">إجراءات</span>
+              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                {t("table.columns.actions")}
               </th>
             </tr>
           </thead>
@@ -1329,21 +1323,27 @@ export function HrPage() {
             {attendance.map((item, idx) => (
               <tr
                 key={item.id}
-                className={idx % 2 ? "bg-[#F5FAFD]" : "bg-white"}
+                className={idx % 2 ? "bg-hr-table-head" : "bg-hr-surface"}
               >
                 <td className="px-2 py-2.5 text-center">
-                  <input
-                    type="checkbox"
-                    className="size-4 rounded accent-hr-primary"
-                    checked={!!item.checkOutRaw}
-                    disabled={!item.checkInRaw || !!item.checkOutRaw}
-                    onChange={(event) => {
-                      if (event.target.checked) {
-                        void handleCheckOutRecord(item);
-                      }
-                    }}
-                    aria-label="تسجيل خروج"
-                  />
+                  {item.checkOutRaw ? (
+                    <span className="text-xs font-medium text-green-500" aria-hidden>
+                      ✓
+                    </span>
+                  ) : item.checkInRaw ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleCheckOutRecord(item)}
+                      disabled={checkOutSavingId === item.id}
+                      className="inline-flex h-8 items-center rounded-lg bg-hr-primary/15 px-2.5 text-xs font-bold text-hr-primary transition hover:bg-hr-primary/25 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {checkOutSavingId === item.id
+                        ? t("hr.attendance.checkOutSaving")
+                        : t("hr.attendance.checkOut")}
+                    </button>
+                  ) : (
+                    <span className="text-hr-muted">-</span>
+                  )}
                 </td>
                 <td className="px-2 py-2.5 text-center text-hr-text">
                   <TableRowIndex
@@ -1377,24 +1377,20 @@ export function HrPage() {
                   <span
                     className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${
                       attendanceStatusClasses[item.status] ??
-                      "bg-gray-100 text-gray-600"
+                      STATUS_BADGE_CLASS.neutral
                     }`}
                   >
-                    {item.status}
+                    {getAttendanceStatusLabel(item.status)}
                   </span>
                 </td>
-                <td className="px-1 py-2.5 text-center">
-                  <button
-                    type="button"
-                    aria-label="إجراءات"
-                    aria-expanded={openActionMenuId === item.id}
-                    onClick={(event) =>
-                      toggleActionMenu(item.id, event.currentTarget)
-                    }
-                    className="rounded p-1 text-hr-muted hover:bg-gray-100"
-                  >
-                    <MoreVertical className="mx-auto size-4" />
-                  </button>
+                <td className="px-1 py-2.5">
+                  <AttendanceRowActions
+                    record={item}
+                    onApprove={(id) => void handleApproveAttendance(id)}
+                    onRefuse={(id) => void handleRefuseAttendance(id)}
+                    onEdit={openEditAttendance}
+                    onDelete={(id) => void handleDeleteAttendance([id])}
+                  />
                 </td>
               </tr>
             ))}
@@ -1404,7 +1400,7 @@ export function HrPage() {
                   colSpan={10}
                   className="px-3 py-8 text-center text-hr-muted"
                 >
-                  لا توجد سجلات حضور
+                  {t("hr.attendance.empty")}
                 </td>
               </tr>
             )}
@@ -1418,96 +1414,30 @@ export function HrPage() {
         onPageChange={(page) => void loadAttendance(page)}
         className="border-t border-hr-border"
       />
-
-      {openActionMenuId &&
-        actionMenuPosition &&
-        openAttendanceRecord &&
-        createPortal(
-          <div
-            ref={actionMenuRef}
-            dir="rtl"
-            style={{
-              position: "fixed",
-              top: actionMenuPosition.top,
-              left: actionMenuPosition.left,
-              zIndex: 1000,
-            }}
-            className="min-w-[170px] rounded-lg bg-[#2F3B4C] py-2 text-sm text-white shadow-lg"
-          >
-            <button
-              type="button"
-              onClick={() => {
-                closeActionMenu();
-                void handleDeleteAttendance([openAttendanceRecord.id]);
-              }}
-              className="flex w-full items-center gap-2 px-4 py-2 text-start hover:bg-white/10"
-            >
-              <Trash2 className="size-4 text-red-400" />
-              حذف السجل
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                closeActionMenu();
-                void handleApproveAttendance(openAttendanceRecord.id);
-              }}
-              className="flex w-full items-center gap-2 px-4 py-2 text-start hover:bg-white/10"
-            >
-              <CheckCircle className="size-4 text-green-400" />
-              قبول السجل
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                closeActionMenu();
-                void handleRefuseAttendance(openAttendanceRecord.id);
-              }}
-              className="flex w-full items-center gap-2 px-4 py-2 text-start hover:bg-white/10"
-            >
-              <FileX className="size-4 text-gray-300" />
-              رفض السجل
-            </button>
-            <button
-              type="button"
-              onClick={() => openEditAttendance(openAttendanceRecord)}
-              className="flex w-full items-center gap-2 px-4 py-2 text-start hover:bg-white/10"
-            >
-              <Pencil className="size-4 text-amber-400" />
-              تعديل السجل
-            </button>
-          </div>,
-          document.body,
-        )}
     </section>
     </>
-    );
-  };
+  );
 
   const renderDepartments = () => (
-    <section className="rounded-xl border border-[#B8E4F2] bg-white p-4 shadow-card sm:p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => {
-            setApiNotice(null);
-            setAddDepartmentForm(emptyDepartmentForm);
-            setActiveSection("addDepartmentModal");
-          }}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#DDF1FA] px-4 py-2 text-sm font-medium text-[#3D7EA6] transition hover:bg-[#C8E9F7]"
-        >
-          <Plus className="size-4" />
-          إضافة قسم جديد
-        </button>
-        <div className="relative w-full max-w-xs">
+    <section className="rounded-xl border border-hr-border bg-hr-surface p-4 shadow-card sm:p-5">
+      <TableToolbar
+        addLabel={t("hr.departmentsSection.addLabel")}
+        onAddClick={() => {
+          setApiNotice(null);
+          setAddDepartmentForm(emptyDepartmentForm);
+          setActiveSection("addDepartmentModal");
+        }}
+      >
+        <div className="relative w-full max-w-xs sm:min-w-[240px]">
           <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-hr-muted" />
           <input
             value={departmentSearch}
             onChange={(e) => setDepartmentSearch(e.target.value)}
-            placeholder="ابحث عن اسم قسم"
-            className="h-9 w-full rounded-lg border border-hr-border bg-white pe-3 ps-9 text-sm outline-none focus:border-hr-primary"
+            placeholder={t("hr.departmentsSection.searchPlaceholder")}
+            className="h-9 w-full rounded-lg border border-hr-border bg-hr-surface pe-3 ps-9 text-sm outline-none focus:border-hr-primary"
           />
         </div>
-      </div>
+      </TableToolbar>
 
       <div className="overflow-hidden rounded-lg border border-hr-border">
         <table className="w-full table-fixed text-sm">
@@ -1521,26 +1451,26 @@ export function HrPage() {
             <col />
             <col className="w-16" />
           </colgroup>
-          <thead className="bg-[#F5FAFD] text-xs text-hr-muted">
+          <thead className="bg-hr-table-head text-xs text-hr-muted">
             <tr>
-              <th className="px-2 py-3 text-center font-medium">تحديد</th>
-              <th className="px-2 py-3 text-center font-medium">#</th>
-              <th className="px-2 py-3 text-center font-medium">id</th>
-              <th className="px-2 py-3 text-start font-medium">اسم القسم</th>
-              <th className="px-2 py-3 text-start font-medium">اسم قسم الأب</th>
+              <th className="px-2 py-3 text-center font-medium">{t("table.columns.select")}</th>
+              <th className="px-2 py-3 text-center font-medium">{t("table.columns.index")}</th>
+              <th className="px-2 py-3 text-center font-medium">{t("table.columns.id")}</th>
+              <th className="px-2 py-3 text-start font-medium">{t("hr.departmentsSection.columns.name")}</th>
+              <th className="px-2 py-3 text-start font-medium">{t("hr.departmentsSection.columns.parentName")}</th>
               <th className="px-2 py-3 text-center font-medium">
-                رقم مدير القسم
+                {t("hr.departmentsSection.columns.managerId")}
               </th>
               <th className="px-2 py-3 text-start font-medium">
-                اسم مدير القسم
+                {t("hr.departmentsSection.columns.managerName")}
               </th>
               <th className="px-2 py-3 text-start font-medium">
-                وصف مختصر عن وصف أساسي
+                {t("hr.departmentsSection.columns.description")}
               </th>
               <th className="px-3 py-3 text-center font-medium">
                 <button
                   type="button"
-                  aria-label="حذف المحدد"
+                  aria-label={t("common.delete")}
                   onClick={() =>
                     handleDeleteDepartments([...selectedDepartmentIds])
                   }
@@ -1556,7 +1486,7 @@ export function HrPage() {
             {departments.map((item, idx) => (
               <tr
                 key={item.id}
-                className={idx % 2 ? "bg-[#F5FAFD]" : "bg-white"}
+                className={idx % 2 ? "bg-hr-table-head" : "bg-hr-surface"}
               >
                 <td className="px-3 py-3 text-center">
                   <input
@@ -1610,7 +1540,7 @@ export function HrPage() {
                   <div className="flex items-center justify-center gap-3">
                     <button
                       type="button"
-                      aria-label="تعديل"
+                      aria-label={t("common.edit")}
                       onClick={() => openEditDepartment(item)}
                       className="text-amber-500"
                     >
@@ -1618,7 +1548,7 @@ export function HrPage() {
                     </button>
                     <button
                       type="button"
-                      aria-label="حذف"
+                      aria-label={t("common.delete")}
                       onClick={() => handleDeleteDepartments([item.id])}
                       className="text-red-400"
                     >
@@ -1631,7 +1561,7 @@ export function HrPage() {
             {!departments.length && (
               <tr>
                 <td colSpan={8} className="px-3 py-8 text-center text-hr-muted">
-                  لا توجد أقسام
+                  {t("hr.departmentsSection.empty")}
                 </td>
               </tr>
             )}
@@ -1651,17 +1581,17 @@ export function HrPage() {
   );
 
   const renderSkills = () => (
-    <section className="rounded-xl border border-[#B8E4F2] bg-white p-4 shadow-card sm:p-5">
+    <section className="rounded-xl border border-hr-border bg-hr-surface p-4 shadow-card sm:p-5">
       <div className="relative pe-10">
         <div
-          className="absolute bottom-6 end-3 top-6 w-px border-e-2 border-dashed border-[#B8E4F2]"
+          className="absolute bottom-6 end-3 top-6 w-px border-e-2 border-dashed border-hr-border"
           aria-hidden
         />
 
         <div className="space-y-10">
           <div className="flex items-start gap-4">
             <div className="min-w-0 flex-1">
-              <p className="mb-3 text-sm font-bold text-hr-text">نوع المهارة</p>
+              <p className="mb-3 text-sm font-bold text-hr-text">{t("hr.skills.skillType")}</p>
               <div className="flex flex-wrap gap-2">
                 {skillGroups.length ? (
                   skillGroups.map((group, index) => {
@@ -1680,17 +1610,17 @@ export function HrPage() {
                         </button>
                         <button
                           type="button"
-                          aria-label={`تعديل ${group.name}`}
+                          aria-label={t("common.editItem", { name: group.name })}
                           onClick={() => openEditSkillType(group)}
-                          className="rounded p-0.5 text-amber-600 transition hover:bg-white/60"
+                          className="rounded p-0.5 text-amber-600 transition hover:bg-hr-surface/60"
                         >
                           <Pencil className="size-3.5" />
                         </button>
                         <button
                           type="button"
-                          aria-label={`حذف ${group.name}`}
+                          aria-label={t("common.deleteItem", { name: group.name })}
                           onClick={() => handleDeleteSkillType(group.id)}
-                          className="rounded p-0.5 text-red-500 transition hover:bg-white/60 hover:text-red-600"
+                          className="rounded p-0.5 text-red-500 transition hover:bg-hr-surface/60 hover:text-red-600"
                         >
                           <Trash2 className="size-3.5" />
                         </button>
@@ -1699,12 +1629,12 @@ export function HrPage() {
                   })
                 ) : (
                   <span className="text-sm text-hr-muted">
-                    لا توجد أنواع مهارات
+                    {t("hr.skills.noSkillTypes")}
                   </span>
                 )}
               </div>
             </div>
-            <div className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-[#DDF1FA] text-sm font-bold text-[#3D7EA6]">
+            <div className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-hr-accent-bg text-sm font-bold text-hr-accent-text">
               1
             </div>
           </div>
@@ -1712,7 +1642,7 @@ export function HrPage() {
           <div className="flex items-start gap-4">
             <div className="min-w-0 flex-1">
               <p className="mb-3 text-sm font-bold text-hr-text">
-                المهارات
+                {t("hr.skills.skills")}
                 {selectedSkillGroup ? (
                   <span className="ms-2 text-xs font-normal text-hr-muted">
                     ({selectedSkillGroup.name})
@@ -1721,14 +1651,14 @@ export function HrPage() {
               </p>
               {!selectedSkillGroup ? (
                 <p className="text-sm text-hr-muted">
-                  اختر نوع مهارة لعرض مهاراته
+                  {t("hr.skills.selectSkillType")}
                 </p>
               ) : displayedSkills.length ? (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
                   {displayedSkills.map((skill) => (
                     <div
                       key={skill.id ?? skill.name}
-                      className="rounded-lg bg-[#F7EEE7] px-3 py-5 text-center text-sm text-[#8B6F62]"
+                      className={`${subtlePanelClass} px-3 py-5 text-center text-sm`}
                     >
                       {skill.name}
                     </div>
@@ -1736,11 +1666,11 @@ export function HrPage() {
                 </div>
               ) : (
                 <p className="text-sm text-hr-muted">
-                  لا توجد مهارات لهذا النوع
+                  {t("hr.skills.noSkills")}
                 </p>
               )}
             </div>
-            <div className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-[#DDF1FA] text-sm font-bold text-[#3D7EA6]">
+            <div className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-hr-accent-bg text-sm font-bold text-hr-accent-text">
               2
             </div>
           </div>
@@ -1748,7 +1678,7 @@ export function HrPage() {
           <div className="flex items-start gap-4">
             <div className="min-w-0 flex-1">
               <p className="mb-3 text-sm font-bold text-hr-text">
-                مستوى المهارة
+                {t("hr.skills.skillLevel")}
                 {selectedSkillGroup ? (
                   <span className="ms-2 text-xs font-normal text-hr-muted">
                     ({selectedSkillGroup.name})
@@ -1758,13 +1688,13 @@ export function HrPage() {
               <div className="flex flex-wrap gap-2">
                 {!selectedSkillGroup ? (
                   <span className="text-sm text-hr-muted">
-                    اختر نوع مهارة لعرض مستوياته
+                    {t("hr.skills.selectSkillTypeForLevels")}
                   </span>
                 ) : displayedSkillLevels.length ? (
                   displayedSkillLevels.map((level) => (
                     <span
                       key={level.id ?? level.name}
-                      className="rounded-full bg-[#DDF1FA] px-4 py-1.5 text-sm font-medium text-[#3D7EA6]"
+                      className="rounded-full bg-hr-accent-bg px-4 py-1.5 text-sm font-medium text-hr-accent-text"
                       title={`${level.progress}%`}
                     >
                       {level.name}
@@ -1772,92 +1702,108 @@ export function HrPage() {
                   ))
                 ) : (
                   <span className="text-sm text-hr-muted">
-                    لا توجد مستويات لهذا النوع
+                    {t("hr.skills.noLevels")}
                   </span>
                 )}
               </div>
             </div>
-            <div className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-[#DDF1FA] text-sm font-bold text-[#3D7EA6]">
+            <div className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full bg-hr-accent-bg text-sm font-bold text-hr-accent-text">
               3
             </div>
           </div>
         </div>
       </div>
 
-      <div className="mt-6 flex justify-start">
-        <button
-          type="button"
-          onClick={openAddSkillModal}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#DDF1FA] px-4 py-2 text-sm font-medium text-[#3D7EA6] transition hover:bg-[#C8E9F7]"
-        >
-          <Plus className="size-4" />
-          إضافة مهارة جديدة
-        </button>
-      </div>
+      <TableAddButton
+        label={t("hr.skills.addLabel")}
+        onClick={openAddSkillModal}
+        className="mt-6 inline-flex items-center gap-2 rounded-lg bg-hr-accent-bg px-4 py-2 text-sm font-medium text-hr-accent-text transition hover:opacity-90"
+      />
     </section>
   );
 
   return (
     <main
       className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-hr-bg px-6 py-6"
-      dir="rtl"
+      dir={dir}
     >
-      <header className="mb-6 rounded-2xl bg-white p-5 shadow-card sm:p-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-          <h1 className="shrink-0 text-xl font-bold text-hr-primary sm:text-[22px]">
-            قسم{" "}
+      <header className="mb-6 rounded-2xl bg-hr-surface p-5 shadow-card sm:p-6">
+        <div className="mb-4">
+          <h1 className="text-xl font-bold text-hr-primary sm:text-[22px]">
+            {t("pages.departments.title")}{" "}
             <span className="font-medium text-hr-primary/80">
               ({departments.length})
             </span>{" "}
-            | HR قسم
+            | {t("hr.page.title")}
           </h1>
-          <div className="relative w-full max-w-[420px] flex-1 sm:min-w-[280px]">
+        </div>
+
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1 sm:min-w-[280px]">
             <Search className="pointer-events-none absolute start-4 top-1/2 size-[18px] -translate-y-1/2 text-hr-muted" />
             <input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث عن قسم محدد"
-              className="h-[45px] w-full rounded-full border border-hr-border bg-white pe-4 ps-11 text-sm text-hr-text outline-none transition placeholder:text-hr-muted focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20"
+              placeholder={t("hr.skills.searchPlaceholder")}
+              className="h-[45px] w-full rounded-full border border-hr-border bg-hr-surface pe-4 ps-11 text-sm text-hr-text outline-none transition placeholder:text-hr-muted focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20"
             />
           </div>
+          <AddProjectButton />
         </div>
 
-        <div className="mb-4 grid grid-cols-1 items-center gap-4 rounded-2xl border border-hr-border bg-[#FAFCFE] px-5 py-4 sm:grid-cols-[minmax(0,1fr)_170px]">
-          <div>
-            <p className="mb-3 text-base font-bold text-hr-text">
-              إحصائيات عن الموظفين
-            </p>
-            <div className="flex flex-wrap gap-6 sm:gap-8">
-              <div className="flex flex-col items-center">
-                <div className="flex size-14 items-center justify-center rounded-full border-4 border-[#7FC9E4] bg-white text-lg font-bold text-[#3FB4E5]">
-                  {statsLoading && totalEmployees === null
-                    ? "…"
-                    : (totalEmployees ?? 0)}
-                </div>
-                <p className="mt-2 text-xs text-hr-muted">
-                  إجمالي عدد الموظفين
+        {scheduleHeader ? (
+          <>
+            <h2 className="mb-4 text-xl font-bold text-hr-text sm:text-[22px]">
+              {scheduleHeader.scheduleTitle}
+            </h2>
+            <div className="mb-4">
+              <WorkScheduleStatsBanner stats={scheduleHeader.stats} />
+            </div>
+          </>
+        ) : (
+          showEmployeeStats && (
+            <div className="mb-4 grid grid-cols-1 items-center gap-4 rounded-2xl border border-hr-border bg-hr-table-alt px-5 py-4 sm:grid-cols-[minmax(0,1fr)_170px]">
+              <div>
+                <p className="mb-3 text-base font-bold text-hr-text">
+                  {t("hr.page.statsTitle")}
                 </p>
-              </div>
-              <div className="flex flex-col items-center">
-                <div className="flex size-14 items-center justify-center rounded-full border-4 border-[#7FC9E4] bg-white text-lg font-bold text-[#3FB4E5]">
-                  {statsLoading && presentTodayCount === null
-                    ? "…"
-                    : (presentTodayCount ?? 0)}
+                <div className="flex flex-wrap gap-6 sm:gap-8">
+                  <div className="flex flex-col items-center">
+                    <div className="flex size-14 items-center justify-center rounded-full border-4 border-[#7FC9E4] bg-hr-surface text-lg font-bold text-[#3FB4E5]">
+                      {statsLoading && totalEmployees === null
+                        ? "…"
+                        : (totalEmployees ?? 0)}
+                    </div>
+                    <p className="mt-2 text-xs text-hr-muted">
+                      {t("hr.page.totalEmployees")}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <div className="flex size-14 items-center justify-center rounded-full border-4 border-[#7FC9E4] bg-hr-surface text-lg font-bold text-[#3FB4E5]">
+                      {statsLoading && presentTodayCount === null
+                        ? "…"
+                        : (presentTodayCount ?? 0)}
+                    </div>
+                    <p className="mt-2 text-xs text-hr-muted">{t("hr.page.presentToday")}</p>
+                  </div>
                 </div>
-                <p className="mt-2 text-xs text-hr-muted">المتواجدون اليوم</p>
+              </div>
+              <div className="hidden items-center justify-center sm:flex">
+                <div className="relative h-[140px] w-[170px] overflow-hidden rounded-2xl bg-gradient-to-b from-[#E8F6FC] to-[#D4EEF9]">
+                  <img
+                    src={hrEmployeeStatsIllustration}
+                    alt=""
+                    className="size-full object-contain object-bottom p-1"
+                  />
+                </div>
               </div>
             </div>
-          </div>
-          <div className="hidden items-center justify-center sm:flex">
-            <div className="relative flex h-[140px] w-[170px] items-end justify-center rounded-2xl bg-gradient-to-b from-[#E8F6FC] to-[#D4EEF9] pb-4">
-              <Briefcase className="size-16 text-[#3FB4E5]/80" />
-            </div>
-          </div>
-        </div>
+          )
+        )}
 
         {apiNotice && (
-          <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className={`mb-4 ${alertErrorClass}`}>
             {apiNotice}
           </p>
         )}
@@ -1868,16 +1814,15 @@ export function HrPage() {
               key={section.key}
               type="button"
               onClick={() => setActiveSection(section.key)}
-              className={[
-                "inline-flex h-10 items-center rounded-lg px-5 text-sm font-medium transition",
+              className={
                 activeSection === section.key ||
                 (activeSection === "addAttendanceModal" &&
                   section.key === "attendance") ||
                 (activeSection === "editAttendanceModal" &&
                   section.key === "attendance")
-                  ? "bg-[#5BB8E8] text-white shadow-sm"
-                  : "bg-[#E9F6FC] text-[#3A6E86] hover:bg-[#D8EEF9]",
-              ].join(" ")}
+                  ? "hr-tab-pill-active"
+                  : "hr-tab-pill-inactive"
+              }
             >
               {section.label}
             </button>
@@ -1887,7 +1832,10 @@ export function HrPage() {
 
       {activeSection === "contracts" && renderContracts()}
       {activeSection === "workSchedules" && (
-        <WorkSchedulePanel onNotice={setApiNotice} />
+        <WorkSchedulePanel
+          onNotice={setApiNotice}
+          onHeaderStateChange={setScheduleHeader}
+        />
       )}
       {activeSection === "attendance" && renderAttendance()}
       {activeSection === "departments" && renderDepartments()}
@@ -1896,18 +1844,19 @@ export function HrPage() {
       {contractModal === "add" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div
-            className="w-full max-w-lg rounded-xl bg-white p-8 shadow-card"
-            dir="rtl"
+            className="relative w-full max-w-lg rounded-xl bg-hr-surface p-8 shadow-card"
+            dir={dir}
           >
-            <h3 className="mb-6 text-center text-2xl font-bold text-[#1B91C4]">
-              إضافة نوع عقد جديد
-            </h3>
-            <label className="mb-2 block text-sm text-hr-text">اسم العقد</label>
+            <ModalTitleBar
+              title={t("hr.contracts.addLabel")}
+              onClose={closeContractModal}
+            />
+            <label className="mb-2 block text-sm text-hr-text">{t("hr.contracts.columns.name")}</label>
             <input
               value={newContractName}
               onChange={(e) => setNewContractName(e.target.value)}
               className="mb-8 h-11 w-full rounded-lg border border-hr-border px-3 outline-none focus:border-hr-primary"
-              placeholder="أدخل اسم نوع العقد"
+              placeholder={t("hr.contracts.modals.namePlaceholder")}
             />
             <div className="flex justify-center gap-3">
               <button
@@ -1915,14 +1864,14 @@ export function HrPage() {
                 onClick={handleAddContract}
                 className="rounded-lg bg-hr-primary px-8 py-2.5 text-sm font-bold text-white"
               >
-                إضافة العقد
+                {t("hr.contracts.modals.addSubmit")}
               </button>
               <button
                 type="button"
                 onClick={closeContractModal}
-                className="rounded-lg bg-gray-400 px-8 py-2.5 text-sm font-bold text-white"
+                className={cancelBtnClass}
               >
-                إلغاء
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -1932,18 +1881,19 @@ export function HrPage() {
       {contractModal === "edit" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div
-            className="w-full max-w-lg rounded-xl bg-white p-8 shadow-card"
-            dir="rtl"
+            className="relative w-full max-w-lg rounded-xl bg-hr-surface p-8 shadow-card"
+            dir={dir}
           >
-            <h3 className="mb-6 text-center text-2xl font-bold text-[#1B91C4]">
-              تعديل نوع العقد
-            </h3>
-            <label className="mb-2 block text-sm text-hr-text">اسم العقد</label>
+            <ModalTitleBar
+              title={t("hr.contracts.modals.editTitle")}
+              onClose={closeContractModal}
+            />
+            <label className="mb-2 block text-sm text-hr-text">{t("hr.contracts.columns.name")}</label>
             <input
               value={editContractName}
               onChange={(e) => setEditContractName(e.target.value)}
               className="mb-8 h-11 w-full rounded-lg border border-hr-border px-3 outline-none focus:border-hr-primary"
-              placeholder="أدخل اسم نوع العقد"
+              placeholder={t("hr.contracts.modals.namePlaceholder")}
               autoFocus
             />
             <div className="flex justify-center gap-3">
@@ -1952,14 +1902,14 @@ export function HrPage() {
                 onClick={handleUpdateContract}
                 className="rounded-lg bg-hr-primary px-8 py-2.5 text-sm font-bold text-white"
               >
-                حفظ التعديلات
+                {t("common.save")}
               </button>
               <button
                 type="button"
                 onClick={closeContractModal}
-                className="rounded-lg bg-gray-400 px-8 py-2.5 text-sm font-bold text-white"
+                className={cancelBtnClass}
               >
-                إلغاء
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -1969,47 +1919,54 @@ export function HrPage() {
       {activeSection === "addAttendanceModal" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div
-            className="w-full max-w-lg rounded-xl bg-white p-8 shadow-card"
-            dir="rtl"
+            className="relative w-full max-w-lg rounded-xl bg-hr-surface p-8 shadow-card"
+            dir={dir}
           >
-            <h3 className="mb-6 text-center text-2xl font-bold text-[#1B91C4]">
-              إضافة سجل حضور
-            </h3>
-            <label className="mb-2 block text-sm text-hr-text">
-              رقم الموظف
-            </label>
-            <input
-              value={attendanceForm.employeeId}
-              onChange={(e) =>
-                setAttendanceForm((prev) => ({
-                  ...prev,
-                  employeeId: e.target.value,
-                }))
-              }
-              className="mb-6 h-11 w-full rounded-lg border border-hr-border px-3 outline-none focus:border-hr-primary"
+            <ModalTitleBar
+              title={t("hr.attendance.modals.addTitle")}
+              onClose={closeTo("attendance")}
             />
+            <FormField
+              label={t("hr.attendance.modals.employee")}
+              required
+              hint={t("hr.attendance.modals.employeeHint")}
+            >
+              <SearchableSelect
+                value={attendanceForm.employeeId}
+                onChange={(value) =>
+                  setAttendanceForm((prev) => ({
+                    ...prev,
+                    employeeId: value,
+                  }))
+                }
+                options={mapNamedOptions(employeeOptions, {
+                  description: (employee) => employee.id,
+                })}
+                placeholder={t("hr.attendance.modals.selectEmployee")}
+              />
+            </FormField>
             <div className="mb-6">
               <label className="mb-2 block text-sm text-hr-text">
-                وقت الدخول
+                {t("hr.attendance.modals.checkInTime")}
               </label>
               <DateTimeInput
                 value={attendanceForm.checkInAt}
                 onChange={(value) =>
                   setAttendanceForm((prev) => ({ ...prev, checkInAt: value }))
                 }
-                aria-label="وقت الدخول"
+                aria-label={t("hr.attendance.modals.checkInTime")}
               />
             </div>
             <div className="mb-8">
               <label className="mb-2 block text-sm text-hr-text">
-                وقت الخروج
+                {t("hr.attendance.modals.checkOutTime")}
               </label>
               <DateTimeInput
                 value={attendanceForm.checkOutAt}
                 onChange={(value) =>
                   setAttendanceForm((prev) => ({ ...prev, checkOutAt: value }))
                 }
-                aria-label="وقت الخروج"
+                aria-label={t("hr.attendance.modals.checkOutTime")}
               />
             </div>
             <div className="flex justify-center gap-3">
@@ -2018,14 +1975,14 @@ export function HrPage() {
                 onClick={handleAddAttendance}
                 className="rounded-lg bg-hr-primary px-8 py-2.5 text-sm font-bold text-white"
               >
-                إضافة سجل الحضور
+                {t("hr.attendance.modals.addSubmit")}
               </button>
               <button
                 type="button"
                 onClick={closeTo("attendance")}
-                className="rounded-lg bg-gray-400 px-8 py-2.5 text-sm font-bold text-white"
+                className={cancelBtnClass}
               >
-                إلغاء
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -2035,21 +1992,22 @@ export function HrPage() {
       {activeSection === "editAttendanceModal" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div
-            className="w-full max-w-lg rounded-xl bg-white p-8 shadow-card"
-            dir="rtl"
+            className="relative w-full max-w-lg rounded-xl bg-hr-surface p-8 shadow-card"
+            dir={dir}
           >
-            <h3 className="mb-6 text-center text-2xl font-bold text-[#1B91C4]">
-              تعديل سجل حضور
-            </h3>
-            <label className="mb-2 block text-sm text-hr-text">رقم السجل</label>
+            <ModalTitleBar
+              title={t("hr.attendance.modals.editTitle")}
+              onClose={closeTo("attendance")}
+            />
+            <label className="mb-2 block text-sm text-hr-text">{t("hr.attendance.modals.recordId")}</label>
             <input
               value={editAttendanceForm.recordId}
               readOnly
-              className="mb-6 h-11 w-full rounded-lg border border-hr-border bg-gray-50 px-3 outline-none"
+              className={`mb-6 ${readOnlyClass}`}
             />
             <div className="mb-6">
               <label className="mb-2 block text-sm text-hr-text">
-                وقت الدخول
+                {t("hr.attendance.modals.checkInTime")}
               </label>
               <DateTimeInput
                 value={editAttendanceForm.checkInAt}
@@ -2059,12 +2017,12 @@ export function HrPage() {
                     checkInAt: value,
                   }))
                 }
-                aria-label="وقت الدخول"
+                aria-label={t("hr.attendance.modals.checkInTime")}
               />
             </div>
             <div className="mb-8">
               <label className="mb-2 block text-sm text-hr-text">
-                وقت الخروج
+                {t("hr.attendance.modals.checkOutTime")}
               </label>
               <DateTimeInput
                 value={editAttendanceForm.checkOutAt}
@@ -2074,7 +2032,7 @@ export function HrPage() {
                     checkOutAt: value,
                   }))
                 }
-                aria-label="وقت الخروج"
+                aria-label={t("hr.attendance.modals.checkOutTime")}
               />
             </div>
             <div className="flex justify-center gap-3">
@@ -2083,14 +2041,14 @@ export function HrPage() {
                 onClick={handleEditAttendance}
                 className="rounded-lg bg-hr-primary px-8 py-2.5 text-sm font-bold text-white"
               >
-                حفظ التعديلات
+                {t("common.save")}
               </button>
               <button
                 type="button"
                 onClick={closeTo("attendance")}
-                className="rounded-lg bg-gray-400 px-8 py-2.5 text-sm font-bold text-white"
+                className={cancelBtnClass}
               >
-                إلغاء
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -2100,31 +2058,32 @@ export function HrPage() {
       {activeSection === "editDepartmentModal" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div
-            className="w-full max-w-2xl rounded-xl bg-white p-8 shadow-card"
-            dir="rtl"
+            className="relative w-full max-w-2xl rounded-xl bg-hr-surface p-8 shadow-card"
+            dir={dir}
           >
-            <h3 className="mb-6 text-center text-2xl font-bold text-[#1B91C4]">
-              تعديل قسم
-            </h3>
+            <ModalTitleBar
+              title={t("hr.departmentsSection.modals.editTitle")}
+              onClose={closeTo("departments")}
+            />
             {apiNotice && (
-              <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className={`mb-4 ${alertErrorClass}`}>
                 {apiNotice}
               </p>
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm text-hr-text">
-                  رقم القسم
+                  {t("hr.departmentsSection.modals.departmentId")}
                 </label>
                 <input
                   value={departmentForm.departmentId}
                   readOnly
-                  className="h-11 w-full rounded-lg border border-hr-border bg-gray-50 px-3 outline-none"
+                  className={readOnlyClass}
                 />
               </div>
               <div>
                 <label className="mb-2 block text-sm text-hr-text">
-                  اسم القسم
+                  {t("hr.departmentsSection.columns.name")}
                 </label>
                 <input
                   value={departmentForm.name}
@@ -2137,58 +2096,41 @@ export function HrPage() {
                   className="h-11 w-full rounded-lg border border-hr-border px-3 outline-none focus:border-hr-primary"
                 />
               </div>
-              <div>
-                <label className="mb-2 block text-sm text-hr-text">
-                  قسم الأب
-                </label>
-                <select
+              <FormField label={t("hr.departmentsSection.modals.parent")} hint={t("common.optional")}>
+                <SearchableSelect
                   value={departmentForm.parentId}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     setDepartmentForm((prev) => ({
                       ...prev,
-                      parentId: e.target.value,
+                      parentId: value,
                     }))
                   }
-                  className="h-11 w-full rounded-lg border border-hr-border bg-white px-3 outline-none focus:border-hr-primary"
-                >
-                  <option value="">بدون قسم أب</option>
-                  {departmentOptions
-                    .filter(
-                      (department) =>
-                        department.id !== departmentForm.departmentId,
-                    )
-                    .map((department) => (
-                      <option key={department.id} value={department.id}>
-                        {department.name}
-                      </option>
-                    ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm text-hr-text">
-                  مدير القسم
-                </label>
-                <select
+                  options={mapNamedOptions(
+                    departmentOptions.filter(
+                      (department) => department.id !== departmentForm.departmentId,
+                    ),
+                  )}
+                  placeholder={t("hr.departmentsSection.modals.noParent")}
+                />
+              </FormField>
+              <FormField label={t("hr.departmentsSection.modals.manager")} hint={t("hr.departmentsSection.modals.managerHint")}>
+                <SearchableSelect
                   value={departmentForm.managerId}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     setDepartmentForm((prev) => ({
                       ...prev,
-                      managerId: e.target.value,
+                      managerId: value,
                     }))
                   }
-                  className="h-11 w-full rounded-lg border border-hr-border bg-white px-3 outline-none focus:border-hr-primary"
-                >
-                  <option value="">اختر المدير</option>
-                  {employeeOptions.map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  options={mapNamedOptions(employeeOptions, {
+                    description: (employee) => employee.id,
+                  })}
+                  placeholder={t("hr.departmentsSection.modals.selectManager")}
+                />
+              </FormField>
               <div className="sm:col-span-2">
                 <label className="mb-2 block text-sm text-hr-text">
-                  وصف القسم
+                  {t("hr.departmentsSection.modals.description")}
                 </label>
                 <textarea
                   value={departmentForm.description}
@@ -2210,14 +2152,14 @@ export function HrPage() {
                 disabled={departmentSaving}
                 className="rounded-lg bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
               >
-                {departmentSaving ? "جاري الحفظ…" : "تعديل معلومات القسم"}
+                {departmentSaving ? t("common.saving") : t("hr.departmentsSection.modals.editSubmit")}
               </button>
               <button
                 type="button"
                 onClick={closeTo("departments")}
-                className="rounded-lg bg-gray-400 px-8 py-2.5 text-sm font-bold text-white"
+                className={cancelBtnClass}
               >
-                إلغاء
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -2227,21 +2169,22 @@ export function HrPage() {
       {activeSection === "addDepartmentModal" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div
-            className="w-full max-w-2xl rounded-xl bg-white p-8 shadow-card"
-            dir="rtl"
+            className="relative w-full max-w-2xl rounded-xl bg-hr-surface p-8 shadow-card"
+            dir={dir}
           >
-            <h3 className="mb-6 text-center text-2xl font-bold text-[#1B91C4]">
-              إضافة قسم جديد
-            </h3>
+            <ModalTitleBar
+              title={t("hr.departmentsSection.modals.addTitle")}
+              onClose={closeTo("departments")}
+            />
             {apiNotice && (
-              <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className={`mb-4 ${alertErrorClass}`}>
                 {apiNotice}
               </p>
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <label className="mb-2 block text-sm text-hr-text">
-                  اسم القسم
+                  {t("hr.departmentsSection.columns.name")}
                 </label>
                 <input
                   value={addDepartmentForm.name}
@@ -2254,53 +2197,37 @@ export function HrPage() {
                   className="h-11 w-full rounded-lg border border-hr-border px-3 outline-none focus:border-hr-primary"
                 />
               </div>
-              <div>
-                <label className="mb-2 block text-sm text-hr-text">
-                  قسم الأب
-                </label>
-                <select
+              <FormField label={t("hr.departmentsSection.modals.parent")} hint={t("common.optional")}>
+                <SearchableSelect
                   value={addDepartmentForm.parentId}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     setAddDepartmentForm((prev) => ({
                       ...prev,
-                      parentId: e.target.value,
+                      parentId: value,
                     }))
                   }
-                  className="h-11 w-full rounded-lg border border-hr-border bg-white px-3 outline-none focus:border-hr-primary"
-                >
-                  <option value="">بدون قسم أب</option>
-                  {departmentOptions.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm text-hr-text">
-                  مدير القسم
-                </label>
-                <select
+                  options={mapNamedOptions(departmentOptions)}
+                  placeholder={t("hr.departmentsSection.modals.noParent")}
+                />
+              </FormField>
+              <FormField label={t("hr.departmentsSection.modals.manager")} hint={t("hr.departmentsSection.modals.managerHint")}>
+                <SearchableSelect
                   value={addDepartmentForm.managerId}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     setAddDepartmentForm((prev) => ({
                       ...prev,
-                      managerId: e.target.value,
+                      managerId: value,
                     }))
                   }
-                  className="h-11 w-full rounded-lg border border-hr-border bg-white px-3 outline-none focus:border-hr-primary"
-                >
-                  <option value="">اختر المدير</option>
-                  {employeeOptions.map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  options={mapNamedOptions(employeeOptions, {
+                    description: (employee) => employee.id,
+                  })}
+                  placeholder={t("hr.departmentsSection.modals.selectManager")}
+                />
+              </FormField>
               <div className="sm:col-span-3">
                 <label className="mb-2 block text-sm text-hr-text">
-                  وصف القسم
+                  {t("hr.departmentsSection.modals.description")}
                 </label>
                 <textarea
                   value={addDepartmentForm.description}
@@ -2322,14 +2249,14 @@ export function HrPage() {
                 disabled={departmentSaving}
                 className="rounded-lg bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
               >
-                {departmentSaving ? "جاري الإضافة…" : "إضافة القسم"}
+                {departmentSaving ? t("common.adding") : t("hr.departmentsSection.modals.addSubmit")}
               </button>
               <button
                 type="button"
                 onClick={closeTo("departments")}
-                className="rounded-lg bg-gray-400 px-8 py-2.5 text-sm font-bold text-white"
+                className={cancelBtnClass}
               >
-                إلغاء
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -2339,17 +2266,23 @@ export function HrPage() {
       {skillModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div
-            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-8 shadow-card"
-            dir="rtl"
+            className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-hr-surface p-8 shadow-card"
+            dir={dir}
           >
-            <h3 className="mb-6 text-center text-2xl font-bold text-[#1B91C4]">
-              {skillModal === "add" ? "إضافة مهارة جديدة" : "تعديل نوع المهارة"}
-            </h3>
+            <ModalTitleBar
+              title={
+                skillModal === "add"
+                  ? t("hr.skills.modals.addTitle")
+                  : t("hr.skills.modals.editTitle")
+              }
+              onClose={closeSkillModal}
+              disabled={skillSaving}
+            />
 
             <div className="space-y-5">
               <div>
                 <label className="mb-2 block text-sm text-hr-text">
-                  نوع المهارة
+                  {t("hr.skills.modals.typeLabel")}
                 </label>
                 <input
                   value={skillType}
@@ -2361,7 +2294,7 @@ export function HrPage() {
 
               <div>
                 <p className="mb-2 text-sm font-semibold text-hr-text">
-                  المهارات
+                  {t("hr.skills.modals.skillsLabel")}
                 </p>
                 <div className="space-y-2">
                   {skillsList.map((skill) => (
@@ -2377,7 +2310,7 @@ export function HrPage() {
                           )
                         }
                         className="text-red-400"
-                        aria-label="حذف المهارة"
+                        aria-label={t("hr.skills.modals.deleteSkill")}
                       >
                         <Trash2 className="size-4" />
                       </button>
@@ -2404,31 +2337,31 @@ export function HrPage() {
                         createSkillDraftRow(""),
                       ])
                     }
-                    className="inline-flex items-center gap-1 rounded-lg bg-[#DDF1FA] px-3 py-1.5 text-sm font-medium text-[#3D7EA6] transition hover:bg-[#C8E9F7]"
+                    className="inline-flex items-center gap-1 rounded-lg bg-hr-accent-bg px-3 py-1.5 text-sm font-medium text-hr-accent-text transition hover:opacity-90"
                   >
                     <Plus className="size-4" />
-                    إضافة مهارة للقائمة
+                    {t("hr.skills.modals.addSkillToList")}
                   </button>
                 </div>
               </div>
 
               <div>
                 <p className="mb-2 text-sm font-semibold text-hr-text">
-                  مستويات المهارة
+                  {t("hr.skills.modals.skillLevelsLabel")}
                 </p>
                 <div className="overflow-hidden rounded-lg border border-hr-border">
                   <table className="w-full table-fixed text-sm">
-                    <thead className="bg-[#F5FAFD] text-xs text-hr-muted">
+                    <thead className="bg-hr-table-head text-xs text-hr-muted">
                       <tr>
                         <th className="w-10 px-2 py-2 text-center font-medium" />
                         <th className="px-2 py-2 text-start font-medium">
-                          اسم المستوى
+                          {t("hr.skills.modals.levelName")}
                         </th>
                         <th className="px-2 py-2 text-start font-medium">
-                          التقدم
+                          {t("hr.skills.modals.progress")}
                         </th>
                         <th className="w-14 px-2 py-2 text-center font-medium">
-                          المستوى
+                          {t("hr.skills.modals.levelColumn")}
                         </th>
                       </tr>
                     </thead>
@@ -2447,7 +2380,7 @@ export function HrPage() {
                                   prev.filter((row) => row.id !== level.id),
                                 )
                               }
-                              aria-label="حذف المستوى"
+                              aria-label={t("hr.skills.modals.deleteLevel")}
                             >
                               <Trash2 className="size-4" />
                             </button>
@@ -2505,10 +2438,10 @@ export function HrPage() {
                       createSkillLevelDraftRow(),
                     ])
                   }
-                  className="mt-2 inline-flex items-center gap-1 rounded-lg bg-[#DDF1FA] px-3 py-1.5 text-sm font-medium text-[#3D7EA6] transition hover:bg-[#C8E9F7]"
+                  className="mt-2 inline-flex items-center gap-1 rounded-lg bg-hr-accent-bg px-3 py-1.5 text-sm font-medium text-hr-accent-text transition hover:opacity-90"
                 >
                   <Plus className="size-4" />
-                  إضافة مستوى جديد
+                  {t("hr.skills.modals.addLevel")}
                 </button>
               </div>
             </div>
@@ -2524,18 +2457,18 @@ export function HrPage() {
               >
                 {skillSaving
                   ? skillModal === "add"
-                    ? "جاري الإضافة…"
-                    : "جاري الحفظ…"
+                    ? t("hr.skills.submit.adding")
+                    : t("common.saving")
                   : skillModal === "add"
-                    ? "إضافة المهارة"
-                    : "حفظ التعديلات"}
+                    ? t("hr.skills.submit.add")
+                    : t("hr.skills.submit.save")}
               </button>
               <button
                 type="button"
                 onClick={closeSkillModal}
-                className="rounded-lg bg-gray-400 px-8 py-2.5 text-sm font-bold text-white"
+                className={cancelBtnClass}
               >
-                إلغاء
+                {t("common.cancel")}
               </button>
             </div>
           </div>

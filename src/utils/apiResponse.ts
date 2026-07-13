@@ -11,6 +11,8 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   "Auth.Error.InvalidEmailOrPassword": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
   "Auth.Error.InvalidEmailOrToken": "انتهت صلاحية الجلسة. يرجى تسجيل الدخول مجدداً.",
   "Auth.Error.EmailNotVerified": "البريد الإلكتروني غير مفعّل. راجع بريدك لتأكيد الحساب.",
+  "Auth.Error.AccountInactive":
+    "هذا الحساب غير مفعّل على السيرفر. اطلب من المسؤول (Admin) تفعيله أو تحقق من إعدادات الحساب في قاعدة البيانات.",
   "SkillType.Error.Name.Duplicate": "اسم نوع المهارة موجود مسبقاً.",
   "ContractType.Error.Name.Duplicate": "اسم نوع العقد موجود مسبقاً.",
   "Department.Error.Name.Duplicate": "اسم القسم موجود مسبقاً.",

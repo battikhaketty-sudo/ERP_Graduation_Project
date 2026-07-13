@@ -1,14 +1,19 @@
-import { LogOut } from "lucide-react";
 import { Outlet, useNavigate } from "react-router-dom";
-import { MobileNav } from "../components/MobileNav";
+import { CommandBar } from "../components/command/CommandBar";
+import { AppTopBar } from "../components/layout/AppTopBar";
 import { Sidebar } from "../components/Sidebar";
+import { ToastStack } from "../components/ui/ToastStack";
+import { CommandBarProvider } from "../context/CommandBarContext";
 import { ConfirmDialogProvider } from "../context/ConfirmDialogContext";
+import { ToastProvider } from "../context/ToastContext";
 import { ROUTES } from "../constants/routes";
 import { useAuth } from "../hooks/useAuth";
+import { usePreferences } from "../context/PreferencesContext";
 
-export function AppLayout() {
+function AppShell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { dir } = usePreferences();
 
   const handleLogout = () => {
     logout();
@@ -16,32 +21,31 @@ export function AppLayout() {
   };
 
   return (
-    <ConfirmDialogProvider>
-      <div className="flex min-h-dvh overflow-hidden" dir="rtl">
-        <Sidebar onLogout={handleLogout} />
+    <div className="theme-transition flex min-h-dvh overflow-hidden bg-hr-bg" dir={dir}>
+      <Sidebar onLogout={handleLogout} />
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-[68px] shrink-0 items-center justify-between border-b border-hr-border bg-white px-6">
-            <MobileNav onLogout={handleLogout} />
-            <div className="ms-auto flex items-center gap-4">
-              <div className="hidden text-end sm:block">
-                <p className="text-sm font-semibold leading-tight text-hr-text">{user?.name}</p>
-                <p className="text-xs leading-tight text-hr-muted">{user?.email}</p>
-              </div>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-hr-border px-4 text-sm font-medium text-hr-text transition hover:bg-gray-50"
-              >
-                <LogOut className="size-4" />
-                <span className="hidden sm:inline">تسجيل الخروج</span>
-              </button>
-            </div>
-          </header>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <AppTopBar user={user} onLogout={handleLogout} />
 
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
           <Outlet />
         </div>
       </div>
-    </ConfirmDialogProvider>
+
+      <CommandBar />
+      <ToastStack />
+    </div>
+  );
+}
+
+export function AppLayout() {
+  return (
+    <ToastProvider>
+      <CommandBarProvider>
+        <ConfirmDialogProvider>
+          <AppShell />
+        </ConfirmDialogProvider>
+      </CommandBarProvider>
+    </ToastProvider>
   );
 }

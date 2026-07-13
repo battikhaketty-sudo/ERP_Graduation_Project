@@ -18,7 +18,7 @@ export function DateTimeInput({
       onChange={(event) => onChange(event.target.value)}
       aria-label={ariaLabel}
       className={[
-        "h-11 w-full rounded-lg border border-hr-border bg-white px-3 text-sm outline-none transition",
+        "h-11 w-full rounded-lg border border-hr-border bg-hr-input-bg px-3 text-sm text-hr-text outline-none transition",
         "focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20",
         "[&::-webkit-calendar-picker-indicator]:cursor-pointer",
         className,

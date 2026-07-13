@@ -30,7 +30,7 @@ export function DetailBackButton({
     <button
       type="button"
       onClick={onClick}
-      className={`mb-4 inline-flex items-center gap-2 rounded-xl border border-[#C8E9F7] bg-[#E9F6FC] px-4 py-2.5 text-sm font-semibold text-[#1B91C4] shadow-sm transition hover:bg-[#DDF1FA] ${className}`}
+      className={`hr-accent-btn mb-4 shadow-sm ${className}`}
     >
       <ChevronRight className="size-5 shrink-0" />
       {label}

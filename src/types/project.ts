@@ -1,6 +1,11 @@
 export type ProjectStatus = "not_started" | "in_progress" | "completed";
 
-export type InvitationStatus = "pending" | "accepted" | "rejected";
+export type InvitationStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "expired"
+  | "cancelled";
 
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
@@ -40,7 +45,7 @@ export type ProjectTask = {
 
 export type Project = {
   id: string;
-  number: number;
+  number: string;
   name: string;
   managerId: string;
   managerName: string;
@@ -72,7 +77,7 @@ export type ProjectInvitation = {
   id: string;
   projectId: string;
   projectName: string;
-  projectNumber: number;
+  projectNumber: string;
   employeeId: string;
   employeeName: string;
   role: string;

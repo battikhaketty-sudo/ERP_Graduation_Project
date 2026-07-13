@@ -7,11 +7,29 @@ const toBlob = async (base64Image: string) => {
   return response.blob();
 };
 
-export const buildEmployeeFormData = async (data: Omit<Employee, "id">) => {
+const appendImageIfDataUrl = async (
+  formData: FormData,
+  fieldName: string,
+  value: string | undefined,
+  fileName: string,
+) => {
+  if (!value?.startsWith("data:")) return;
+  const blob = await toBlob(value);
+  formData.append(fieldName, blob, fileName);
+};
+
+export const buildEmployeeFormData = async (
+  data: Omit<Employee, "id">,
+  mode: "create" | "update" = "create",
+) => {
   const formData = new FormData();
 
   formData.append("Email", data.email.trim());
-  formData.append("Password", data.password || DEFAULT_EMPLOYEE_PASSWORD);
+  if (mode === "create") {
+    formData.append("Password", data.password || DEFAULT_EMPLOYEE_PASSWORD);
+  } else if (data.password?.trim()) {
+    formData.append("Password", data.password.trim());
+  }
   formData.append("PersonalInfo.LegalName", data.name.trim());
   formData.append("PersonalInfo.Gender", toApiGender(data.gender));
   formData.append("PersonalInfo.MobileNumber", data.phone.trim());
@@ -23,8 +41,9 @@ export const buildEmployeeFormData = async (data: Omit<Employee, "id">) => {
   formData.append("WorkInfo.DepartmentId", data.departmentId || "");
   formData.append("WorkInfo.ManagerId", data.managerId || "");
   formData.append("WorkInfo.ContractTypeId", data.contractTypeId || "");
-  formData.append("WorkInfo.Wage", String(data.salary || 0));
-  formData.append("WorkInfo.Salary", String(data.salary || 0));
+  formData.append("WorkInfo.WorkMobileNumber", data.phone.trim());
+  formData.append("WorkInfo.Wage", String(data.wage ?? 0));
+  formData.append("WorkInfo.Salary", String(data.salary ?? 0));
 
   if (data.joiningDate && data.contractEndDate) {
     formData.append(
@@ -45,10 +64,24 @@ export const buildEmployeeFormData = async (data: Omit<Employee, "id">) => {
     formData.append("CitizenshipInfo.IdentificationNo", data.idNumber);
   }
 
-  if (data.avatar?.startsWith("data:")) {
-    const blob = await toBlob(data.avatar);
-    formData.append("PersonalInfo.ProfileImage", blob, "avatar.jpg");
-  }
+  await appendImageIfDataUrl(
+    formData,
+    "PersonalInfo.ProfileImage",
+    data.avatar,
+    "avatar.jpg",
+  );
+  await appendImageIfDataUrl(
+    formData,
+    "CitizenshipInfo.IdCardFrontImage",
+    data.idCardFrontImage,
+    "id-front.jpg",
+  );
+  await appendImageIfDataUrl(
+    formData,
+    "CitizenshipInfo.IdCardBackImage",
+    data.idCardBackImage,
+    "id-back.jpg",
+  );
 
   return formData;
 };

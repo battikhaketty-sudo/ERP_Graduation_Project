@@ -1,4 +1,10 @@
+import { useTranslation } from "../../i18n";
 import { Pagination } from "../Pagination";
+import {
+  cardSurfaceClass,
+  tableHeadRowClass,
+  tableRowClass,
+} from "../ui/formStyles";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
 import { TableRowIndex } from "../ui/TableRowIndex";
 import { EmptyState } from "../EmptyState";
@@ -12,6 +18,7 @@ type InvitationsTableProps = {
   onPageChange: (page: number) => void;
   onAccept: (invitation: ProjectInvitation) => void;
   onReject: (invitation: ProjectInvitation) => void;
+  onCancel: (invitation: ProjectInvitation) => void;
 };
 
 const PAGE_SIZE = 5;
@@ -23,80 +30,119 @@ export function InvitationsTable({
   onPageChange,
   onAccept,
   onReject,
+  onCancel,
 }: InvitationsTableProps) {
+  const { t } = useTranslation();
+
   if (!invitations.length) {
     return (
-      <section className="overflow-hidden rounded-2xl bg-white shadow-card">
-        <EmptyState message="لا توجد دعوات" />
+      <section className={cardSurfaceClass}>
+        <EmptyState message={t("projects.invitations.empty")} />
       </section>
     );
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl bg-white shadow-card">
+    <section className={`${cardSurfaceClass} min-w-0`}>
       <div className="border-b border-hr-border px-5 py-4">
-        <h2 className="text-base font-bold text-hr-text">إدارة الدعوات</h2>
+        <h2 className="text-base font-bold text-hr-text">{t("projects.invitations.title")}</h2>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[920px] table-fixed border-collapse text-sm">
+      <div className="min-w-0 max-w-full overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <colgroup>
+            <col className="w-12" />
+            <col className="w-[7.5rem]" />
+            <col />
+            <col className="w-[7.5rem]" />
+            <col />
+            <col className="w-28" />
+            <col className="w-24" />
+            <col className="w-24" />
+            <col className="w-28" />
+            <col className="w-[5.5rem]" />
+          </colgroup>
           <thead>
-            <tr className="bg-[#F5FAFD] text-hr-muted">
-              <th className="px-3 py-3 text-center font-medium">#</th>
-              <th className="px-3 py-3 text-center font-medium">id</th>
-              <th className="px-3 py-3 text-center font-medium">اسم المشروع</th>
-              <th className="px-3 py-3 text-center font-medium">رقم المشروع</th>
-              <th className="px-3 py-3 text-center font-medium">اسم الموظف</th>
-              <th className="px-3 py-3 text-center font-medium">الحالة</th>
-              <th className="px-3 py-3 text-center font-medium">تاريخ البدء</th>
-              <th className="px-3 py-3 text-center font-medium">تاريخ الانتهاء</th>
-              <th className="px-3 py-3 text-center font-medium">تاريخ الدعوة</th>
-              <th className="px-3 py-3 text-center font-medium">إجراءات</th>
+            <tr className={tableHeadRowClass}>
+              <th className="px-2 py-3 text-center font-medium">{t("table.columns.index")}</th>
+              <th className="px-2 py-3 text-center font-medium">{t("table.columns.id")}</th>
+              <th className="px-2 py-3 text-center font-medium">
+                {t("projects.invitations.columns.projectName")}
+              </th>
+              <th className="px-2 py-3 text-center font-medium">
+                {t("projects.invitations.columns.projectNumber")}
+              </th>
+              <th className="px-2 py-3 text-center font-medium">
+                {t("projects.invitations.columns.employeeName")}
+              </th>
+              <th className="px-2 py-3 text-center font-medium">
+                {t("projects.invitations.columns.status")}
+              </th>
+              <th className="px-2 py-3 text-center font-medium">
+                {t("projects.invitations.columns.startDate")}
+              </th>
+              <th className="px-2 py-3 text-center font-medium">
+                {t("projects.invitations.columns.endDate")}
+              </th>
+              <th className="px-2 py-3 text-center font-medium">
+                {t("projects.invitations.columns.invitedAt")}
+              </th>
+              <th className="px-2 py-3 text-center font-medium">{t("table.columns.actions")}</th>
             </tr>
           </thead>
           <tbody>
             {invitations.map((invitation, index) => (
               <tr
                 key={invitation.id}
-                className={[
-                  "border-t border-hr-border",
-                  index % 2 ? "bg-[#FAFCFE]" : "bg-white",
-                ].join(" ")}
+                className={`border-t border-hr-border ${tableRowClass(index)}`}
               >
-                <td className="px-3 py-3 text-center text-hr-muted">
+                <td className="px-2 py-3 text-center text-hr-muted">
                   <TableRowIndex index={index} page={currentPage} pageSize={PAGE_SIZE} />
                 </td>
-                <td className="px-3 py-3 text-center">
+                <td className="px-2 py-3 text-center">
                   <CopyableIdCell value={invitation.id} />
                 </td>
-                <td className="px-3 py-3 text-center font-medium">{invitation.projectName}</td>
-                <td className="px-3 py-3 text-center">{invitation.projectNumber}</td>
-                <td className="px-3 py-3 text-center">{invitation.employeeName}</td>
-                <td className="px-3 py-3 text-center">
+                <td className="truncate px-2 py-3 text-center font-medium">{invitation.projectName}</td>
+                <td className="px-2 py-3 text-center">
+                  <CopyableIdCell value={invitation.projectId} />
+                </td>
+                <td className="truncate px-2 py-3 text-center">{invitation.employeeName}</td>
+                <td className="px-2 py-3 text-center">
                   <InvitationStatusBadge status={invitation.status} />
                 </td>
-                <td className="px-3 py-3 text-center">{invitation.startDate}</td>
-                <td className="px-3 py-3 text-center">{invitation.endDate}</td>
-                <td className="px-3 py-3 text-center">{invitation.invitedAt}</td>
-                <td className="px-3 py-3">
+                <td className="whitespace-nowrap px-2 py-3 text-center">
+                  {invitation.startDate || t("common.dash")}
+                </td>
+                <td className="whitespace-nowrap px-2 py-3 text-center">
+                  {invitation.endDate || t("common.dash")}
+                </td>
+                <td className="whitespace-nowrap px-2 py-3 text-center">{invitation.invitedAt}</td>
+                <td className="px-2 py-3">
                   {invitation.status === "pending" ? (
-                    <div className="flex items-center justify-center gap-2">
+                    <div className="mx-auto flex w-[5.5rem] flex-col gap-1">
                       <button
                         type="button"
                         onClick={() => onAccept(invitation)}
-                        className="rounded-lg bg-green-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-green-600"
+                        className="rounded-md bg-green-500 px-2 py-1 text-[11px] font-bold text-white hover:bg-green-600"
                       >
-                        قبول
+                        {t("common.accept")}
                       </button>
                       <button
                         type="button"
                         onClick={() => onReject(invitation)}
-                        className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600"
+                        className="rounded-md bg-red-500 px-2 py-1 text-[11px] font-bold text-white hover:bg-red-600"
                       >
-                        رفض
+                        {t("common.reject")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onCancel(invitation)}
+                        className="rounded-md bg-slate-500 px-2 py-1 text-[11px] font-bold text-white hover:bg-slate-600"
+                      >
+                        {t("common.cancel")}
                       </button>
                     </div>
                   ) : (
-                    <span className="text-xs text-hr-muted">—</span>
+                    <span className="text-xs text-hr-muted">{t("common.dash")}</span>
                   )}
                 </td>
               </tr>

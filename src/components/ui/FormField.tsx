@@ -4,16 +4,32 @@ type FormFieldProps = {
   label: string;
   children: ReactNode;
   required?: boolean;
+  hint?: string;
+  error?: string;
+  htmlFor?: string;
 };
 
-export function FormField({ label, children, required }: FormFieldProps) {
+export function FormField({
+  label,
+  children,
+  required,
+  hint,
+  error,
+  htmlFor,
+}: FormFieldProps) {
   return (
-    <div>
-      <label className="mb-2 block text-sm font-medium text-hr-text">
+    <div className="mb-4 text-start">
+      <label htmlFor={htmlFor} className="mb-2 block text-sm font-medium text-hr-text">
         {label}
         {required && <span className="text-red-500"> *</span>}
       </label>
       {children}
+      {error && (
+        <p className="mt-1 text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+      {!error && hint && <p className="mt-1 text-xs text-hr-muted">{hint}</p>}
     </div>
   );
 }

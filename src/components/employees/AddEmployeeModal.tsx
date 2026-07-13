@@ -1,22 +1,49 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle,
   Loader,
-  Plus,
-  Trash2,
   Upload,
-  X,
 } from "lucide-react";
 import { DEFAULT_EMPLOYEE_PASSWORD } from "../../constants/defaults";
+import { usePreferences } from "../../context/PreferencesContext";
+import { useModalAutoFocus } from "../../hooks/useModalAutoFocus";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
+import { useTranslation } from "../../i18n";
 import type { Employee, WorkRole } from "../../types/employee";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
+import {
+  isValidDecimal,
+  isValidEmail,
+  isValidPhone,
+  sanitizeEmployeeField,
+} from "../../utils/inputConstraints";
+import { mapNamedOptions } from "../../utils/selectOptions";
+import { useSkillCatalog } from "../../hooks/useSkillCatalog";
+import { SearchableSelect } from "../ui/SearchableSelect";
+import { PasswordInput } from "../ui/PasswordInput";
+import { EmployeeResumeSkillsEditor } from "./EmployeeResumeSkillsEditor";
+import {
+  emptyEmployeeSkillRow,
+  isEmployeeSkillRowComplete,
+  toResumeSkillPayload,
+  type EmployeeSkillRow,
+} from "./employeeSkills";
+import {
+  alertErrorClass,
+  alertSuccessClass,
+  cancelBtnLgClass,
+  dashedZoneClass,
+  modalBodyClass,
+  modalFooterClass,
+  ModalCloseButton,
+} from "../ui/modalStyles";
 import {
   EMPLOYEE_TABS_CLASS,
   EmployeeField,
   StepBadge,
   inputClass,
+  readOnlyClass,
 } from "./employee-ui";
 
 type AddEmployeeModalProps = {
@@ -27,33 +54,31 @@ type AddEmployeeModalProps = {
 
 type TabType = "personal" | "work" | "resume" | "payroll";
 
-const TABS: Array<{ value: TabType; label: string }> = [
-  { value: "personal", label: "معلومات شخصية" },
-  { value: "work", label: "معلومات العمل" },
-  { value: "resume", label: "سيرة ذاتية" },
-  { value: "payroll", label: "معلومات كشوف الرواتب" },
-];
-
-const WORK_ROLES: Array<{ value: WorkRole; label: string }> = [
-  { value: "Front_end", label: "Front_end" },
-  { value: "Back_end", label: "Back_end" },
-  { value: "UI_UX", label: "UI_UX" },
-  { value: "Test", label: "Test" },
-];
-
-const emptySkill = { name: "", type: "", level: "" };
+const WORK_ROLES: WorkRole[] = ["Front_end", "Back_end", "UI_UX", "Test"];
 
 export function AddEmployeeModal({
   isOpen,
   onClose,
   onSubmit,
 }: AddEmployeeModalProps) {
+  const { t } = useTranslation();
+  const { dir } = usePreferences();
+  const tabs = useMemo<Array<{ value: TabType; label: string }>>(
+    () => [
+      { value: "personal", label: t("employees.modal.tabs.personal") },
+      { value: "work", label: t("employees.modal.tabs.work") },
+      { value: "resume", label: t("employees.modal.tabs.resume") },
+      { value: "payroll", label: t("employees.modal.tabs.payroll") },
+    ],
+    [t],
+  );
   const [activeTab, setActiveTab] = useState<TabType>("personal");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const firstFieldRef = useModalAutoFocus<HTMLInputElement>(isOpen);
 
   const {
     departments: departmentOptions,
@@ -65,6 +90,12 @@ export function AddEmployeeModal({
     contractTypes: true,
     employees: false,
   });
+
+  const {
+    skillGroups,
+    loading: skillsLoading,
+    error: skillsError,
+  } = useSkillCatalog(isOpen);
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -80,9 +111,10 @@ export function AddEmployeeModal({
     joiningDate: "",
     contractEndDate: "",
     salary: "",
+    wage: "",
     contractTypeId: "",
     idNumber: "",
-    skills: [emptySkill],
+    skills: [emptyEmployeeSkillRow()] as EmployeeSkillRow[],
   });
 
   useEffect(() => {
@@ -106,7 +138,8 @@ export function AddEmployeeModal({
     >,
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const sanitized = sanitizeEmployeeField(name, value);
+    setFormData((prev) => ({ ...prev, [name]: sanitized }));
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
@@ -129,17 +162,47 @@ export function AddEmployeeModal({
   const validateForm = () => {
     const nextErrors: Record<string, string> = {};
 
-    if (!formData.fullName.trim()) nextErrors.fullName = "الاسم الكامل مطلوب";
-    if (!formData.email.trim()) nextErrors.email = "البريد الإلكتروني مطلوب";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      nextErrors.email = "بريد إلكتروني غير صحيح";
+    if (!formData.fullName.trim()) {
+      nextErrors.fullName = t("employees.errors.fullNameRequired");
     }
-    if (!formData.phone.trim()) nextErrors.phone = "رقم الهاتف مطلوب";
-    if (!formData.departmentId) nextErrors.departmentId = "يرجى اختيار القسم";
-    if (!formData.contractTypeId)
-      nextErrors.contractTypeId = "يرجى اختيار نوع العقد";
+    if (!formData.email.trim()) {
+      nextErrors.email = t("employees.errors.emailRequired");
+    } else if (!isValidEmail(formData.email)) {
+      nextErrors.email = t("employees.errors.emailInvalid");
+    }
+    if (!formData.phone.trim()) {
+      nextErrors.phone = t("employees.errors.phoneRequired");
+    } else if (!isValidPhone(formData.phone)) {
+      nextErrors.phone = t("employees.errors.phoneInvalid");
+    }
+    if (formData.salary && !isValidDecimal(formData.salary)) {
+      nextErrors.salary = t("employees.errors.salaryInvalid");
+    }
+    if (formData.wage && !isValidDecimal(formData.wage)) {
+      nextErrors.wage = t("employees.errors.wageInvalid");
+    }
+    if (formData.idNumber && !/^\d+$/.test(formData.idNumber)) {
+      nextErrors.idNumber = t("employees.errors.idNumberInvalid");
+    }
+    if (!formData.departmentId) {
+      nextErrors.departmentId = t("employees.errors.departmentRequired");
+    }
+    if (!formData.contractTypeId) {
+      nextErrors.contractTypeId = t("employees.errors.contractTypeRequired");
+    }
 
     setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      if (nextErrors.fullName || nextErrors.email || nextErrors.phone) {
+        setActiveTab("personal");
+      } else if (nextErrors.departmentId) {
+        setActiveTab("work");
+      } else if (nextErrors.contractTypeId) {
+        setActiveTab("payroll");
+      }
+    }
+
     return Object.keys(nextErrors).length === 0;
   };
 
@@ -174,12 +237,20 @@ export function AddEmployeeModal({
         joiningDate: formData.joiningDate,
         contractEndDate: formData.contractEndDate,
         salary: formData.salary ? Number(formData.salary) : undefined,
-        wage: formData.salary ? Number(formData.salary) : undefined,
+        wage: formData.wage ? Number(formData.wage) : undefined,
         idNumber: formData.idNumber,
-        resumeSkills: formData.skills.filter(
-          (skill) =>
-            skill.name.trim() || skill.type.trim() || skill.level.trim(),
-        ),
+        resumeSkills: formData.skills
+          .filter(isEmployeeSkillRowComplete)
+          .filter(
+            (row, index, rows) =>
+              rows.findIndex(
+                (entry) =>
+                  entry.typeId === row.typeId &&
+                  entry.skillId === row.skillId &&
+                  entry.levelId === row.levelId,
+              ) === index,
+          )
+          .map(toResumeSkillPayload),
       });
 
       setSubmitSuccess(true);
@@ -188,7 +259,7 @@ export function AddEmployeeModal({
         onClose();
       }, 1200);
     } catch (error) {
-      setSubmitError(getThrownErrorMessage(error, "فشل إضافة الموظف"));
+      setSubmitError(getThrownErrorMessage(error, t("employees.errors.add")));
     } finally {
       setIsSubmitting(false);
     }
@@ -201,39 +272,29 @@ export function AddEmployeeModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div
-        className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-card"
-        dir="rtl"
-      >
-        <div className="relative border-b border-hr-border px-6 py-5 text-center">
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute start-4 top-4 rounded-full p-1 text-hr-muted transition hover:bg-gray-100"
-            aria-label="إغلاق"
-          >
-            <X className="size-5" />
-          </button>
-          <h2 className="text-2xl font-bold text-[#1B91C4]">إضافة موظف جديد</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="hr-modal relative max-w-4xl" dir={dir}>
+        <ModalCloseButton onClick={onClose} disabled={isSubmitting} />
+        <div className="border-b border-hr-border px-6 py-5 pe-12 text-center">
+          <h2 className="text-2xl font-bold text-hr-primary">{t("employees.modal.title")}</h2>
         </div>
 
         {submitSuccess && (
-          <div className="mx-6 mt-4 flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-green-700">
+          <div className={`mx-6 mt-4 flex items-center gap-3 ${alertSuccessClass}`}>
             <CheckCircle className="size-5 shrink-0" />
-            <span>تم إضافة الموظف بنجاح</span>
+            <span>{t("employees.toasts.addSuccess")}</span>
           </div>
         )}
 
         {submitError && (
-          <div className="mx-6 mt-4 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+          <div className={`mx-6 mt-4 flex items-center gap-3 ${alertErrorClass}`}>
             <AlertCircle className="size-5 shrink-0" />
             <span>{submitError}</span>
           </div>
         )}
 
         <div className={EMPLOYEE_TABS_CLASS.bar}>
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.value}
               type="button"
@@ -248,31 +309,35 @@ export function AddEmployeeModal({
         <form
           id="add-employee-form"
           onSubmit={handleSubmit}
-          className="flex-1 overflow-y-auto px-6 py-5"
+          className={modalBodyClass}
         >
           {activeTab === "personal" && (
             <div className="space-y-5">
               <div className="flex items-center gap-2 text-hr-text">
                 <StepBadge step={1} />
-                <h3 className="font-bold">معلومات شخصية</h3>
+                <h3 className="font-bold">{t("employees.modal.tabs.personal")}</h3>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <EmployeeField label="اسم الموظف الكامل" required>
+                <EmployeeField
+                  label={t("employees.modal.fields.fullName")}
+                  required
+                  error={errors.fullName}
+                  htmlFor="employee-fullName"
+                >
                   <input
+                    id="employee-fullName"
+                    ref={firstFieldRef}
                     name="fullName"
                     value={formData.fullName}
                     onChange={handleChange}
                     className={inputClass}
+                    placeholder={t("employees.modal.placeholders.fullName")}
+                    autoComplete="name"
                   />
-                  {errors.fullName && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.fullName}
-                    </p>
-                  )}
                 </EmployeeField>
 
-                <EmployeeField label="تاريخ الميلاد">
+                <EmployeeField label={t("employees.modal.fields.birthDate")}>
                   <input
                     type="date"
                     name="birthDate"
@@ -282,45 +347,58 @@ export function AddEmployeeModal({
                   />
                 </EmployeeField>
 
-                <EmployeeField label="البريد الإلكتروني" required>
+                <EmployeeField
+                  label={t("employees.modal.fields.email")}
+                  required
+                  error={errors.email}
+                  htmlFor="employee-email"
+                >
                   <input
+                    id="employee-email"
                     type="email"
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
                     className={inputClass}
+                    placeholder="name@example.com"
+                    autoComplete="email"
                   />
-                  {errors.email && (
-                    <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                  )}
                 </EmployeeField>
 
-                <EmployeeField label="رقم الهاتف" required>
+                <EmployeeField
+                  label={t("employees.modal.fields.phone")}
+                  required
+                  error={errors.phone}
+                  htmlFor="employee-phone"
+                >
                   <input
+                    id="employee-phone"
                     name="phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    dir="ltr"
                     value={formData.phone}
                     onChange={handleChange}
                     className={inputClass}
+                    placeholder="05xxxxxxxx"
                   />
-                  {errors.phone && (
-                    <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
-                  )}
                 </EmployeeField>
 
-                <EmployeeField label="الجنس">
+                <EmployeeField label={t("employees.modal.fields.gender")}>
                   <select
                     name="gender"
                     value={formData.gender}
                     onChange={handleChange}
                     className={inputClass}
                   >
-                    <option value="">اختر</option>
-                    <option value="male">ذكر</option>
-                    <option value="female">أنثى</option>
+                    <option value="">{t("common.select")}</option>
+                    <option value="male">{t("common.male")}</option>
+                    <option value="female">{t("common.female")}</option>
                   </select>
                 </EmployeeField>
 
-                <EmployeeField label="الجنسية">
+                <EmployeeField label={t("employees.modal.fields.nationality")}>
                   <input
                     name="nationality"
                     value={formData.nationality}
@@ -329,8 +407,8 @@ export function AddEmployeeModal({
                   />
                 </EmployeeField>
 
-                <EmployeeField label="كلمة المرور">
-                  <input
+                <EmployeeField label={t("employees.modal.fields.password")}>
+                  <PasswordInput
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
@@ -338,9 +416,15 @@ export function AddEmployeeModal({
                   />
                 </EmployeeField>
 
-                <EmployeeField label="رقم الهوية">
+                <EmployeeField
+                  label={t("employees.modal.fields.idNumber")}
+                  error={errors.idNumber}
+                >
                   <input
                     name="idNumber"
+                    type="text"
+                    inputMode="numeric"
+                    dir="ltr"
                     value={formData.idNumber}
                     onChange={handleChange}
                     className={inputClass}
@@ -348,7 +432,7 @@ export function AddEmployeeModal({
                 </EmployeeField>
               </div>
 
-              <EmployeeField label="صورة الموظف">
+              <EmployeeField label={t("employees.modal.fields.photo")}>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -359,19 +443,19 @@ export function AddEmployeeModal({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex w-full max-w-[280px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-hr-border bg-[#FAFCFE] px-4 py-8 transition hover:border-hr-primary"
+                  className={`flex w-full max-w-[280px] flex-col items-center justify-center rounded-2xl px-4 py-8 ${dashedZoneClass}`}
                 >
                   {formData.personalImage ? (
                     <img
                       src={formData.personalImage}
-                      alt="معاينة"
+                      alt={t("common.preview")}
                       className="mb-3 size-24 rounded-xl object-cover"
                     />
                   ) : (
                     <Upload className="mb-2 size-8 text-hr-muted" />
                   )}
                   <span className="text-sm text-hr-muted">
-                    انقر لرفع الصورة
+                    {t("employees.modal.uploadPhotoHint")}
                   </span>
                 </button>
               </EmployeeField>
@@ -382,43 +466,40 @@ export function AddEmployeeModal({
             <div className="space-y-5">
               <div className="flex items-center gap-2 text-hr-text">
                 <StepBadge step={2} />
-                <h3 className="font-bold">معلومات العمل</h3>
+                <h3 className="font-bold">{t("employees.modal.tabs.work")}</h3>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <EmployeeField label="اسم القسم الذي يعمل فيه" required>
-                  <select
-                    name="departmentId"
+                <EmployeeField
+                  label={t("employees.modal.fields.department")}
+                  required
+                  error={errors.departmentId}
+                  hint={t("employees.modal.fields.departmentHint")}
+                >
+                  <SearchableSelect
                     value={formData.departmentId}
-                    onChange={handleChange}
-                    disabled={optionsLoading}
-                    className={inputClass}
-                  >
-                    <option value="">
-                      {optionsLoading ? "جاري التحميل..." : "اختر القسم"}
-                    </option>
-                    {departmentOptions.map((department) => (
-                      <option key={department.id} value={department.id}>
-                        {department.name}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.departmentId && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.departmentId}
-                    </p>
-                  )}
-                </EmployeeField>
-
-                <EmployeeField label="مدير القسم">
-                  <input
-                    value={selectedDepartment?.managerName || "-"}
-                    readOnly
-                    className={`${inputClass} bg-[#FAFCFE]`}
+                    onChange={(value) => {
+                      setFormData((prev) => ({ ...prev, departmentId: value }));
+                      if (errors.departmentId) {
+                        setErrors((prev) => ({ ...prev, departmentId: "" }));
+                      }
+                    }}
+                    options={mapNamedOptions(departmentOptions)}
+                    placeholder={t("employees.modal.placeholders.selectDepartment")}
+                    loading={optionsLoading}
+                    hasError={Boolean(errors.departmentId)}
                   />
                 </EmployeeField>
 
-                <EmployeeField label="دور العمل">
+                <EmployeeField label={t("employees.modal.fields.manager")}>
+                  <input
+                    value={selectedDepartment?.managerName || t("common.dash")}
+                    readOnly
+                    className={readOnlyClass}
+                  />
+                </EmployeeField>
+
+                <EmployeeField label={t("employees.modal.fields.workRole")}>
                   <select
                     name="role"
                     value={formData.role}
@@ -426,8 +507,8 @@ export function AddEmployeeModal({
                     className={inputClass}
                   >
                     {WORK_ROLES.map((role) => (
-                      <option key={role.value} value={role.value}>
-                        {role.label}
+                      <option key={role} value={role}>
+                        {t(`badges.workRoles.${role}`)}
                       </option>
                     ))}
                   </select>
@@ -440,89 +521,16 @@ export function AddEmployeeModal({
             <div className="space-y-5">
               <div className="flex items-center gap-2 text-hr-text">
                 <StepBadge step={3} />
-                <h3 className="font-bold">السيرة الذاتية</h3>
+                <h3 className="font-bold">{t("employees.modal.tabs.resume")}</h3>
               </div>
 
-              <div className="space-y-3">
-                {formData.skills.map((skill, index) => (
-                  <div
-                    key={index}
-                    className="grid grid-cols-1 gap-3 rounded-xl border border-hr-border p-4 sm:grid-cols-[1fr_1fr_1fr_auto]"
-                  >
-                    <EmployeeField label="اكتب المهارة">
-                      <input
-                        value={skill.name}
-                        onChange={(e) => {
-                          const next = [...formData.skills];
-                          next[index] = {
-                            ...next[index],
-                            name: e.target.value,
-                          };
-                          setFormData((prev) => ({ ...prev, skills: next }));
-                        }}
-                        className={inputClass}
-                      />
-                    </EmployeeField>
-                    <EmployeeField label="فئة المهارة">
-                      <input
-                        value={skill.type}
-                        onChange={(e) => {
-                          const next = [...formData.skills];
-                          next[index] = {
-                            ...next[index],
-                            type: e.target.value,
-                          };
-                          setFormData((prev) => ({ ...prev, skills: next }));
-                        }}
-                        className={inputClass}
-                      />
-                    </EmployeeField>
-                    <EmployeeField label="مستوى المهارة">
-                      <input
-                        value={skill.level}
-                        onChange={(e) => {
-                          const next = [...formData.skills];
-                          next[index] = {
-                            ...next[index],
-                            level: e.target.value,
-                          };
-                          setFormData((prev) => ({ ...prev, skills: next }));
-                        }}
-                        className={inputClass}
-                      />
-                    </EmployeeField>
-                    <div className="flex items-end">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            skills: prev.skills.filter((_, i) => i !== index),
-                          }))
-                        }
-                        className="mb-1 text-red-400"
-                        aria-label="حذف المهارة"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      skills: [...prev.skills, emptySkill],
-                    }))
-                  }
-                  className="inline-flex items-center gap-2 rounded-xl border border-dashed border-hr-border px-4 py-2 text-sm text-hr-primary"
-                >
-                  <Plus className="size-4" />
-                  إضافة مهارة أخرى
-                </button>
-              </div>
+              <EmployeeResumeSkillsEditor
+                skills={formData.skills}
+                onChange={(skills) => setFormData((prev) => ({ ...prev, skills }))}
+                skillGroups={skillGroups}
+                loading={skillsLoading}
+                error={skillsError}
+              />
             </div>
           )}
 
@@ -530,45 +538,69 @@ export function AddEmployeeModal({
             <div className="space-y-5">
               <div className="flex items-center gap-2 text-hr-text">
                 <StepBadge step={4} />
-                <h3 className="font-bold">معلومات كشوف الرواتب</h3>
+                <h3 className="font-bold">{t("employees.modal.tabs.payroll")}</h3>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <EmployeeField label="نوع العقد" required>
-                  <select
-                    name="contractTypeId"
+                <EmployeeField
+                  label={t("employees.modal.fields.contractType")}
+                  required
+                  error={errors.contractTypeId}
+                  hint={t("employees.modal.fields.contractTypeHint")}
+                >
+                  <SearchableSelect
                     value={formData.contractTypeId}
-                    onChange={handleChange}
-                    disabled={optionsLoading}
-                    className={inputClass}
-                  >
-                    <option value="">
-                      {optionsLoading ? "جاري التحميل..." : "اختر نوع العقد"}
-                    </option>
-                    {contractTypeOptions.map((contractType) => (
-                      <option key={contractType.id} value={contractType.id}>
-                        {contractType.name}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.contractTypeId && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.contractTypeId}
-                    </p>
-                  )}
-                </EmployeeField>
-
-                <EmployeeField label="الراتب">
-                  <input
-                    type="number"
-                    name="salary"
-                    value={formData.salary}
-                    onChange={handleChange}
-                    className={inputClass}
+                    onChange={(value) => {
+                      setFormData((prev) => ({ ...prev, contractTypeId: value }));
+                      if (errors.contractTypeId) {
+                        setErrors((prev) => ({ ...prev, contractTypeId: "" }));
+                      }
+                    }}
+                    options={mapNamedOptions(contractTypeOptions)}
+                    placeholder={t("employees.modal.placeholders.selectContractType")}
+                    loading={optionsLoading}
+                    hasError={Boolean(errors.contractTypeId)}
                   />
                 </EmployeeField>
 
-                <EmployeeField label="تاريخ بدء العقد">
+                <EmployeeField
+                  label={t("employees.modal.fields.salary")}
+                  hint={t("employees.modal.fields.salaryHint")}
+                  error={errors.salary}
+                >
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    name="salary"
+                    dir="ltr"
+                    value={formData.salary}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder="5000"
+                  />
+                </EmployeeField>
+
+                <EmployeeField
+                  label={t("employees.detail.fields.wage")}
+                  hint={t("employees.detail.fields.wageHint")}
+                  error={errors.wage}
+                >
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    name="wage"
+                    dir="ltr"
+                    value={formData.wage}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder="500"
+                  />
+                </EmployeeField>
+
+                <EmployeeField
+                  label={t("employees.modal.fields.contractStart")}
+                  hint={t("employees.modal.fields.contractStartHint")}
+                >
                   <input
                     type="date"
                     name="joiningDate"
@@ -578,7 +610,10 @@ export function AddEmployeeModal({
                   />
                 </EmployeeField>
 
-                <EmployeeField label="إلى">
+                <EmployeeField
+                  label={t("employees.modal.fields.contractEnd")}
+                  hint={t("employees.modal.fields.contractEndHint")}
+                >
                   <input
                     type="date"
                     name="contractEndDate"
@@ -592,7 +627,7 @@ export function AddEmployeeModal({
           )}
         </form>
 
-        <div className="flex gap-3 border-t border-hr-border bg-[#FAFCFE] px-6 py-4">
+        <div className={modalFooterClass}>
           <button
             type="submit"
             form="add-employee-form"
@@ -600,15 +635,15 @@ export function AddEmployeeModal({
             className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-hr-primary text-sm font-bold text-white transition hover:bg-hr-primary-hover disabled:opacity-60"
           >
             {isSubmitting && <Loader className="size-4 animate-spin" />}
-            {isSubmitting ? "جاري الإضافة..." : "إضافة موظف"}
+            {isSubmitting ? t("employees.modal.submitting") : t("employees.modal.submit")}
           </button>
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="h-11 flex-1 rounded-xl bg-gray-400 text-sm font-bold text-white transition hover:bg-gray-500 disabled:opacity-60"
+            className={cancelBtnLgClass}
           >
-            إلغاء
+            {t("common.cancel")}
           </button>
         </div>
       </div>

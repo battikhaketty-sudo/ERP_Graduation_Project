@@ -194,8 +194,9 @@ export const checkIn = async () => {
 };
 // CHECK OUT
 export const checkOut = async (id) => {
-  const res = await api.put(
-    `/attendences/${id}/check-out`
+  const res = await api.post(
+    `/attendences/${id}/check-out`,
+    {}
   );
   return res.data;
 };

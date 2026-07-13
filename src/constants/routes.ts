@@ -4,6 +4,7 @@ export const ROUTES = {
   employees: "/employees",
   departments: "/departments",
   hr: "/hr",
+  access: "/access",
   notifications: "/notifications",
 } as const;
 

@@ -16,14 +16,6 @@ const formatDate = (value?: string | null) => {
   return value.slice(0, 10);
 };
 
-const hashNumber = (id: string) => {
-  let hash = 0;
-  for (let index = 0; index < id.length; index += 1) {
-    hash = (hash * 31 + id.charCodeAt(index)) % 1000;
-  }
-  return hash || 101;
-};
-
 export const normalizeSection = (
   item: Record<string, unknown>,
   projectId: string,
@@ -53,7 +45,7 @@ export const normalizeProjectListItem = (item: Record<string, unknown>): Project
 
   return {
     id,
-    number: extractRowNumber(item) ?? 0,
+    number: id,
     name: String(item.name ?? "بدون اسم"),
     managerId: String(item.managerId ?? ""),
     managerName: String(item.managerName ?? "-"),
@@ -81,7 +73,7 @@ export const normalizeProjectDetail = (item: Record<string, unknown>): Project =
 
   return {
     id,
-    number: hashNumber(id),
+    number: id,
     name: String(item.name ?? "بدون اسم"),
     managerId: String(item.managerId ?? ""),
     managerName: String(item.managerName ?? "-"),
@@ -111,7 +103,7 @@ export const normalizeInvitation = (item: Record<string, unknown>): ProjectInvit
     id,
     projectId,
     projectName: String(item.projectName ?? "بدون اسم"),
-    projectNumber: hashNumber(projectId),
+    projectNumber: projectId,
     employeeId: String(item.invitedEmployeeId ?? item.employeeId ?? ""),
     employeeName: String(item.invitedEmployeeName ?? item.employeeName ?? "-"),
     role: roleLabelFromApi(item.role),

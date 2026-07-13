@@ -1,109 +1,92 @@
 import type { Notification } from "../types/notification";
+import type { Locale } from "../utils/preferencesStorage";
 
-export const notificationsSeed: Notification[] = [
+const arNotifications: Notification[] = [
   {
     id: "1",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
+    title: "طلب إجازة جديد",
+    description: "قدّم أحمد محمد طلب إجازة لمدة 3 أيام. يرجى المراجعة والموافقة.",
     date: "10.09.2023",
   },
   {
     id: "2",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
+    title: "تحديث سياسة الحضور",
+    description: "تم تحديث سياسة الحضور والانصراف. يرجى الاطلاع على التفاصيل في قسم HR.",
     date: "10.09.2023",
   },
   {
     id: "3",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
+    title: "موظف جديد",
+    description: "تمت إضافة موظف جديد إلى قسم التطوير. راجع ملف الموظف للاطلاع على التفاصيل.",
     date: "10.09.2023",
   },
   {
     id: "4",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
+    title: "تذكير: تقييم الأداء",
+    description: "موعد تقييم الأداء الربع سنوي يقترب. يرجى إعداد التقييمات قبل نهاية الأسبوع.",
     date: "09.09.2023",
   },
   {
     id: "5",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
-    date: "09.09.2023",
+    title: "دعوة مشروع",
+    description: "تمت دعوتك للانضمام إلى مشروع ERP. افتح صفحة المشاريع للرد على الدعوة.",
+    date: "08.09.2023",
   },
   {
     id: "6",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
-    date: "08.09.2023",
-  },
-  {
-    id: "7",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
-    date: "08.09.2023",
-  },
-  {
-    id: "8",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
+    title: "تغيير جدول العمل",
+    description: "تم تحديث جدول العمل الافتراضي للمؤسسة اعتباراً من الأسبوع القادم.",
     date: "07.09.2023",
-  },
-  {
-    id: "9",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
-    date: "07.09.2023",
-  },
-  {
-    id: "10",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
-    date: "06.09.2023",
-  },
-  {
-    id: "11",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
-    date: "06.09.2023",
-  },
-  {
-    id: "12",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
-    date: "05.09.2023",
-  },
-  {
-    id: "13",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
-    date: "05.09.2023",
-  },
-  {
-    id: "14",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
-    date: "04.09.2023",
-  },
-  {
-    id: "15",
-    title: "عنوان الإشعار",
-    description:
-      "هذا النص هو مثال لنص يمكن أن يستبدل في نفس المساحة، لقد تم توليد هذا النص من مولد النص العربي، حيث يمكنك أن تولد مثل هذا النص.",
-    date: "04.09.2023",
   },
 ];
+
+const enNotifications: Notification[] = [
+  {
+    id: "1",
+    title: "New leave request",
+    description: "Ahmed Mohammed submitted a 3-day leave request. Please review and approve.",
+    date: "10.09.2023",
+  },
+  {
+    id: "2",
+    title: "Attendance policy update",
+    description: "The attendance policy has been updated. See HR for details.",
+    date: "10.09.2023",
+  },
+  {
+    id: "3",
+    title: "New employee",
+    description: "A new employee was added to the Development department. Review their profile for details.",
+    date: "10.09.2023",
+  },
+  {
+    id: "4",
+    title: "Reminder: performance review",
+    description: "The quarterly performance review deadline is approaching. Please submit reviews by end of week.",
+    date: "09.09.2023",
+  },
+  {
+    id: "5",
+    title: "Project invitation",
+    description: "You were invited to join the ERP project. Open Projects to respond.",
+    date: "08.09.2023",
+  },
+  {
+    id: "6",
+    title: "Work schedule change",
+    description: "The default company work schedule will change starting next week.",
+    date: "07.09.2023",
+  },
+];
+
+export function getNotificationsSeed(locale: Locale): Notification[] {
+  return locale === "en" ? enNotifications : arNotifications;
+}
+
+/** Unread count shown in the header badge (matches Figma demo). */
+export function getUnreadNotificationCount(locale: Locale): number {
+  return Math.min(4, getNotificationsSeed(locale).length);
+}
+
+/** @deprecated Use getNotificationsSeed(locale) */
+export const notificationsSeed = arNotifications;

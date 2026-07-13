@@ -1,16 +1,22 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { usePreferences } from "../../context/PreferencesContext";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
+import { useProjectLabels } from "../../hooks/useProjectLabels";
+import { useModalAutoFocus } from "../../hooks/useModalAutoFocus";
+import { useTranslation } from "../../i18n";
 import type {
   Project,
   ProjectFormPayload,
   ProjectStatus,
 } from "../../types/project";
+import { mapNamedOptions } from "../../utils/selectOptions";
+import { SearchableSelect } from "../ui/SearchableSelect";
+import { readOnlyClass } from "../ui/formStyles";
+import { alertErrorClass, cancelBtnClass, ModalCloseButton, ModalTitleBar } from "../ui/modalStyles";
 import {
   inputClass,
   modalCardClass,
   modalOverlayClass,
-  PROJECT_STATUS_LABELS,
   textareaClass,
 } from "./project-ui";
 
@@ -33,6 +39,9 @@ export function AddProjectModal({
   onClose,
   onSubmit,
 }: AddProjectModalProps) {
+  const { t } = useTranslation();
+  const { dir } = usePreferences();
+  const { projectStatusLabel } = useProjectLabels();
   const isEditing = Boolean(project);
   const { employees, loading } = useReferenceOptions(isOpen, {
     departments: false,
@@ -50,6 +59,7 @@ export function AddProjectModal({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const firstFieldRef = useModalAutoFocus<HTMLInputElement>(isOpen);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -69,11 +79,11 @@ export function AddProjectModal({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.name.trim()) {
-      setError("اسم المشروع مطلوب");
+      setError(t("projects.modals.addProject.errors.nameRequired"));
       return;
     }
     if (!form.managerId) {
-      setError("يرجى اختيار مدير المشروع");
+      setError(t("projects.modals.addProject.errors.managerRequired"));
       return;
     }
 
@@ -99,7 +109,7 @@ export function AddProjectModal({
       setError(
         err && typeof err === "object" && "message" in err
           ? String(err.message)
-          : "فشل حفظ المشروع",
+          : t("projects.modals.addProject.errors.saveFailed"),
       );
     } finally {
       setSaving(false);
@@ -107,144 +117,131 @@ export function AddProjectModal({
   };
 
   return (
-    <div className={modalOverlayClass} dir="rtl">
-      <div className={`${modalCardClass} max-w-2xl`}>
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-[#1B91C4]">
-            {isEditing ? "تعديل المشروع" : "إضافة مشروع جديد"}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-hr-muted hover:text-hr-text"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
+    <div className={modalOverlayClass} dir={dir}>
+      <div className={`${modalCardClass} relative max-w-2xl`}>
+        <ModalCloseButton onClick={onClose} disabled={saving} />
+        <ModalTitleBar
+          title={
+            isEditing
+              ? t("projects.modals.addProject.editTitle")
+              : t("projects.modals.addProject.title")
+          }
+          onClose={onClose}
+          disabled={saving}
+          hideCloseButton
+        />
 
         <form
           onSubmit={(event) => void handleSubmit(event)}
           className="space-y-6"
         >
-          <section>
-            <h3 className="mb-4 border-b border-hr-border pb-2 text-sm font-bold text-hr-text">
-              المعلومات الأساسية
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="mb-2 block text-sm text-hr-text">
-                  الرقم (غير قابل للتعديل)
-                </label>
-                <input
-                  value={project?.number ?? "يتم إنشاء الرقم تلقائياً"}
-                  disabled
-                  className={`${inputClass} bg-[#FAFCFE] text-hr-muted`}
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm text-hr-text">
-                    اسم المشروع <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    value={form.name}
-                    onChange={(event) =>
-                      setForm((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                    className={inputClass}
-                    placeholder="أدخل اسم المشروع"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm text-hr-text">
-                    مدير المشروع <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={form.managerId}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        managerId: event.target.value,
-                      }))
-                    }
-                    disabled={loading}
-                    className={inputClass}
-                  >
-                    <option value="">اختر المدير</option>
-                    {employees.map((employee) => (
-                      <option key={employee.id} value={employee.id}>
-                        {employee.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm text-hr-text">
-                  الوصف <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      description: event.target.value,
-                    }))
-                  }
-                  className={textareaClass}
-                  placeholder="أدخل وصفاً مفصلاً للمشروع"
-                />
-              </div>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-2 block text-sm text-hr-text">
+                {t("projects.modals.addProject.fields.number")}
+              </label>
+              <input
+                value={project?.id ?? t("projects.modals.addProject.autoNumber")}
+                disabled
+                className={`${readOnlyClass} text-hr-muted`}
+              />
             </div>
-          </section>
-
-          <section>
-            <h3 className="mb-4 border-b border-hr-border pb-2 text-sm font-bold text-hr-text">
-              التواريخ
-            </h3>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm text-hr-text">
-                  تاريخ البداية
+                  {t("projects.modals.addProject.fields.name")}{" "}
+                  <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="date"
-                  value={form.startDate}
+                  ref={firstFieldRef}
+                  value={form.name}
                   onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      startDate: event.target.value,
-                    }))
+                    setForm((prev) => ({ ...prev, name: event.target.value }))
                   }
                   className={inputClass}
+                  placeholder={t("projects.modals.addProject.placeholders.name")}
                 />
               </div>
               <div>
                 <label className="mb-2 block text-sm text-hr-text">
-                  تاريخ النهاية
+                  {t("projects.modals.addProject.fields.manager")}{" "}
+                  <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="date"
-                  value={form.endDate}
-                  onChange={(event) =>
+                <SearchableSelect
+                  value={form.managerId}
+                  onChange={(value) =>
                     setForm((prev) => ({
                       ...prev,
-                      endDate: event.target.value,
+                      managerId: value,
                     }))
                   }
-                  className={inputClass}
+                  options={mapNamedOptions(employees, {
+                    description: (employee) => employee.id,
+                  })}
+                  placeholder={t("projects.modals.addProject.placeholders.manager")}
+                  searchPlaceholder={t("projects.modals.addProject.placeholders.managerSearch")}
+                  loading={loading}
                 />
               </div>
             </div>
-          </section>
-
-          <section>
-            <h3 className="mb-4 border-b border-hr-border pb-2 text-sm font-bold text-hr-text">
-              حالة المشروع
-            </h3>
-            <div className="mb-4 rounded-xl border-s-4 border-hr-primary bg-[#E9F6FC] px-4 py-3 text-sm text-[#3A6E86]">
-              اختر الحالة الحالية للمشروع، يمكن تغيير الحالة في أي وقت
+            <div>
+              <label className="mb-2 block text-sm text-hr-text">
+                {t("projects.modals.addProject.fields.description")}{" "}
+                <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={form.description}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    description: event.target.value,
+                  }))
+                }
+                className={textareaClass}
+                placeholder={t("projects.modals.addProject.placeholders.description")}
+              />
             </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm text-hr-text">
+                {t("projects.modals.addProject.fields.startDate")}
+              </label>
+              <input
+                type="date"
+                value={form.startDate}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    startDate: event.target.value,
+                  }))
+                }
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm text-hr-text">
+                {t("projects.modals.addProject.fields.endDate")}
+              </label>
+              <input
+                type="date"
+                value={form.endDate}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    endDate: event.target.value,
+                  }))
+                }
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-4 block text-sm font-bold text-hr-text">
+              {t("projects.modals.addProject.fields.status")}
+            </label>
             <div className="grid grid-cols-3 gap-2">
               {statusOptions.map((status) => (
                 <button
@@ -254,18 +251,18 @@ export function AddProjectModal({
                   className={[
                     "rounded-xl border px-3 py-3 text-sm font-medium transition",
                     form.status === status
-                      ? "border-hr-primary bg-[#E9F6FC] text-hr-primary"
-                      : "border-hr-border bg-white text-hr-muted hover:border-hr-primary/40",
+                      ? "border-hr-primary bg-hr-nav-active text-hr-primary"
+                      : "border-hr-border bg-hr-surface text-hr-muted hover:border-hr-primary/40",
                   ].join(" ")}
                 >
-                  {PROJECT_STATUS_LABELS[status]}
+                  {projectStatusLabel(status)}
                 </button>
               ))}
             </div>
-          </section>
+          </div>
 
           {error && (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p className={alertErrorClass}>
               {error}
             </p>
           )}
@@ -277,17 +274,17 @@ export function AddProjectModal({
               className="rounded-xl bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
             >
               {saving
-                ? "جاري الحفظ…"
+                ? t("projects.modals.addProject.saving")
                 : isEditing
-                  ? "حفظ التعديلات"
-                  : "إضافة المشروع"}
+                  ? t("projects.modals.addProject.editSubmit")
+                  : t("projects.modals.addProject.submit")}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl bg-gray-400 px-8 py-2.5 text-sm font-bold text-white"
+              className={cancelBtnClass}
             >
-              إلغاء
+              {t("common.cancel")}
             </button>
           </div>
         </form>

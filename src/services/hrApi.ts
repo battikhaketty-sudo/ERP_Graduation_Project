@@ -12,6 +12,7 @@ import {
   unwrapPagedMeta,
 } from "../utils/apiResponse";
 import { extractRowNumber } from "../utils/tableRowNumber";
+import { fetchAllPages } from "../utils/fetchAllPages";
 import { sortNewestFirst } from "../utils/listOrder";
 
 export type { AttendanceFilters, AttendancePayload, AttendanceRecord } from "../types/attendance";
@@ -48,9 +49,20 @@ const normalizeDepartment = (item: Record<string, unknown>): Department => ({
   rowNumber: extractRowNumber(item),
 });
 
+const readAttendanceDate = (item: Record<string, unknown>, ...keys: string[]) => {
+  for (const key of keys) {
+    const value = item[key];
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed && trimmed !== "-") return trimmed;
+    }
+  }
+  return "";
+};
+
 const normalizeAttendance = (item: Record<string, unknown>): AttendanceRecord => {
-  const checkInRaw = typeof item.checkin === "string" ? item.checkin : "";
-  const checkOutRaw = typeof item.checkout === "string" ? item.checkout : "";
+  const checkInRaw = readAttendanceDate(item, "checkin", "checkIn", "CheckIn");
+  const checkOutRaw = readAttendanceDate(item, "checkout", "checkOut", "CheckOut");
 
   return {
     id: String(item.id ?? crypto.randomUUID()),
@@ -305,7 +317,7 @@ export const checkInAttendence = async () => {
 };
 
 export const checkOutAttendence = async (id: string) => {
-  const res = await api.post(`/attendences/${id}/check-out`);
+  const res = await api.post(`/attendences/${id}/check-out`, {});
   assertSuccess(res.data);
   return res.data;
 };
@@ -316,12 +328,31 @@ export const deleteAttendence = async (id: string) => {
   return res.data;
 };
 
-export const getSkillTypes = async (page = 1, limit = 50) => {
+export const getSkillTypesPage = async (page = 1, limit = 50) => {
   const res = await api.get("/skill-types", { params: { page, limit } });
-  return sortNewestFirst(
+  const meta = unwrapPagedMeta(res.data);
+  const records = sortNewestFirst(
     unwrapPage<Record<string, unknown>>(res.data).map(normalizeSkillGroup),
   );
+
+  return {
+    records,
+    meta: {
+      ...meta,
+      totalPages: meta.totalItems
+        ? Math.max(1, Math.ceil(meta.totalItems / limit))
+        : meta.totalPages,
+    },
+  };
 };
+
+export const getSkillTypes = async (page = 1, limit = 50) => {
+  const { records } = await getSkillTypesPage(page, limit);
+  return records;
+};
+
+export const getAllSkillTypes = async () =>
+  fetchAllPages((page, limit) => getSkillTypesPage(page, limit));
 
 export const addSkillType = async (data: {
   name: string;

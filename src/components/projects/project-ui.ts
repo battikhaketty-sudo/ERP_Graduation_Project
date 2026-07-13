@@ -1,13 +1,13 @@
 export const inputClass =
-  "h-11 w-full rounded-xl border border-hr-border bg-white px-4 text-sm text-hr-text outline-none transition placeholder:text-hr-muted focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20";
+  "h-11 w-full rounded-xl border border-hr-border bg-hr-input-bg px-4 text-start text-sm text-hr-text outline-none transition placeholder:text-hr-muted focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20";
 
 export const textareaClass =
-  "min-h-[110px] w-full rounded-xl border border-hr-border bg-white px-4 py-3 text-sm text-hr-text outline-none transition placeholder:text-hr-muted focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20";
+  "min-h-[110px] w-full rounded-xl border border-hr-border bg-hr-input-bg px-4 py-3 text-start text-sm text-hr-text outline-none transition placeholder:text-hr-muted focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20";
 
 export const modalOverlayClass = "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4";
 
 export const modalCardClass =
-  "max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-white p-6 shadow-card sm:p-8";
+  "max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-hr-surface p-6 shadow-card sm:p-8";
 
 export const PROJECT_STATUS_LABELS = {
   not_started: "لم يبدأ بعد",

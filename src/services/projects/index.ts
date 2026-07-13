@@ -4,6 +4,7 @@ export {
   addProject,
   addSection,
   addTask,
+  cancelInvitation,
   deleteMember,
   deleteProject,
   deleteSection,
@@ -24,4 +25,10 @@ export {
   updateSection,
 } from "./project.service";
 
-export { PROJECT_MEMBER_ROLES } from "./project.enums";
+export {
+  PROJECT_INVITE_MEMBER_ROLE_IDS,
+  PROJECT_MEMBER_ROLES,
+  ProjectInvitationStatusApi,
+  ProjectMemberRoleApi,
+  ProjectStatusApi,
+} from "./project.enums";

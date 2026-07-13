@@ -1,4 +1,5 @@
 import { Plus, Search } from "lucide-react";
+import { useTranslation } from "../../i18n";
 
 type ProjectsPageHeaderProps = {
   totalCount: number;
@@ -17,34 +18,37 @@ export function ProjectsPageHeader({
   addLabel,
   searchPlaceholder,
 }: ProjectsPageHeaderProps) {
+  const { t } = useTranslation();
+
   return (
-    <header className="mb-5 rounded-2xl bg-white p-5 shadow-card">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-hr-primary sm:text-[22px]">
-            إدارة المشاريع{" "}
-            <span className="font-medium text-hr-primary/80">({totalCount})</span> مشروع
-          </h1>
+    <header className="theme-transition mb-5 rounded-2xl bg-hr-surface p-5 shadow-card">
+      <div className="mb-4">
+        <h1 className="text-xl font-bold text-hr-primary sm:text-[22px]">
+          {t("pages.projects.title")}{" "}
+          <span className="font-medium text-hr-primary/80">({totalCount})</span>{" "}
+          {t("pages.projects.countLabel")}
+        </h1>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[220px] flex-1 max-w-[420px]">
+          <Search className="pointer-events-none absolute start-4 top-1/2 size-[18px] -translate-y-1/2 text-hr-muted" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder={searchPlaceholder}
+            className="h-[45px] w-full rounded-full border border-hr-border bg-hr-input-bg pe-4 ps-11 text-sm text-hr-text outline-none transition placeholder:text-hr-muted focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20"
+          />
         </div>
         <button
           type="button"
           onClick={onAddClick}
-          className="inline-flex h-11 items-center gap-2 rounded-xl bg-hr-primary px-5 text-sm font-bold text-white transition hover:bg-hr-primary-hover"
+          className="ms-auto inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-hr-primary px-4 text-sm font-bold text-white transition hover:bg-hr-primary-hover"
         >
           <Plus className="size-4" strokeWidth={2.5} />
           {addLabel}
         </button>
-      </div>
-
-      <div className="relative max-w-[420px]">
-        <Search className="pointer-events-none absolute start-4 top-1/2 size-[18px] -translate-y-1/2 text-hr-muted" />
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder={searchPlaceholder}
-          className="h-[45px] w-full rounded-full border border-hr-border bg-white pe-4 ps-11 text-sm text-hr-text outline-none transition placeholder:text-hr-muted focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20"
-        />
       </div>
     </header>
   );
@@ -58,9 +62,11 @@ type ProjectsViewTabsProps = {
 };
 
 export function ProjectsViewTabs({ activeTab, onChange }: ProjectsViewTabsProps) {
+  const { t } = useTranslation();
+
   const tabs: Array<{ key: ViewTab; label: string }> = [
-    { key: "projects", label: "إدارة المشاريع" },
-    { key: "invitations", label: "إدارة الدعوات" },
+    { key: "projects", label: t("projects.header.projectsTab") },
+    { key: "invitations", label: t("projects.header.invitationsTab") },
   ];
 
   return (
@@ -71,10 +77,7 @@ export function ProjectsViewTabs({ activeTab, onChange }: ProjectsViewTabsProps)
           type="button"
           onClick={() => onChange(tab.key)}
           className={[
-            "inline-flex h-11 min-w-[160px] items-center justify-center rounded-xl px-6 text-sm font-bold transition",
-            activeTab === tab.key
-              ? "bg-hr-primary text-white shadow-sm"
-              : "bg-[#E9F6FC] text-[#3A6E86] hover:bg-[#D8EEF9]",
+            activeTab === tab.key ? "hr-tab-pill-active" : "hr-tab-pill-inactive",
           ].join(" ")}
         >
           {tab.label}

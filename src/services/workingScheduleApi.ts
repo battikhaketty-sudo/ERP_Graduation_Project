@@ -70,11 +70,13 @@ const normalizePeriod = (item: Record<string, unknown>): WorkingPeriod => ({
   timeTo: String(item.timeTo ?? ""),
 });
 
-export const getWorkingSchedules = async (filters: {
-  page?: number;
-  limit?: number;
-  name?: string;
-} = {}) => {
+export const getWorkingSchedules = async (
+  filters: {
+    page?: number;
+    limit?: number;
+    name?: string;
+  } = {},
+) => {
   const { page = 1, limit = 10, name } = filters;
   const params: Record<string, string | number> = { Page: page, Limit: limit };
   if (name?.trim()) params.Name = name.trim();
@@ -92,7 +94,9 @@ export const getWorkingScheduleById = async (id: string) => {
   const res = await api.get(`/working-schedules/${id}`);
   const data = unwrapEntity<Record<string, unknown>>(res.data);
   const periods = Array.isArray(data.periods)
-    ? data.periods.map((period) => normalizePeriod(period as Record<string, unknown>))
+    ? data.periods.map((period) =>
+        normalizePeriod(period as Record<string, unknown>),
+      )
     : [];
 
   return {
@@ -110,7 +114,10 @@ export const addWorkingSchedule = async (data: {
   return res.data;
 };
 
-export const updateWorkingSchedule = async (id: string, data: { name: string }) => {
+export const updateWorkingSchedule = async (
+  id: string,
+  data: { name: string },
+) => {
   const res = await api.put(`/working-schedules/${id}`, data);
   assertSuccess(res.data);
   return res.data;
@@ -136,20 +143,30 @@ export const updateWorkingPeriod = async (
   periodId: string,
   data: WorkingPeriodInput,
 ) => {
-  const res = await api.put(`/working-schedules/${scheduleId}/periods/${periodId}`, data);
+  const res = await api.put(
+    `/working-schedules/${scheduleId}/periods/${periodId}`,
+    data,
+  );
   assertSuccess(res.data);
   return res.data;
 };
 
-export const deleteWorkingPeriod = async (scheduleId: string, periodId: string) => {
-  const res = await api.delete(`/working-schedules/${scheduleId}/periods/${periodId}`);
+export const deleteWorkingPeriod = async (
+  scheduleId: string,
+  periodId: string,
+) => {
+  const res = await api.delete(
+    `/working-schedules/${scheduleId}/periods/${periodId}`,
+  );
   assertSuccess(res.data);
   return res.data;
 };
 
 const unwrapEnumList = (payload: unknown) => {
   if (Array.isArray(payload)) {
-    return payload.map((item) => normalizeEnum(item as Record<string, unknown>));
+    return payload.map((item) =>
+      normalizeEnum(item as Record<string, unknown>),
+    );
   }
   const data = unwrapData<Record<string, unknown>[]>(payload);
   if (!Array.isArray(data)) return [];

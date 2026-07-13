@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
+import { usePreferences } from "../../context/PreferencesContext";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
-import { getAllProjects, PROJECT_MEMBER_ROLES } from "../../services/projects";
+import { useProjectLabels } from "../../hooks/useProjectLabels";
+import { useTranslation } from "../../i18n";
+import { getAllProjects } from "../../services/projects";
 import type { InvitationFormPayload, Project } from "../../types/project";
+import { mapNamedOptions } from "../../utils/selectOptions";
+import { FormField } from "../ui/FormField";
+import { SearchableSelect } from "../ui/SearchableSelect";
+import { alertErrorClass, cancelBtnClass, ModalCloseButton, ModalTitleBar } from "../ui/modalStyles";
 import {
   inputClass,
   modalCardClass,
@@ -24,6 +31,10 @@ export function InviteMemberModal({
   onClose,
   onSubmit,
 }: InviteMemberModalProps) {
+  const { t } = useTranslation();
+  const { dir } = usePreferences();
+  const { inviteMemberRoleOptions } = useProjectLabels();
+  const defaultRole = inviteMemberRoleOptions[0]?.apiLabel ?? "";
   const { employees, loading } = useReferenceOptions(isOpen, {
     departments: false,
     contractTypes: false,
@@ -33,7 +44,7 @@ export function InviteMemberModal({
   const [form, setForm] = useState({
     projectId: "",
     employeeId: "",
-    role: PROJECT_MEMBER_ROLES[0]?.label ?? "",
+    role: defaultRole,
     message: "",
     expiresAt: "",
   });
@@ -54,18 +65,18 @@ export function InviteMemberModal({
     setForm({
       projectId: defaultProjectId ?? projectOptions[0]?.id ?? "",
       employeeId: "",
-      role: PROJECT_MEMBER_ROLES[0]?.label ?? "",
+      role: inviteMemberRoleOptions[0]?.apiLabel ?? "",
       message: "",
       expiresAt: "",
     });
-  }, [defaultProjectId, isOpen, projectOptions]);
+  }, [defaultProjectId, isOpen, inviteMemberRoleOptions, projectOptions]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.projectId || !form.employeeId || !form.role) {
-      setError("يرجى تعبئة جميع الحقول المطلوبة");
+      setError(t("projects.modals.inviteMember.errors.required"));
       return;
     }
 
@@ -88,7 +99,7 @@ export function InviteMemberModal({
       setError(
         err && typeof err === "object" && "message" in err
           ? String(err.message)
-          : "فشل إرسال الدعوة",
+          : t("projects.modals.inviteMember.errors.sendFailed"),
       );
     } finally {
       setSaving(false);
@@ -96,66 +107,61 @@ export function InviteMemberModal({
   };
 
   return (
-    <div className={modalOverlayClass} dir="rtl">
-      <div className={`${modalCardClass} max-w-xl`}>
-        <div className="mb-6 text-center">
-          <h2 className="text-xl font-bold text-[#1B91C4]">دعوة عضو جديد</h2>
-        </div>
-
-        <div className="mb-6 rounded-xl border border-dashed border-[#9FD4EF] bg-[#E9F6FC] px-4 py-3 text-sm text-[#3A6E86]">
-          أدخل بيانات الموظف الذي تريد دعوته للانضمام إلى المشروع. سيتم إرسال
-          رابط الدعوة إليه عبر البريد الإلكتروني.
-        </div>
+    <div className={modalOverlayClass} dir={dir}>
+      <div className={`${modalCardClass} relative max-w-xl`}>
+        <ModalCloseButton onClick={onClose} disabled={saving} />
+        <ModalTitleBar
+          title={t("projects.modals.inviteMember.title")}
+          onClose={onClose}
+          disabled={saving}
+          hideCloseButton
+        />
 
         <form
           onSubmit={(event) => void handleSubmit(event)}
           className="space-y-4"
         >
-          <div>
-            <label className="mb-2 block text-sm text-hr-text">المشروع</label>
-            <select
+          <FormField
+            label={t("projects.modals.inviteMember.fields.project")}
+            required
+            hint={t("projects.modals.inviteMember.fields.projectHint")}
+          >
+            <SearchableSelect
               value={form.projectId}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, projectId: event.target.value }))
+              onChange={(value) =>
+                setForm((prev) => ({ ...prev, projectId: value }))
               }
-              className={inputClass}
-            >
-              <option value="">اختر المشروع</option>
-              {projectOptions.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </div>
+              options={mapNamedOptions(
+                projectOptions.map((project) => ({
+                  id: project.id,
+                  name: project.name,
+                })),
+              )}
+              placeholder={t("projects.modals.inviteMember.placeholders.project")}
+            />
+          </FormField>
 
-          <div>
-            <label className="mb-2 block text-sm text-hr-text">
-              رقم الموظف المراد دعوته
-            </label>
-            <select
+          <FormField
+            label={t("projects.modals.inviteMember.fields.employee")}
+            required
+            hint={t("projects.modals.inviteMember.fields.employeeHint")}
+          >
+            <SearchableSelect
               value={form.employeeId}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, employeeId: event.target.value }))
+              onChange={(value) =>
+                setForm((prev) => ({ ...prev, employeeId: value }))
               }
-              disabled={loading}
-              className={inputClass}
-            >
-              <option value="">ادخل رقم الموظف</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-hr-muted">
-              يجب أن يكون الموظف موجوداً في النظام
-            </p>
-          </div>
+              options={mapNamedOptions(employees, {
+                description: (employee) => employee.id,
+              })}
+              placeholder={t("projects.modals.inviteMember.placeholders.employee")}
+              loading={loading}
+            />
+          </FormField>
 
           <div>
             <label className="mb-2 block text-sm text-hr-text">
-              دور الموظف المراد دعوته
+              {t("projects.modals.inviteMember.fields.role")}
             </label>
             <select
               value={form.role}
@@ -164,9 +170,9 @@ export function InviteMemberModal({
               }
               className={inputClass}
             >
-              <option value="">اختر دور الموظف</option>
-              {PROJECT_MEMBER_ROLES.map((role) => (
-                <option key={role.id} value={role.label}>
+              <option value="">{t("common.select")}</option>
+              {inviteMemberRoleOptions.map((role) => (
+                <option key={role.id} value={role.apiLabel}>
                   {role.label}
                 </option>
               ))}
@@ -175,7 +181,8 @@ export function InviteMemberModal({
 
           <div>
             <label className="mb-2 block text-sm text-hr-text">
-              الرسالة (اختياري)
+              {t("projects.modals.inviteMember.fields.message")}{" "}
+              <span className="text-hr-muted">({t("common.optional")})</span>
             </label>
             <textarea
               value={form.message}
@@ -183,13 +190,13 @@ export function InviteMemberModal({
                 setForm((prev) => ({ ...prev, message: event.target.value }))
               }
               className={textareaClass}
-              placeholder="أضف رسالة شخصية للموظف"
+              placeholder={t("projects.modals.inviteMember.placeholders.message")}
             />
           </div>
 
           <div>
             <label className="mb-2 block text-sm text-hr-text">
-              تاريخ انتهاء صلاحية الدعوة
+              {t("projects.detail.fields.endDate")}
             </label>
             <input
               type="date"
@@ -199,13 +206,10 @@ export function InviteMemberModal({
               }
               className={inputClass}
             />
-            <p className="mt-1 text-xs text-hr-muted">
-              بعد هذا التاريخ لن تكون الدعوة صالحة
-            </p>
           </div>
 
           {error && (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p className={alertErrorClass}>
               {error}
             </p>
           )}
@@ -216,14 +220,16 @@ export function InviteMemberModal({
               disabled={saving}
               className="rounded-xl bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
             >
-              {saving ? "جاري الإرسال…" : "إرسال الدعوة"}
+              {saving
+                ? t("projects.modals.inviteMember.sending")
+                : t("projects.modals.inviteMember.submit")}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl bg-gray-400 px-8 py-2.5 text-sm font-bold text-white"
+              className={cancelBtnClass}
             >
-              إلغاء
+              {t("common.cancel")}
             </button>
           </div>
         </form>

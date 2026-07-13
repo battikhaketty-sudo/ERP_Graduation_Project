@@ -1,20 +1,33 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: "class",
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Tajawal", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       colors: {
         hr: {
-          primary: "#2F80ED",
-          "primary-hover": "#2569C7",
-          bg: "#F4F6F9",
-          text: "#333333",
-          muted: "#828282",
-          border: "#E8ECF1",
-          "header-bg": "#F8FAFC",
+          primary: "rgb(var(--hr-primary) / <alpha-value>)",
+          "primary-hover": "rgb(var(--hr-primary-hover) / <alpha-value>)",
+          bg: "rgb(var(--hr-bg) / <alpha-value>)",
+          surface: "rgb(var(--hr-surface) / <alpha-value>)",
+          text: "rgb(var(--hr-text) / <alpha-value>)",
+          muted: "rgb(var(--hr-muted) / <alpha-value>)",
+          border: "rgb(var(--hr-border) / <alpha-value>)",
+          "header-bg": "rgb(var(--hr-header-bg) / <alpha-value>)",
+          "nav-active": "rgb(var(--hr-nav-active) / <alpha-value>)",
+          "accent-bg": "rgb(var(--hr-accent-bg) / <alpha-value>)",
+          "accent-text": "rgb(var(--hr-accent-text) / <alpha-value>)",
+          hover: "rgb(var(--hr-hover) / <alpha-value>)",
+          "input-bg": "rgb(var(--hr-input-bg) / <alpha-value>)",
+          "table-head": "rgb(var(--hr-table-head) / <alpha-value>)",
+          "table-alt": "rgb(var(--hr-table-alt) / <alpha-value>)",
+          "table-hover": "rgb(var(--hr-table-hover) / <alpha-value>)",
+          "info-bg": "rgb(var(--hr-info-bg) / <alpha-value>)",
+          "info-text": "rgb(var(--hr-info-text) / <alpha-value>)",
+          highlight: "rgb(var(--hr-highlight) / <alpha-value>)",
         },
         role: {
           test: { bg: "#E8F5E9", text: "#2E7D32" },
@@ -31,7 +44,7 @@ module.exports = {
         },
       },
       boxShadow: {
-        card: "0 2px 12px rgba(0, 0, 0, 0.06)",
+        card: "var(--hr-card-shadow)",
         glow: "0 0 40px -8px rgba(249, 115, 22, 0.35)",
       },
     },

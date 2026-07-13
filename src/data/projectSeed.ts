@@ -11,7 +11,7 @@ const sectionDoneId = "sec-done";
 export const seedProjects: Project[] = [
   {
     id: projectOneId,
-    number: 101,
+    number: projectOneId,
     name: "تطبيق الويب الحديث",
     managerId: "mgr-1",
     managerName: "أحمد محمد",
@@ -79,7 +79,7 @@ export const seedProjects: Project[] = [
   },
   {
     id: projectTwoId,
-    number: 102,
+    number: projectTwoId,
     name: "نظام إدارة المخزون",
     managerId: "mgr-2",
     managerName: "فاطمة حسن",
@@ -100,7 +100,7 @@ export const seedProjects: Project[] = [
   },
   {
     id: "proj-003",
-    number: 103,
+    number: "proj-003",
     name: "بوابة الموظفين",
     managerId: "mgr-1",
     managerName: "أحمد محمد",
@@ -123,7 +123,7 @@ export const seedInvitations: ProjectInvitation[] = [
     id: "inv-1",
     projectId: projectOneId,
     projectName: "تطبيق الويب الحديث",
-    projectNumber: 101,
+    projectNumber: projectOneId,
     employeeId: "emp-1",
     employeeName: "عبد القادر بن القادر",
     role: "مطور واجهات",
@@ -138,7 +138,7 @@ export const seedInvitations: ProjectInvitation[] = [
     id: "inv-2",
     projectId: projectOneId,
     projectName: "تطبيق الويب الحديث",
-    projectNumber: 101,
+    projectNumber: projectOneId,
     employeeId: "emp-2",
     employeeName: "سارة أحمد",
     role: "محلل نظم",
@@ -152,7 +152,7 @@ export const seedInvitations: ProjectInvitation[] = [
     id: "inv-3",
     projectId: projectTwoId,
     projectName: "نظام إدارة المخزون",
-    projectNumber: 102,
+    projectNumber: projectTwoId,
     employeeId: "emp-6",
     employeeName: "خالد يوسف",
     role: "مدير مشروع",

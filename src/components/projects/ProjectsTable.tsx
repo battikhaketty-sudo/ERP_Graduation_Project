@@ -1,4 +1,5 @@
 import { Pencil, Trash2 } from "lucide-react";
+import { useTranslation } from "../../i18n";
 import { Pagination } from "../Pagination";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
 import { TableRowIndex } from "../ui/TableRowIndex";
@@ -27,30 +28,46 @@ export function ProjectsTable({
   onEdit,
   onDelete,
 }: ProjectsTableProps) {
+  const { t } = useTranslation();
+
   if (!projects.length) {
     return (
-      <section className="overflow-hidden rounded-2xl bg-white shadow-card">
-        <EmptyState message="لا توجد مشاريع" />
+      <section className="hr-card">
+        <EmptyState message={t("projects.table.empty")} />
       </section>
     );
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl bg-white shadow-card">
+    <section className="hr-card">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] table-fixed border-collapse text-sm">
           <thead>
-            <tr className="bg-[#F5FAFD] text-hr-muted">
-              <th className="px-3 py-3 text-center font-medium">#</th>
-              <th className="px-3 py-3 text-center font-medium">id</th>
-              <th className="px-3 py-3 text-center font-medium">اسم المشروع</th>
-              <th className="px-3 py-3 text-center font-medium">المدير المباشر</th>
-              <th className="px-3 py-3 text-center font-medium">الموظف المكلف</th>
-              <th className="px-3 py-3 text-center font-medium">الوصف</th>
-              <th className="px-3 py-3 text-center font-medium">تاريخ البداية</th>
-              <th className="px-3 py-3 text-center font-medium">تاريخ النهاية</th>
-              <th className="px-3 py-3 text-center font-medium">الحالة</th>
-              <th className="px-3 py-3 text-center font-medium">إجراءات</th>
+            <tr className="hr-table-head">
+              <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>
+              <th className="px-3 py-3 text-center font-medium">{t("table.columns.id")}</th>
+              <th className="px-3 py-3 text-center font-medium">
+                {t("projects.table.columns.name")}
+              </th>
+              <th className="px-3 py-3 text-center font-medium">
+                {t("projects.table.columns.manager")}
+              </th>
+              <th className="px-3 py-3 text-center font-medium">
+                {t("projects.table.columns.assignee")}
+              </th>
+              <th className="px-3 py-3 text-center font-medium">
+                {t("projects.table.columns.description")}
+              </th>
+              <th className="px-3 py-3 text-center font-medium">
+                {t("projects.table.columns.startDate")}
+              </th>
+              <th className="px-3 py-3 text-center font-medium">
+                {t("projects.table.columns.endDate")}
+              </th>
+              <th className="px-3 py-3 text-center font-medium">
+                {t("projects.table.columns.status")}
+              </th>
+              <th className="px-3 py-3 text-center font-medium">{t("table.columns.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -58,8 +75,8 @@ export function ProjectsTable({
               <tr
                 key={project.id}
                 className={[
-                  "cursor-pointer border-t border-hr-border transition hover:bg-[#F8FBFE]",
-                  index % 2 ? "bg-[#FAFCFE]" : "bg-white",
+                  "cursor-pointer border-t border-hr-border",
+                  index % 2 ? "hr-table-row-alt" : "hr-table-row",
                 ].join(" ")}
                 onClick={() => onProjectClick(project)}
               >
@@ -89,7 +106,7 @@ export function ProjectsTable({
                         onEdit(project);
                       }}
                       className="text-amber-500"
-                      aria-label="تعديل"
+                      aria-label={t("common.edit")}
                     >
                       <Pencil className="size-4" />
                     </button>
@@ -100,7 +117,7 @@ export function ProjectsTable({
                         onDelete(project);
                       }}
                       className="text-red-400"
-                      aria-label="حذف"
+                      aria-label={t("common.delete")}
                     >
                       <Trash2 className="size-4" />
                     </button>

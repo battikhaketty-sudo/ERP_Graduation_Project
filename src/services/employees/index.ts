@@ -4,6 +4,8 @@ export {
   getEmployeeById,
   addEmployee,
   updateEmployee,
+  archiveEmployee,
+  unarchiveEmployee,
   deleteEmployee,
 } from "./employee.service";
 

@@ -1,24 +1,31 @@
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { notificationsSeed } from "../data/notifications";
+import { getNotificationsSeed } from "../data/notifications";
+import { AddProjectButton } from "../components/ui/AddProjectButton";
+import { usePreferences } from "../context/PreferencesContext";
+import { useTranslation } from "../i18n";
 
 const PAGE_SIZE = 3;
 
 export function NotificationsPage() {
+  const { dir, locale } = usePreferences();
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  const notifications = useMemo(() => getNotificationsSeed(locale), [locale]);
+
   const filteredNotifications = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return notificationsSeed;
+    if (!query) return notifications;
 
-    return notificationsSeed.filter(
+    return notifications.filter(
       (item) =>
         item.title.toLowerCase().includes(query) ||
         item.description.toLowerCase().includes(query),
     );
-  }, [search]);
+  }, [notifications, search]);
 
   const totalPages = Math.max(1, Math.ceil(filteredNotifications.length / PAGE_SIZE));
 
@@ -43,7 +50,7 @@ export function NotificationsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search]);
+  }, [search, locale]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -57,31 +64,34 @@ export function NotificationsPage() {
   return (
     <main
       className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6 lg:px-8"
-      dir="rtl"
+      dir={dir}
     >
-      <header className="mb-5 rounded-xl bg-white p-4 shadow-card sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <header className="theme-transition mb-5 rounded-xl bg-hr-surface p-4 shadow-card sm:p-6">
+        <div className="mb-4">
           <h1 className="text-xl font-bold text-hr-primary sm:text-2xl">
-            الإشعارات{" "}
+            {t("notifications.title")}{" "}
             <span className="font-medium text-hr-primary/80">
-              | ({filteredNotifications.length}) إشعار
+              | ({filteredNotifications.length}) {t("notifications.countLabel")}
             </span>
           </h1>
+        </div>
 
-          <div className="relative w-full max-w-md flex-1 sm:min-w-[280px]">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1">
             <Search className="pointer-events-none absolute start-4 top-1/2 size-[18px] -translate-y-1/2 text-hr-muted" />
             <input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث عن إشعار محدد..."
-              className="h-11 w-full rounded-full border border-hr-border bg-white pe-4 ps-11 text-sm text-hr-text shadow-sm outline-none transition placeholder:text-hr-muted focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20"
+              placeholder={t("notifications.searchPlaceholder")}
+              className="h-11 w-full rounded-full border border-hr-border bg-hr-input-bg pe-4 ps-11 text-sm text-hr-text shadow-sm outline-none transition placeholder:text-hr-muted focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20"
             />
           </div>
+          <AddProjectButton />
         </div>
       </header>
 
-      <section className="overflow-hidden rounded-xl border border-hr-border bg-white shadow-card">
+      <section className="hr-card border border-hr-border">
         <div className="divide-y divide-hr-border">
           {pageNotifications.map((item) => (
             <article
@@ -93,7 +103,7 @@ export function NotificationsPage() {
                 checked={selectedIds.has(item.id)}
                 onChange={() => toggleSelect(item.id)}
                 className="mt-1 size-4 shrink-0 rounded border-hr-border text-hr-primary focus:ring-hr-primary/30"
-                aria-label={`تحديد ${item.title}`}
+                aria-label={t("notifications.selectItem", { title: item.title })}
               />
 
               <div className="min-w-0 flex-1">
@@ -116,7 +126,7 @@ export function NotificationsPage() {
 
           {!pageNotifications.length && (
             <div className="px-4 py-12 text-center text-sm text-hr-muted sm:px-6">
-              لا توجد إشعارات مطابقة للبحث
+              {t("notifications.empty")}
             </div>
           )}
         </div>
@@ -128,7 +138,7 @@ export function NotificationsPage() {
               onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
               disabled={currentPage <= 1}
               className="rounded px-2 py-1 text-hr-muted disabled:opacity-40"
-              aria-label="الصفحة السابقة"
+              aria-label={t("table.pagination.previous")}
             >
               ‹
             </button>
@@ -142,7 +152,7 @@ export function NotificationsPage() {
                   "size-8 rounded-full text-sm transition",
                   page === currentPage
                     ? "bg-hr-primary text-white"
-                    : "text-hr-muted hover:bg-gray-100",
+                    : "text-hr-muted hover:bg-hr-hover",
                 ].join(" ")}
                 aria-current={page === currentPage ? "page" : undefined}
               >
@@ -155,7 +165,7 @@ export function NotificationsPage() {
               onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
               disabled={currentPage >= totalPages}
               className="rounded px-2 py-1 text-hr-muted disabled:opacity-40"
-              aria-label="الصفحة التالية"
+              aria-label={t("table.pagination.next")}
             >
               ›
             </button>

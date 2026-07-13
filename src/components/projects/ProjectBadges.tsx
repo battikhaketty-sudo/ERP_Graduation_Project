@@ -1,76 +1,85 @@
 import type { InvitationStatus, ProjectStatus, TaskPriority } from "../../types/project";
-import {
-  INVITATION_STATUS_LABELS,
-  PRIORITY_LABELS,
-  PROJECT_STATUS_LABELS,
-} from "./project-ui";
+import { useProjectLabels } from "../../hooks/useProjectLabels";
+import { STATUS_BADGE_CLASS } from "../ui/formStyles";
 
 const projectStatusClasses: Record<ProjectStatus, string> = {
-  not_started: "bg-amber-100 text-amber-700",
-  in_progress: "bg-sky-100 text-sky-700",
-  completed: "bg-green-100 text-green-700",
+  not_started: STATUS_BADGE_CLASS.warning,
+  in_progress: STATUS_BADGE_CLASS.info,
+  completed: STATUS_BADGE_CLASS.success,
 };
 
 const invitationStatusClasses: Record<InvitationStatus, string> = {
-  pending: "bg-amber-100 text-amber-700",
-  accepted: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
+  pending: STATUS_BADGE_CLASS.warning,
+  accepted: STATUS_BADGE_CLASS.success,
+  rejected: STATUS_BADGE_CLASS.error,
+  expired: STATUS_BADGE_CLASS.neutral,
+  cancelled: STATUS_BADGE_CLASS.neutral,
 };
 
 const priorityClasses: Record<TaskPriority, string> = {
-  low: "bg-orange-100 text-orange-700",
-  medium: "bg-sky-100 text-sky-700",
-  high: "bg-green-100 text-green-700",
-  urgent: "bg-red-100 text-red-700",
+  low: "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
+  medium: STATUS_BADGE_CLASS.info,
+  high: STATUS_BADGE_CLASS.success,
+  urgent: STATUS_BADGE_CLASS.error,
 };
 
 export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
+  const { projectStatusLabel } = useProjectLabels();
+
   return (
     <span
       className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${projectStatusClasses[status]}`}
     >
-      {PROJECT_STATUS_LABELS[status]}
+      {projectStatusLabel(status)}
     </span>
   );
 }
 
 export function InvitationStatusBadge({ status }: { status: InvitationStatus }) {
+  const { invitationStatusLabel } = useProjectLabels();
+
   return (
     <span
       className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${invitationStatusClasses[status]}`}
     >
-      {INVITATION_STATUS_LABELS[status]}
+      {invitationStatusLabel(status)}
     </span>
   );
 }
 
 export function PriorityBadge({ priority }: { priority: TaskPriority }) {
+  const { priorityLabel } = useProjectLabels();
+
   return (
     <span
       className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${priorityClasses[priority]}`}
     >
-      {PRIORITY_LABELS[priority]}
+      {priorityLabel(priority)}
     </span>
   );
 }
 
 const memberRoleClasses: Record<string, string> = {
-  "مدير مشروع": "bg-sky-100 text-sky-700",
-  "مطور واجهات": "bg-amber-100 text-amber-700",
-  "محلل نظم": "bg-violet-100 text-violet-700",
-  "مصمم UI/UX": "bg-pink-100 text-pink-700",
-  مراقب: "bg-gray-100 text-gray-600",
-  عضو: "bg-slate-100 text-slate-600",
+  Manager: STATUS_BADGE_CLASS.info,
+  "مدير مشروع": STATUS_BADGE_CLASS.info,
+  مدير: STATUS_BADGE_CLASS.info,
+  Member: "bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300",
+  عضو: "bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300",
+  Observer: STATUS_BADGE_CLASS.neutral,
+  مراقب: STATUS_BADGE_CLASS.neutral,
 };
 
 export function MemberRoleBadge({ role }: { role: string }) {
+  const { memberRoleLabel } = useProjectLabels();
+  const displayRole = memberRoleLabel(role);
+
   return (
     <span
       className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
-        memberRoleClasses[role] ?? "bg-slate-100 text-slate-600"
+        memberRoleClasses[role] ?? memberRoleClasses[displayRole] ?? "bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300"
       }`}
     >
-      {role}
+      {displayRole}
     </span>
   );
 }
