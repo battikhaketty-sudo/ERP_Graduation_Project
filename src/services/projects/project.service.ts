@@ -293,8 +293,23 @@ export const getProjectInvitations = async (
 
   const response = await api.get(`/projects/${projectId}/invitations`, { params });
   return sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(response.data).map(normalizeInvitation),
+    unwrapPage<Record<string, unknown>>(response.data).map((item) =>
+      normalizeInvitation({
+        ...item,
+        projectId: String(item.projectId ?? projectId),
+      }),
+    ),
   );
+};
+
+const dedupeInvitationsById = (invitations: ProjectInvitation[]) => {
+  const unique = new Map<string, ProjectInvitation>();
+  for (const invitation of invitations) {
+    if (!unique.has(invitation.id)) {
+      unique.set(invitation.id, invitation);
+    }
+  }
+  return [...unique.values()];
 };
 
 export const getAllInvitations = async (query: InvitationsQuery = {}) => {
@@ -308,7 +323,16 @@ export const getAllInvitations = async (query: InvitationsQuery = {}) => {
     ),
   );
 
-  return sortNewestFirst(invitationGroups.flat());
+  const merged = invitationGroups.flatMap((group, index) => {
+    const projectId = projects[index]?.id;
+    if (!projectId) return [];
+
+    return group.filter(
+      (invitation) => !invitation.projectId || invitation.projectId === projectId,
+    );
+  });
+
+  return sortNewestFirst(dedupeInvitationsById(merged));
 };
 
 export const addInvitation = async (payload: InvitationFormPayload) => {
@@ -336,6 +360,13 @@ export const rejectInvitation = async (projectId: string, invitationId: string) 
   assertMutationSuccess(response.data, "فشل رفض الدعوة.");
 };
 
+export const cancelInvitation = async (projectId: string, invitationId: string) => {
+  const response = await api.post(
+    `/projects/${projectId}/invitations/${invitationId}/cancel`,
+  );
+  assertMutationSuccess(response.data, "فشل إلغاء الدعوة.");
+};
+
 export const updateInvitationStatus = async (
   invitation: ProjectInvitation,
   status: ProjectInvitation["status"],
@@ -346,6 +377,10 @@ export const updateInvitationStatus = async (
   }
   if (status === "rejected") {
     await rejectInvitation(invitation.projectId, invitation.id);
+    return;
+  }
+  if (status === "cancelled") {
+    await cancelInvitation(invitation.projectId, invitation.id);
   }
 };
 

@@ -1,12 +1,19 @@
 import { FileText, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useUrlQueryNavigation } from "../hooks/useUrlQueryNavigation";
+import { useTranslation } from "../i18n";
+import { TableToolbar } from "./ui/TableToolbar";
 import { DetailBackButton } from "./ui/DetailBackButton";
+import {
+  accentBtnClass,
+  alertErrorClass,
+  cancelBtnClass,
+} from "./ui/formStyles";
 import { useConfirmDialog } from "../context/ConfirmDialogContext";
 import { TimeInput } from "./ui/TimeInput";
 import { CopyableIdCell } from "./ui/CopyableIdCell";
 import { TableRowIndex } from "./ui/TableRowIndex";
 import type { WorkScheduleStatsSnapshot } from "./WorkScheduleStatsBanner";
-import { WorkScheduleStatsBanner } from "./WorkScheduleStatsBanner";
 import { apiTimeToInputValue, timeInputToMinutes } from "../utils/timeInput";
 import {
   addWorkingPeriod,
@@ -26,6 +33,22 @@ import {
   updateWorkingSchedule,
 } from "../services/workingScheduleApi";
 import { getThrownErrorMessage } from "../utils/apiResponse";
+
+const DAY_I18N_KEYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+] as const;
+
+const PERIOD_I18N_KEYS: Record<number, "work" | "break"> = {
+  1: "work",
+  2: "break",
+};
+
 const resolveEnumId = (value: unknown, options: EnumOption[], fallback = 0) => {
   const numeric = Number(value);
   if (!Number.isNaN(numeric) && options.some((option) => option.id === numeric)) {
@@ -45,7 +68,6 @@ const roundHours = (value: number) =>
   Number.isInteger(value) ? value : Number(value.toFixed(1));
 
 const statsFromForm = (
-  name: string,
   rows: PeriodRow[],
   weeklyDaysTarget: number,
 ): WorkScheduleStatsSnapshot => {
@@ -54,7 +76,6 @@ const statsFromForm = (
   const workingDaysCount = weeklyDaysTarget || new Set(activeRows.map((row) => row.day)).size;
 
   return {
-    title: name.trim() || "جدول عمل جديد",
     workingDaysCount,
     periodsCount: activeRows.length,
     totalWeeklyHours: roundHours(totalWeeklyHours),
@@ -64,8 +85,15 @@ const statsFromForm = (
   };
 };
 
+export type WorkScheduleHeaderState = {
+  isFormView: true;
+  scheduleTitle: string;
+  stats: WorkScheduleStatsSnapshot;
+};
+
 type WorkSchedulePanelProps = {
   onNotice: (message: string | null) => void;
+  onHeaderStateChange?: (state: WorkScheduleHeaderState | null) => void;
 };
 
 type PanelView = "list" | "form";
@@ -80,25 +108,20 @@ type PeriodRow = {
   timeTo: string;
 };
 
-const DEFAULT_PERIOD_NAME = "الفترة الصباحية الأولى";
 const DEFAULT_TIME_FROM = "08:00";
 const DEFAULT_TIME_TO = "16:00";
 
-const validatePeriodRows = (rows: PeriodRow[]) => {
-  const activeRows = rows.filter((row) => row.name.trim());
-  if (!activeRows.length) {
-    return "يرجى إضافة فترة عمل واحدة على الأقل.";
-  }
-  return null;
-};
+const validatePeriodRows = (rows: PeriodRow[]) =>
+  rows.some((row) => row.name.trim());
 
 const createPeriodRow = (
   dayOptions: EnumOption[],
   periodOptions: EnumOption[],
+  defaultPeriodName: string,
   dayId?: number,
 ): PeriodRow => ({
   localId: crypto.randomUUID(),
-  name: DEFAULT_PERIOD_NAME,
+  name: defaultPeriodName,
   day: dayId ?? dayOptions[0]?.id ?? 0,
   period: periodOptions[0]?.id ?? 1,
   timeFrom: DEFAULT_TIME_FROM,
@@ -109,22 +132,37 @@ const buildRowsForWeeklyDays = (
   count: number,
   dayOptions: EnumOption[],
   periodOptions: EnumOption[],
+  defaultPeriodName: string,
 ) =>
-  dayOptions.slice(0, count).map((day) => createPeriodRow(dayOptions, periodOptions, day.id));
+  dayOptions
+    .slice(0, count)
+    .map((day) => createPeriodRow(dayOptions, periodOptions, defaultPeriodName, day.id));
 
 const PAGE_SIZE = 5;
 const PERIOD_PAGE_SIZE = 5;
 const WEEKLY_DAY_OPTIONS = [1, 2, 3, 4, 5, 6, 7];
 
-export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
+export function WorkSchedulePanel({
+  onNotice,
+  onHeaderStateChange,
+}: WorkSchedulePanelProps) {
+  const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
+  const {
+    value: scheduleParam,
+    pushValue: openScheduleInUrl,
+    removeValue: clearScheduleFromUrl,
+    goBack: goBackToScheduleList,
+  } = useUrlQueryNavigation({ param: "schedule" });
+  const hoursSuffix = t("common.hours");
+  const defaultPeriodName = t("hr.workSchedule.defaultPeriodName");
+  const defaultScheduleTitle = t("hr.workSchedule.defaultTitle");
   const [view, setView] = useState<PanelView>("list");
   const [schedules, setSchedules] = useState<WorkingSchedule[]>([]);
   const [focusedScheduleId, setFocusedScheduleId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -144,31 +182,51 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
     [onNotice],
   );
 
+  const translateDayOptions = useCallback(
+    (days: EnumOption[]) =>
+      days.map((day) => ({
+        ...day,
+        name: t(`hr.workSchedule.days.${DAY_I18N_KEYS[day.id] ?? "sunday"}`),
+      })),
+    [t],
+  );
+
+  const translatePeriodOptions = useCallback(
+    (periods: EnumOption[]) =>
+      periods.map((period) => ({
+        ...period,
+        name: t(`hr.workSchedule.periodTypes.${PERIOD_I18N_KEYS[period.id] ?? "work"}`),
+      })),
+    [t],
+  );
+
   const loadConstants = useCallback(async () => {
     try {
       const [days, periods] = await Promise.all([getDaysOfWeek(), getPeriodTypes()]);
-      setDayOptions(days);
-      setPeriodOptions(periods);
-      return { days, periods };
+      const translatedDays = translateDayOptions(days);
+      const translatedPeriods = translatePeriodOptions(periods);
+      setDayOptions(translatedDays);
+      setPeriodOptions(translatedPeriods);
+      return { days: translatedDays, periods: translatedPeriods };
     } catch {
-      const fallbackDays = [
-        { id: 0, name: "الأحد" },
-        { id: 1, name: "الإثنين" },
-        { id: 2, name: "الثلاثاء" },
-        { id: 3, name: "الأربعاء" },
-        { id: 4, name: "الخميس" },
-        { id: 5, name: "الجمعة" },
-        { id: 6, name: "السبت" },
-      ];
-      const fallbackPeriods = [
-        { id: 1, name: "عمل" },
-        { id: 2, name: "راحة" },
-      ];
+      const fallbackDays = translateDayOptions([
+        { id: 0, name: "Sunday" },
+        { id: 1, name: "Monday" },
+        { id: 2, name: "Tuesday" },
+        { id: 3, name: "Wednesday" },
+        { id: 4, name: "Thursday" },
+        { id: 5, name: "Friday" },
+        { id: 6, name: "Saturday" },
+      ]);
+      const fallbackPeriods = translatePeriodOptions([
+        { id: 1, name: "Work" },
+        { id: 2, name: "Break" },
+      ]);
       setDayOptions(fallbackDays);
       setPeriodOptions(fallbackPeriods);
       return { days: fallbackDays, periods: fallbackPeriods };
     }
-  }, []);
+  }, [translateDayOptions, translatePeriodOptions]);
 
   const loadSchedules = useCallback(
     async (targetPage = 1) => {
@@ -182,15 +240,14 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
         setSchedules(records);
         setPage(meta.currentPage || targetPage);
         setTotalPages(Math.max(meta.totalPages || 1, 1));
-        setTotalCount(meta.totalItems || records.length);
         notify(null);
       } catch (err) {
-        notify(getThrownErrorMessage(err, "تعذر تحميل جداول العمل"));
+        notify(getThrownErrorMessage(err, t("hr.workSchedule.errors.loadList")));
       } finally {
         setLoading(false);
       }
     },
-    [notify, search],
+    [notify, search, t],
   );
 
   useEffect(() => {
@@ -206,8 +263,28 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
   }, [view, search, loadSchedules]);
 
   const formStats = useMemo(
-    () => statsFromForm(scheduleName, periodRows, weeklyDaysTarget),
-    [periodRows, scheduleName, weeklyDaysTarget],
+    () => statsFromForm(periodRows, weeklyDaysTarget),
+    [periodRows, weeklyDaysTarget],
+  );
+
+  useEffect(() => {
+    if (view !== "form") {
+      onHeaderStateChange?.(null);
+      return;
+    }
+
+    onHeaderStateChange?.({
+      isFormView: true,
+      scheduleTitle: scheduleName.trim() || defaultScheduleTitle,
+      stats: formStats,
+    });
+  }, [view, scheduleName, defaultScheduleTitle, formStats, onHeaderStateChange]);
+
+  useEffect(
+    () => () => {
+      onHeaderStateChange?.(null);
+    },
+    [onHeaderStateChange],
   );
 
   const pageNumbers = useMemo(() => {
@@ -225,7 +302,7 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
 
   const applyWeeklyDaysTarget = (count: number, days = dayOptions, periods = periodOptions) => {
     setWeeklyDaysTarget(count);
-    setPeriodRows(buildRowsForWeeklyDays(count, days, periods));
+    setPeriodRows(buildRowsForWeeklyDays(count, days, periods, defaultPeriodName));
     setPeriodPage(1);
   };
 
@@ -238,37 +315,64 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
     setView("form");
   };
 
-  const openEditForm = async (schedule: WorkingSchedule) => {
-    try {
-      notify(null);
-      setFocusedScheduleId(schedule.id);
-      const { days, periods } = await loadConstants();
-      const detail = await getWorkingScheduleById(schedule.id);
-      setEditingId(schedule.id);
-      setScheduleName(detail.name);
-      setWeeklyDaysTarget(detail.workingDaysCount || detail.periods.length || 5);
-      setPeriodRows(
-        detail.periods.length
-          ? detail.periods.map((period) => ({
-              localId: crypto.randomUUID(),
-              id: period.id,
-              name: period.name,
-              day: resolveEnumId(period.day, days),
-              period: resolveEnumId(period.period, periods, 1),
-              timeFrom: apiTimeToInputValue(period.timeFrom, DEFAULT_TIME_FROM),
-              timeTo: apiTimeToInputValue(period.timeTo, DEFAULT_TIME_TO),            }))
-          : buildRowsForWeeklyDays(5, days, periods),
-      );
-      setPeriodPage(1);
-      setView("form");
-    } catch (err) {
-      notify(getThrownErrorMessage(err, "تعذر تحميل بيانات الجدول"));
+  useEffect(() => {
+    if (!scheduleParam) {
+      setView("list");
+      return;
     }
-  };
+
+    let cancelled = false;
+
+    const loadForm = async () => {
+      if (scheduleParam === "new") {
+        await openAddForm();
+        return;
+      }
+
+      if (cancelled) return;
+
+      try {
+        notify(null);
+        setFocusedScheduleId(scheduleParam);
+        const { days, periods } = await loadConstants();
+        const detail = await getWorkingScheduleById(scheduleParam);
+        if (cancelled) return;
+        setEditingId(scheduleParam);
+        setScheduleName(detail.name);
+        setWeeklyDaysTarget(detail.workingDaysCount || detail.periods.length || 5);
+        setPeriodRows(
+          detail.periods.length
+            ? detail.periods.map((period) => ({
+                localId: crypto.randomUUID(),
+                id: period.id,
+                name: period.name,
+                day: resolveEnumId(period.day, days),
+                period: resolveEnumId(period.period, periods, 1),
+                timeFrom: apiTimeToInputValue(period.timeFrom, DEFAULT_TIME_FROM),
+                timeTo: apiTimeToInputValue(period.timeTo, DEFAULT_TIME_TO),
+              }))
+            : buildRowsForWeeklyDays(5, days, periods, defaultPeriodName),
+        );
+        setPeriodPage(1);
+        setView("form");
+      } catch (err) {
+        if (!cancelled) {
+          notify(getThrownErrorMessage(err, t("hr.workSchedule.errors.loadDetail")));
+          clearScheduleFromUrl();
+        }
+      }
+    };
+
+    void loadForm();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scheduleParam]);
 
   const handleDeleteSchedule = async (id: string) => {
     const confirmed = await confirm({
-      message: "هل أنت متأكد من حذف جدول العمل؟",
+      message: t("hr.workSchedule.confirms.delete"),
     });
     if (!confirmed) return;
 
@@ -277,19 +381,24 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
       notify(null);
       await loadSchedules(page);
     } catch (err) {
-      notify(getThrownErrorMessage(err, "فشل حذف جدول العمل"));
+      notify(getThrownErrorMessage(err, t("hr.workSchedule.errors.delete")));
     }
   };
 
   const addPeriodRow = () => {
-    setPeriodRows((prev) => [...prev, createPeriodRow(dayOptions, periodOptions)]);
+    setPeriodRows((prev) => [
+      ...prev,
+      createPeriodRow(dayOptions, periodOptions, defaultPeriodName),
+    ]);
     setPeriodPage(Math.max(1, Math.ceil((periodRows.length + 1) / PERIOD_PAGE_SIZE)));
   };
 
   const removePeriodRow = (localId: string) => {
     setPeriodRows((prev) => {
       const next = prev.filter((row) => row.localId !== localId);
-      return next.length ? next : [createPeriodRow(dayOptions, periodOptions)];
+      return next.length
+        ? next
+        : [createPeriodRow(dayOptions, periodOptions, defaultPeriodName)];
     });
   };
 
@@ -309,13 +418,12 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
 
   const handleSaveSchedule = async () => {
     if (!scheduleName.trim()) {
-      notify("يرجى إدخال اسم الجدول.");
+      notify(t("hr.workSchedule.errors.nameRequired"));
       return;
     }
 
-    const periodValidationError = validatePeriodRows(periodRows);
-    if (periodValidationError) {
-      notify(periodValidationError);
+    if (!validatePeriodRows(periodRows)) {
+      notify(t("hr.workSchedule.errors.periodRequired"));
       return;
     }
 
@@ -355,89 +463,75 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
 
       notify(null);
       setFormNotice(null);
-      setView("list");
+      clearScheduleFromUrl();
       await loadSchedules(1);
     } catch (err) {
-      notify(getThrownErrorMessage(err, "فشل حفظ جدول العمل"));
+      notify(getThrownErrorMessage(err, t("hr.workSchedule.errors.save")));
     } finally {
       setSaving(false);
     }
   };
 
   const listToolbar = (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div className="relative w-full max-w-md flex-1 sm:min-w-[260px]">
+    <TableToolbar
+      addLabel={t("hr.workSchedule.addLabel")}
+      onAddClick={() => openScheduleInUrl("new")}
+      addClassName="inline-flex shrink-0 items-center gap-2 rounded-lg bg-hr-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-hr-primary-hover"
+    >
+        <div className="relative w-full max-w-md sm:min-w-[260px]">
         <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-hr-muted" />
         <input
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="ابحث عن جدول عمل محدد"
-          className="h-9 w-full rounded-lg border border-hr-border bg-white pe-3 ps-9 text-sm outline-none focus:border-hr-primary"
+          placeholder={t("hr.workSchedule.searchPlaceholder")}
+          className="h-9 w-full rounded-lg border border-hr-border bg-hr-surface pe-3 ps-9 text-sm outline-none focus:border-hr-primary"
         />
       </div>
-
-      <button
-        type="button"
-        onClick={() => void openAddForm()}
-        className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-hr-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-hr-primary-hover"
-      >
-        <Plus className="size-4" strokeWidth={2.5} />
-        إضافة جدول عمل جديد
-      </button>
-    </div>
+    </TableToolbar>
   );
 
   if (view === "form") {
     return (
-      <section className="rounded-xl border border-[#B8E4F2] bg-white p-4 shadow-card sm:p-5">
+      <section className="rounded-xl border border-hr-border bg-hr-surface p-4 shadow-card sm:p-5">
         <DetailBackButton
-          label="العودة إلى قائمة جداول العمل"
-          onClick={() => setView("list")}
+          label={t("hr.workSchedule.backLabel")}
+          onClick={goBackToScheduleList}
+          className="mb-6"
         />
 
-        <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-hr-muted">
-          <span className="font-medium text-hr-primary">
-            إدارة جدول العمل ({totalCount}) جدول
-          </span>
-          <span>›</span>
-          <span className="text-hr-text">
-            {editingId ? "تعديل جدول عمل" : "إضافة جدول عمل جديد"}
-          </span>
-        </div>
-
-        <div className="mb-6">
-          <WorkScheduleStatsBanner stats={formStats} />
-        </div>
-
-        <div className="mb-6 rounded-2xl border border-hr-border bg-[#FAFCFE] p-4 sm:p-5">
+        <div className="mb-6 rounded-2xl border border-hr-border bg-hr-table-alt p-4 sm:p-5">
           <div className="mb-4 flex items-center gap-2">
             <FileText className="size-5 text-hr-primary" />
-            <h3 className="text-base font-bold text-hr-text">المعلومات الأساسية</h3>
+            <h3 className="text-base font-bold text-hr-text">{t("hr.workSchedule.basicInfo")}</h3>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm text-hr-text">اسم الجدول</label>
+              <label className="mb-2 block text-sm text-hr-text">
+                {t("hr.workSchedule.columns.scheduleName")}
+              </label>
               <input
                 value={scheduleName}
                 onChange={(e) => setScheduleName(e.target.value)}
-                placeholder="أدخل اسم الجدول"
-                className="h-11 w-full rounded-lg border border-hr-border bg-white px-3 outline-none focus:border-hr-primary"
+                placeholder={t("hr.workSchedule.namePlaceholder")}
+                className="h-11 w-full rounded-lg border border-hr-border bg-hr-surface px-3 outline-none focus:border-hr-primary"
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm text-hr-text">عدد أيام العمل الأسبوعية</label>
+              <label className="mb-2 block text-sm text-hr-text">
+                {t("hr.workSchedule.weeklyDaysLabel")}
+              </label>
               <select
                 value={weeklyDaysTarget}
                 onChange={(e) => applyWeeklyDaysTarget(Number(e.target.value))}
-                className="h-11 w-full rounded-lg border border-hr-border bg-white px-3 outline-none focus:border-hr-primary"
+                className="h-11 w-full rounded-lg border border-hr-border bg-hr-surface px-3 outline-none focus:border-hr-primary"
               >
                 <option value={0} disabled>
-                  اختر عدد الأيام
+                  {t("hr.workSchedule.selectDaysCount")}
                 </option>
                 {WEEKLY_DAY_OPTIONS.map((days) => (
                   <option key={days} value={days}>
-                    {days} {days === 1 ? "يوم" : "أيام"}
+                    {days} {days === 1 ? t("common.day") : t("common.days")}
                   </option>
                 ))}
               </select>
@@ -445,38 +539,38 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-hr-border bg-white p-4 sm:p-5">
+        <div className="rounded-2xl border border-hr-border bg-hr-surface p-4 sm:p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-base font-bold text-hr-text">فترات العمل</h3>
+            <h3 className="text-base font-bold text-hr-text">{t("hr.workSchedule.periodsSection")}</h3>
             <button
               type="button"
               onClick={addPeriodRow}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#DDF1FA] px-4 py-2 text-sm font-medium text-[#3D7EA6] transition hover:bg-[#C8E9F7]"
+              className={`${accentBtnClass} rounded-lg`}
             >
               <Plus className="size-4" />
-              إضافة فترة
+              {t("hr.workSchedule.addPeriod")}
             </button>
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-hr-border">
             <table className="min-w-[900px] w-full text-sm">
-              <thead className="bg-[#F5FAFD] text-hr-muted">
+              <thead className="bg-hr-table-head text-hr-muted">
                 <tr>
-                  <th className="px-3 py-3 text-center font-medium">#</th>
-                  <th className="px-3 py-3 text-center font-medium">id</th>
-                  <th className="px-3 py-3 text-center font-medium">اسم الفترة</th>
-                  <th className="px-3 py-3 text-center font-medium">اليوم</th>
-                  <th className="px-3 py-3 text-center font-medium">نوع الفترة</th>
-                  <th className="px-3 py-3 text-center font-medium">من الوقت</th>
-                  <th className="px-3 py-3 text-center font-medium">إلى الوقت</th>
-                  <th className="px-3 py-3 text-center font-medium">إجراءات</th>
+                  <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>
+                  <th className="px-3 py-3 text-center font-medium">{t("table.columns.id")}</th>
+                  <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.form.periodName")}</th>
+                  <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.form.day")}</th>
+                  <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.form.periodType")}</th>
+                  <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.form.fromTime")}</th>
+                  <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.form.toTime")}</th>
+                  <th className="px-3 py-3 text-center font-medium">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {visiblePeriodRows.map((row, idx) => (
                   <tr
                     key={row.localId}
-                    className={idx % 2 ? "border-t border-hr-border bg-[#F5FAFD]" : "border-t border-hr-border bg-white"}
+                    className={idx % 2 ? "border-t border-hr-border bg-hr-table-head" : "border-t border-hr-border bg-hr-surface"}
                   >
                     <td className="px-3 py-3 text-center text-hr-muted">
                       <TableRowIndex
@@ -492,8 +586,8 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                       <input
                         value={row.name}
                         onChange={(e) => updatePeriodRow(row.localId, { name: e.target.value })}
-                        placeholder={DEFAULT_PERIOD_NAME}
-                        aria-label="اسم الفترة"
+                        placeholder={defaultPeriodName}
+                        aria-label={t("hr.workSchedule.form.periodName")}
                         className="h-10 w-full min-w-[160px] rounded-lg border border-hr-border px-3 text-center outline-none focus:border-hr-primary"
                       />
                     </td>
@@ -503,8 +597,8 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                         onChange={(e) =>
                           updatePeriodRow(row.localId, { day: Number(e.target.value) })
                         }
-                        aria-label="اليوم"
-                        className="h-10 w-full min-w-[120px] rounded-lg border border-hr-border bg-white px-3 text-center outline-none focus:border-hr-primary"
+                        aria-label={t("hr.workSchedule.form.day")}
+                        className="h-10 w-full min-w-[120px] rounded-lg border border-hr-border bg-hr-surface px-3 text-center outline-none focus:border-hr-primary"
                       >
                         {dayOptions.map((day) => (
                           <option key={day.id} value={day.id}>
@@ -519,8 +613,8 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                         onChange={(e) =>
                           updatePeriodRow(row.localId, { period: Number(e.target.value) })
                         }
-                        aria-label="نوع الفترة"
-                        className="h-10 w-full min-w-[120px] rounded-lg border border-hr-border bg-white px-3 text-center outline-none focus:border-hr-primary"
+                        aria-label={t("hr.workSchedule.form.periodType")}
+                        className="h-10 w-full min-w-[120px] rounded-lg border border-hr-border bg-hr-surface px-3 text-center outline-none focus:border-hr-primary"
                       >
                         {periodOptions.map((period) => (
                           <option key={period.id} value={period.id}>
@@ -533,21 +627,21 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                       <TimeInput
                         value={row.timeFrom}
                         onChange={(value) => updatePeriodRow(row.localId, { timeFrom: value })}
-                        aria-label="من الوقت"
+                        aria-label={t("hr.workSchedule.form.fromTime")}
                       />
                     </td>
                     <td className="px-3 py-3">
                       <TimeInput
                         value={row.timeTo}
                         onChange={(value) => updatePeriodRow(row.localId, { timeTo: value })}
-                        aria-label="إلى الوقت"
+                        aria-label={t("hr.workSchedule.form.toTime")}
                       />
                     </td>                    <td className="px-3 py-3 text-center">
                       <button
                         type="button"
                         onClick={() => removePeriodRow(row.localId)}
                         className="text-red-400 transition hover:text-red-600"
-                        aria-label="حذف الفترة"
+                        aria-label={t("hr.workSchedule.form.deletePeriod")}
                       >
                         <X className="mx-auto size-4" />
                       </button>
@@ -579,7 +673,7 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                       "size-8 rounded-full text-sm",
                       pageNumber === periodPage
                         ? "bg-hr-primary text-white"
-                        : "text-hr-muted hover:bg-gray-100",
+                        : "text-hr-muted hover:bg-hr-hover",
                     ].join(" ")}
                   >
                     {pageNumber}
@@ -601,7 +695,7 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
 
         <div className="mt-8 flex flex-col gap-4">
           {formNotice && (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p className={alertErrorClass}>
               {formNotice}
             </p>
           )}
@@ -613,14 +707,14 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
             disabled={saving}
             className="rounded-lg bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
           >
-            {saving ? "جاري الحفظ…" : "حفظ الجدول"}
+            {saving ? t("hr.workSchedule.saving") : t("hr.workSchedule.saveSchedule")}
           </button>
           <button
             type="button"
-            onClick={() => setView("list")}
-            className="rounded-lg border border-hr-primary px-8 py-2.5 text-sm font-bold text-hr-primary transition hover:bg-[#F0F6FF]"
+            onClick={goBackToScheduleList}
+            className={cancelBtnClass}
           >
-            إلغاء
+            {t("common.cancel")}
           </button>
           </div>
         </div>
@@ -629,7 +723,7 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
   }
 
   return (
-    <section className="rounded-xl border border-[#B8E4F2] bg-white p-4 shadow-card sm:p-5">
+    <section className="rounded-xl border border-hr-border bg-hr-surface p-4 shadow-card sm:p-5">
       {listToolbar}
 
       <div className="overflow-x-auto rounded-lg border border-hr-border">
@@ -643,23 +737,23 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
             <col className="w-36" />
             <col className="w-24" />
           </colgroup>
-          <thead className="bg-[#F5FAFD] text-hr-muted">
+          <thead className="bg-hr-table-head text-hr-muted">
             <tr>
-              <th className="px-3 py-3 text-center font-medium">#</th>
-              <th className="px-3 py-3 text-center font-medium">id</th>
-              <th className="px-3 py-3 text-center font-medium">اسم الجدول</th>
-              <th className="px-3 py-3 text-center font-medium">عدد الفترات</th>
-              <th className="px-3 py-3 text-center font-medium">عدد أيام العمل</th>
-              <th className="px-3 py-3 text-center font-medium">إجمالي ساعات العمل الأسبوعي</th>
-              <th className="px-3 py-3 text-center font-medium">متوسط ساعات العمل اليومي</th>
-              <th className="px-3 py-3 text-center font-medium">إجراءات</th>
+              <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>
+              <th className="px-3 py-3 text-center font-medium">{t("table.columns.id")}</th>
+              <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.columns.scheduleName")}</th>
+              <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.columns.periodsCount")}</th>
+              <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.columns.workingDays")}</th>
+              <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.columns.weeklyHours")}</th>
+              <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.columns.dailyHours")}</th>
+              <th className="px-3 py-3 text-center font-medium">{t("common.actions")}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
                 <td colSpan={8} className="px-3 py-8 text-center text-hr-muted">
-                  جاري التحميل…
+                  {t("common.loading")}
                 </td>
               </tr>
             ) : (
@@ -668,10 +762,10 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                   key={item.id}
                   className={[
                     "cursor-pointer",
-                    idx % 2 ? "bg-[#F5FAFD]" : "bg-white",
+                    idx % 2 ? "bg-hr-table-head" : "bg-hr-surface",
                     focusedScheduleId === item.id ? "ring-1 ring-inset ring-[#5BB8E8]" : "",
                   ].join(" ")}
-                  onClick={() => void openEditForm(item)}
+                  onClick={() => openScheduleInUrl(item.id)}
                 >
                   <td className="px-3 py-3 text-center text-hr-muted">
                     <TableRowIndex index={idx} page={page} pageSize={PAGE_SIZE} />
@@ -685,10 +779,10 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                   <td className="px-3 py-3 text-center">{item.periodsCount}</td>
                   <td className="px-3 py-3 text-center">{item.workingDaysCount}</td>
                   <td className="px-3 py-3 text-center">
-                    {formatHoursLabel(item.totalWorkingHoursWeekly)}
+                    {formatHoursLabel(item.totalWorkingHoursWeekly, hoursSuffix)}
                   </td>
                   <td className="px-3 py-3 text-center">
-                    {formatHoursLabel(item.averageWorkingHoursPerDay, "ساعات")}
+                    {formatHoursLabel(item.averageWorkingHoursPerDay, hoursSuffix)}
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center justify-center gap-2">
@@ -696,10 +790,10 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          void openEditForm(item);
+                          openScheduleInUrl(item.id);
                         }}
                         className="text-amber-500"
-                        aria-label="تعديل"
+                        aria-label={t("common.edit")}
                       >
                         <Pencil className="size-4" />
                       </button>
@@ -710,7 +804,7 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
                           void handleDeleteSchedule(item.id);
                         }}
                         className="text-red-400"
-                        aria-label="حذف"
+                        aria-label={t("common.delete")}
                       >
                         <Trash2 className="size-4" />
                       </button>
@@ -722,7 +816,7 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
             {!loading && !schedules.length && (
               <tr>
                 <td colSpan={8} className="px-3 py-8 text-center text-hr-muted">
-                  لا توجد جداول عمل
+                  {t("hr.workSchedule.empty")}
                 </td>
               </tr>
             )}
@@ -736,7 +830,7 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
           onClick={() => page > 1 && void loadSchedules(page - 1)}
           disabled={page <= 1}
           className="rounded px-2 py-1 text-hr-muted disabled:opacity-40"
-          aria-label="الصفحة السابقة"
+          aria-label={t("table.pagination.previous")}
         >
           ‹
         </button>
@@ -747,7 +841,7 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
             onClick={() => void loadSchedules(pageNumber)}
             className={[
               "size-8 rounded-full text-sm",
-              pageNumber === page ? "bg-hr-primary text-white" : "text-hr-muted hover:bg-gray-100",
+              pageNumber === page ? "bg-hr-primary text-white" : "text-hr-muted hover:bg-hr-hover",
             ].join(" ")}
             aria-current={pageNumber === page ? "page" : undefined}
           >
@@ -759,7 +853,7 @@ export function WorkSchedulePanel({ onNotice }: WorkSchedulePanelProps) {
           onClick={() => page < totalPages && void loadSchedules(page + 1)}
           disabled={page >= totalPages}
           className="rounded px-2 py-1 text-hr-muted disabled:opacity-40"
-          aria-label="الصفحة التالية"
+          aria-label={t("table.pagination.next")}
         >
           ›
         </button>

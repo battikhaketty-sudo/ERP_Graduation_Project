@@ -1,29 +1,28 @@
 import {
   Bell,
-  BookOpen,
   Building2,
-  FileText,
   FolderKanban,
   LayoutGrid,
   PanelsTopLeft,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import { ROUTES } from "./routes";
+import type { TranslationKey } from "../i18n/types";
 
 export type NavItem = {
   id: string;
-  label: string;
+  labelKey: TranslationKey;
   icon: typeof LayoutGrid;
   to?: string;
 };
 
 export const navItems: NavItem[] = [
-  { id: "dashboard", label: "الرئيسية", icon: LayoutGrid },
-  { id: "projects", label: "إدارة المشاريع", icon: FolderKanban, to: ROUTES.projects },
-  { id: "employees", label: "الموظفين", icon: Users, to: ROUTES.employees },
-  { id: "departments", label: "الأقسام", icon: PanelsTopLeft, to: ROUTES.departments },
-  { id: "hr", label: "قسم HR", icon: Building2, to: ROUTES.hr },
-  { id: "learning", label: "learning", icon: BookOpen },
-  { id: "memo", label: "Memo", icon: FileText },
-  { id: "notifications", label: "الإشعارات", icon: Bell, to: ROUTES.notifications },
+  { id: "dashboard", labelKey: "nav.dashboard", icon: LayoutGrid },
+  { id: "projects", labelKey: "nav.projects", icon: FolderKanban, to: ROUTES.projects },
+  { id: "employees", labelKey: "nav.employees", icon: Users, to: ROUTES.employees },
+  { id: "departments", labelKey: "nav.departments", icon: PanelsTopLeft, to: ROUTES.departments },
+  { id: "access", labelKey: "nav.access", icon: ShieldCheck, to: ROUTES.access },
+  { id: "hr", labelKey: "nav.hr", icon: Building2, to: ROUTES.hr },
+  { id: "notifications", labelKey: "nav.notifications", icon: Bell, to: ROUTES.notifications },
 ];

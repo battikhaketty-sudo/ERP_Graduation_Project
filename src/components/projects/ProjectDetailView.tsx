@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "../../i18n";
+import { useUrlQueryNavigation } from "../../hooks/useUrlQueryNavigation";
 import { DetailBackButton } from "../ui/DetailBackButton";
+import { cardSurfaceClass, subtlePanelClass } from "../ui/formStyles";
 import { buildProjectDetailStats } from "../../services/projects/project.mapper";
 import { getProjectMembers } from "../../services/projects";
 import type {
@@ -53,6 +56,13 @@ export function ProjectDetailView({
   onEditMember,
   onDeleteMember,
 }: ProjectDetailViewProps) {
+  const { t } = useTranslation();
+  const {
+    value: sectionId,
+    pushValue: openSectionInUrl,
+    removeValue: clearSectionFromUrl,
+    goBack: goBackFromSection,
+  } = useUrlQueryNavigation({ param: "section" });
   const [activeTab, setActiveTab] = useState<DetailTab>("general");
   const [selectedSection, setSelectedSection] = useState<ProjectSection | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
@@ -87,10 +97,21 @@ export function ProjectDetailView({
     void loadMembers();
   }, [loadMembers]);
 
+  useEffect(() => {
+    if (!sectionId) {
+      setSelectedSection(null);
+      return;
+    }
+
+    setSelectedSection(
+      project.sections.find((section) => section.id === sectionId) ?? null,
+    );
+  }, [project.sections, sectionId]);
+
   const tabs: Array<{ key: DetailTab; label: string }> = [
-    { key: "general", label: "معلومات عامة" },
-    { key: "members", label: "الأعضاء" },
-    { key: "kanban", label: "لوحة كانبان" },
+    { key: "general", label: t("projects.detail.tabs.general") },
+    { key: "members", label: t("projects.detail.tabs.members") },
+    { key: "kanban", label: t("projects.detail.tabs.kanban") },
   ];
 
   if (selectedSection) {
@@ -98,11 +119,11 @@ export function ProjectDetailView({
       <SectionDetailView
         project={project}
         section={selectedSection}
-        onBack={() => setSelectedSection(null)}
+        onBack={goBackFromSection}
         onEditSection={() => onEditSection(selectedSection)}
         onDeleteSection={() => {
           onDeleteSection(selectedSection);
-          setSelectedSection(null);
+          clearSectionFromUrl();
         }}
         onAddTask={() => onAddTask(selectedSection.id)}
         onDeleteTask={onDeleteTask}
@@ -119,34 +140,36 @@ export function ProjectDetailView({
         <div className="flex items-center gap-3">
           <DetailBackButton
             variant="onPrimary"
-            label="العودة إلى قائمة المشاريع"
+            label={t("projects.detail.backLabel")}
             onClick={onBack}
             className="mb-0"
           />
           <div>
             <h1 className="text-xl font-bold">{project.name}</h1>
-            <p className="text-sm text-white/80">{project.description || "تفاصيل المشروع"}</p>
+            <p className="text-sm text-white/80">
+              {project.description || t("projects.detail.defaultDescription")}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={onEdit}
-            className="rounded-xl bg-white px-5 py-2 text-sm font-bold text-hr-primary"
+            className="rounded-xl bg-hr-surface px-5 py-2 text-sm font-bold text-hr-primary"
           >
-            تعديل
+            {t("common.edit")}
           </button>
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-xl bg-white px-5 py-2 text-sm font-bold text-red-500"
+            className="rounded-xl bg-hr-surface px-5 py-2 text-sm font-bold text-red-500"
           >
-            حذف
+            {t("common.delete")}
           </button>
         </div>
       </div>
 
-      <div className="mb-5 overflow-hidden rounded-2xl bg-[#EEF2F6] shadow-card">
+      <div className={`mb-5 overflow-hidden ${cardSurfaceClass} bg-hr-table-alt shadow-none`}>
         <div className="flex flex-wrap">
           {tabs.map((tab) => (
             <button
@@ -172,20 +195,39 @@ export function ProjectDetailView({
       )}
 
       {activeTab === "general" && (
-        <section className="mb-5 rounded-2xl bg-white p-5 shadow-card">
+        <section className={`mb-5 ${cardSurfaceClass} p-5`}>
           <div className="grid gap-4 sm:grid-cols-2">
-            <InfoItem label="الرقم" value={String(project.number)} />
-            <InfoItem label="الاسم" value={project.name} />
-            <InfoItem label="الوصف" value={project.description || "—"} />
-            <InfoItem label="رقم المدير" value={project.managerId || "—"} />
-            <InfoItem label="اسم المدير" value={project.managerName} />
+            <InfoItem
+              label={t("projects.detail.fields.number")}
+              value={project.id}
+              dir="ltr"
+            />
+            <InfoItem label={t("projects.detail.fields.name")} value={project.name} />
+            <InfoItem
+              label={t("projects.detail.fields.description")}
+              value={project.description || t("common.dash")}
+            />
+            <InfoItem
+              label={t("projects.detail.fields.managerId")}
+              value={project.managerId || t("common.dash")}
+            />
+            <InfoItem label={t("projects.detail.fields.managerName")} value={project.managerName} />
             <div>
-              <p className="mb-1 text-xs text-hr-muted">الحالة</p>
+              <p className="mb-1 text-xs text-hr-muted">{t("projects.table.columns.status")}</p>
               <ProjectStatusBadge status={project.status} />
             </div>
-            <InfoItem label="تاريخ البداية" value={project.startDate || "—"} />
-            <InfoItem label="تاريخ النهاية" value={project.endDate || "—"} />
-            <InfoItem label="تاريخ الإضافة" value={project.createdAt || "—"} />
+            <InfoItem
+              label={t("projects.detail.fields.startDate")}
+              value={project.startDate || t("common.dash")}
+            />
+            <InfoItem
+              label={t("projects.detail.fields.endDate")}
+              value={project.endDate || t("common.dash")}
+            />
+            <InfoItem
+              label={t("projects.detail.fields.createdAt")}
+              value={project.createdAt || t("common.dash")}
+            />
           </div>
         </section>
       )}
@@ -211,7 +253,7 @@ export function ProjectDetailView({
           project={project}
           onAddSection={onAddSection}
           onAddTask={() => onAddTask()}
-          onSectionClick={setSelectedSection}
+          onSectionClick={(section) => openSectionInUrl(section.id)}
         />
       )}
 
@@ -225,11 +267,21 @@ export function ProjectDetailView({
   );
 }
 
-function InfoItem({ label, value }: { label: string; value: string }) {
+function InfoItem({
+  label,
+  value,
+  dir,
+}: {
+  label: string;
+  value: string;
+  dir?: "ltr" | "rtl";
+}) {
   return (
-    <div className="rounded-xl border border-hr-border bg-[#FAFCFE] px-4 py-3">
+    <div className={subtlePanelClass}>
       <p className="mb-1 text-xs text-hr-muted">{label}</p>
-      <p className="text-sm font-medium text-hr-text">{value}</p>
+      <p className="text-sm font-medium text-hr-text" dir={dir}>
+        {value}
+      </p>
     </div>
   );
 }

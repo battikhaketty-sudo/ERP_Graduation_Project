@@ -1,63 +1,172 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useUrlQueryNavigation } from "../hooks/useUrlQueryNavigation";
 import { AddEmployeeModal } from "../components/employees/AddEmployeeModal";
 import { EmployeeDetailView } from "../components/employees/EmployeeDetailView";
+import { EmployeeDrawerPreview } from "../components/employees/EmployeeDrawerPreview";
 import { EmployeePageHeader } from "../components/employees/EmployeePageHeader";
 import { EmployeeTable } from "../components/employees/EmployeeTable";
 import { EmployeeTableSkeleton } from "../components/employees/EmployeeTableSkeleton";
+import { DetailDrawer } from "../components/ui/DetailDrawer";
 import { StatusBanner } from "../components/ui/StatusBanner";
 import { DEFAULT_PAGE_SIZE } from "../constants/defaults";
+import { useRegisterCommandActions } from "../context/CommandBarContext";
 import { useConfirmDialog } from "../context/ConfirmDialogContext";
-import { addEmployee, deleteEmployee, getEmployees } from "../services/employees";
+import { useToast } from "../context/ToastContext";
+import {
+  addEmployee,
+  archiveEmployee,
+  getEmployeeById,
+  getEmployees,
+  unarchiveEmployee,
+} from "../services/employees";
 import type { Employee } from "../types/employee";
 import { getThrownErrorMessage } from "../utils/apiResponse";
+import {
+  addArchivedEmployee,
+  getArchivedEmployeeIds,
+  getArchivedEmployees,
+  isLocallyArchived,
+  removeArchivedEmployee,
+} from "../utils/archivedEmployeesStore";
+import { exportToCsv } from "../utils/exportCsv";
+import { useTranslation } from "../i18n";
+
+type ArchiveView = "active" | "archived";
 
 export function EmployeesPage() {
   const { confirm } = useConfirmDialog();
-  const removedEmployeeIdsRef = useRef(new Set<string>());
+  const { showToast } = useToast();
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const {
+    value: employeeId,
+    pushValue: openEmployeeInUrl,
+    removeValue: clearEmployeeFromUrl,
+    goBack: goBackToEmployeeList,
+  } = useUrlQueryNavigation({ param: "id" });
+
   const [search, setSearch] = useState("");
+  const [archiveView, setArchiveView] = useState<ArchiveView>("active");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [drawerEmployee, setDrawerEmployee] = useState<Employee | null>(null);
+  const [fullPageEmployee, setFullPageEmployee] = useState<Employee | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
-  const fetchEmployees = async (options?: { silent?: boolean }) => {
-    try {
-      if (!options?.silent) {
-        setLoading(true);
-        setError(null);
+  useEffect(() => {
+    if (searchParams.get("add") !== "1") return;
+
+    setIsAddModalOpen(true);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("add");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const commandActions = useMemo(
+    () => [
+      {
+        id: "employees-add",
+        label: t("pages.employees.addEmployee"),
+        keywords: ["موظف", "add", "employee"],
+        group: "actions" as const,
+        onSelect: () => setIsAddModalOpen(true),
+      },
+    ],
+    [t],
+  );
+  useRegisterCommandActions(commandActions);
+
+  const fetchEmployees = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        if (!options?.silent) {
+          setLoading(true);
+          setError(null);
+        }
+
+        if (archiveView === "archived") {
+          const archived = getArchivedEmployees();
+          setEmployees(archived);
+          setTotalPages(1);
+          setTotalCount(archived.length);
+          return archived;
+        }
+
+        const archivedIds = getArchivedEmployeeIds();
+        const result = await getEmployees(currentPage, DEFAULT_PAGE_SIZE, {
+          archived: false,
+        });
+
+        const data = (result.data || []).filter(
+          (employee) =>
+            !archivedIds.has(employee.id) &&
+            !employee.isArchived &&
+            !isLocallyArchived(employee.id),
+        );
+
+        setEmployees(data);
+        setTotalPages(result.totalPages || 1);
+        setTotalCount(data.length);
+
+        return data;
+      } catch (err) {
+        if (!options?.silent) {
+          setError(getThrownErrorMessage(err, t("employees.errors.loadList")));
+        }
+        return null;
+      } finally {
+        if (!options?.silent) {
+          setLoading(false);
+        }
       }
-
-      const result = await getEmployees(currentPage, DEFAULT_PAGE_SIZE);
-
-      const data = (result.data || []).filter(
-        (employee) => !removedEmployeeIdsRef.current.has(employee.id),
-      );
-
-      setEmployees(data);
-      setTotalPages(result.totalPages || 1);
-      setTotalCount(result.totalCount || result.data?.length || 0);
-
-      return data;
-    } catch (err) {
-      if (!options?.silent) {
-        setError(getThrownErrorMessage(err, "فشل تحميل الموظفين"));
-      }
-      return null;
-    } finally {
-      if (!options?.silent) {
-        setLoading(false);
-      }
-    }
-  };
+    },
+    [archiveView, currentPage],
+  );
 
   useEffect(() => {
     fetchEmployees();
-  }, [currentPage]);
+  }, [fetchEmployees]);
+
+  useEffect(() => {
+    if (!employeeId) {
+      setFullPageEmployee(null);
+      return;
+    }
+
+    const fromList = employees.find((employee) => employee.id === employeeId);
+    if (fromList) {
+      setFullPageEmployee(fromList);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadEmployee = async () => {
+      try {
+        const employee = await getEmployeeById(employeeId);
+        if (!cancelled) {
+          setFullPageEmployee(employee);
+        }
+      } catch {
+        if (!cancelled) {
+          setFullPageEmployee(null);
+        }
+      }
+    };
+
+    void loadEmployee();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeId, employees]);
 
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -72,6 +181,27 @@ export function EmployeesPage() {
     );
   }, [employees, search]);
 
+  const handleExport = () => {
+    exportToCsv(
+      `employees-${new Date().toISOString().slice(0, 10)}.csv`,
+      [
+        t("employees.export.headers.name"),
+        t("employees.export.headers.email"),
+        t("employees.export.headers.phone"),
+        t("employees.export.headers.department"),
+        t("employees.export.headers.role"),
+      ],
+      filteredEmployees.map((employee) => [
+        employee.name,
+        employee.email,
+        employee.phone,
+        employee.department ?? employee.address,
+        employee.role,
+      ]),
+    );
+    showToast(t("employees.toasts.exportSuccess"), "success");
+  };
+
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -82,7 +212,9 @@ export function EmployeesPage() {
   };
 
   const toggleSelectAll = (checked: boolean) => {
-    setSelectedIds(checked ? new Set(filteredEmployees.map((employee) => employee.id)) : new Set());
+    setSelectedIds(
+      checked ? new Set(filteredEmployees.map((employee) => employee.id)) : new Set(),
+    );
   };
 
   const handleAddEmployee = async (newEmployee: Omit<Employee, "id">) => {
@@ -92,56 +224,93 @@ export function EmployeesPage() {
       setIsAddModalOpen(false);
       setCurrentPage(1);
       await fetchEmployees();
+      showToast(t("employees.toasts.addSuccess"), "success");
     } catch (err) {
-      const message = getThrownErrorMessage(err, "فشل إضافة الموظف");
+      const message = getThrownErrorMessage(err, t("employees.errors.add"));
       setError(message);
+      showToast(message, "error");
       throw { message };
     }
   };
 
-  const handleDeleteEmployee = async (employee: Employee) => {
+  const handleToggleArchive = async (employee: Employee) => {
+    const isArchived = archiveView === "archived" || Boolean(employee.isArchived);
     const confirmed = await confirm({
-      message: `هل أنت متأكد من حذف ${employee.name}؟`,
+      title: isArchived
+        ? t("employees.archive.unarchiveTitle")
+        : t("employees.archive.confirmTitle"),
+      message: isArchived
+        ? t("employees.archive.unarchiveMessage", { name: employee.name })
+        : t("employees.archive.confirmMessage", { name: employee.name }),
+      confirmLabel: isArchived
+        ? t("employees.archive.unarchiveLabel")
+        : t("employees.archive.archiveLabel"),
     });
     if (!confirmed) return;
 
     try {
-      await deleteEmployee(employee.id);
+      if (isArchived) {
+        await unarchiveEmployee(employee.id);
+        removeArchivedEmployee(employee.id);
+        showToast(t("employees.toasts.unarchiveSuccess", { name: employee.name }), "success");
+
+        if (archiveView === "archived") {
+          setEmployees((prev) => prev.filter((item) => item.id !== employee.id));
+          setTotalCount((count) => Math.max(0, count - 1));
+        }
+      } else {
+        await archiveEmployee(employee.id);
+        addArchivedEmployee(employee);
+        showToast(t("employees.toasts.archiveSuccess", { name: employee.name }), "success");
+
+        setEmployees((prev) => {
+          const remaining = prev.filter((item) => item.id !== employee.id);
+          if (archiveView === "active" && remaining.length === 0 && currentPage > 1) {
+            setCurrentPage((page) => page - 1);
+          }
+          return remaining;
+        });
+        setTotalCount((count) => Math.max(0, count - 1));
+      }
+
       setError(null);
-      setSelectedEmployee(null);
-      removedEmployeeIdsRef.current.add(employee.id);
+      setDrawerEmployee(null);
+      clearEmployeeFromUrl();
       setSelectedIds((prev) => {
         const next = new Set(prev);
         next.delete(employee.id);
         return next;
       });
-
-      const remaining = employees.filter((item) => item.id !== employee.id);
-      setEmployees(remaining);
-      setTotalCount((count) => Math.max(0, count - 1));
-
-      if (remaining.length === 0 && currentPage > 1) {
-        setCurrentPage((page) => page - 1);
-      }
     } catch (err) {
-      setError(getThrownErrorMessage(err, "فشل حذف الموظف"));
-      await fetchEmployees({ silent: true });
+      const message = getThrownErrorMessage(
+        err,
+        isArchived ? t("employees.errors.unarchive") : t("employees.errors.archive"),
+      );
+      setError(message);
+      showToast(message, "error");
     }
   };
 
-  if (selectedEmployee) {
+  const handleArchiveViewChange = (view: ArchiveView) => {
+    setArchiveView(view);
+    setCurrentPage(1);
+    setSelectedIds(new Set());
+  };
+
+  if (fullPageEmployee) {
     return (
       <EmployeeDetailView
-        employee={selectedEmployee}
-        onBack={() => setSelectedEmployee(null)}
-        onDelete={handleDeleteEmployee}
+        employee={fullPageEmployee}
+        onBack={goBackToEmployeeList}
+        onToggleArchive={handleToggleArchive}
         onUpdate={(updatedEmployee) => {
           setEmployees((prev) =>
             prev.map((employee) =>
               employee.id === updatedEmployee.id ? updatedEmployee : employee,
             ),
           );
-          setSelectedEmployee(updatedEmployee);
+          setFullPageEmployee(updatedEmployee);
+          showToast(t("employees.toasts.saveSuccess"), "success");
         }}
       />
     );
@@ -156,7 +325,9 @@ export function EmployeesPage() {
           totalCount={totalCount}
           search={search}
           onSearchChange={setSearch}
-          onAddClick={() => setIsAddModalOpen(true)}
+          onExport={handleExport}
+          archiveView={archiveView}
+          onArchiveViewChange={handleArchiveViewChange}
         />
 
         {loading ? (
@@ -170,11 +341,31 @@ export function EmployeesPage() {
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={setCurrentPage}
-            onEmployeeClick={setSelectedEmployee}
-            onDeleteEmployee={handleDeleteEmployee}
+            onEmployeeClick={setDrawerEmployee}
+            onEmployeeEdit={(employee) => openEmployeeInUrl(employee.id)}
+            onToggleArchive={handleToggleArchive}
+            onAddClick={() => setIsAddModalOpen(true)}
           />
         )}
       </main>
+
+      <DetailDrawer
+        open={Boolean(drawerEmployee)}
+        title={drawerEmployee?.name ?? t("employees.drawer.defaultTitle")}
+        subtitle={t("employees.drawer.subtitle")}
+        onClose={() => setDrawerEmployee(null)}
+      >
+        {drawerEmployee && (
+          <EmployeeDrawerPreview
+            employee={drawerEmployee}
+            onOpenFull={() => {
+              openEmployeeInUrl(drawerEmployee.id);
+              setDrawerEmployee(null);
+            }}
+            onToggleArchive={handleToggleArchive}
+          />
+        )}
+      </DetailDrawer>
 
       <AddEmployeeModal
         isOpen={isAddModalOpen}

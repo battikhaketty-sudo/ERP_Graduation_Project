@@ -1,7 +1,8 @@
 import { ImagePlus, Loader, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { DetailBackButton } from "../ui/DetailBackButton";
+import { usePreferences } from "../../context/PreferencesContext";
 import { useConfirmDialog } from "../../context/ConfirmDialogContext";
+import { useTranslation } from "../../i18n";
 import { getEmployees } from "../../services/employeeApi";
 import {
   deleteDepartment,
@@ -10,6 +11,8 @@ import {
   type Department,
 } from "../../services/hrApi";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
+import { alertErrorClass, cardSurfaceClass, readOnlyClass } from "../ui/formStyles";
+import { DetailBackButton } from "../ui/DetailBackButton";
 import { DepartmentField, inputClass } from "./department-ui";
 
 type DepartmentDetailViewProps = {
@@ -27,6 +30,8 @@ export function DepartmentDetailView({
   onDelete,
   onUpdate,
 }: DepartmentDetailViewProps) {
+  const { t } = useTranslation();
+  const { dir } = usePreferences();
   const { confirm } = useConfirmDialog();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,10 +59,10 @@ export function DepartmentDetailView({
       })
       .catch((err) => {
         setEditData(department);
-        setError(getThrownErrorMessage(err, "تعذر تحميل تفاصيل القسم"));
+        setError(getThrownErrorMessage(err, t("departments.detail.loadError")));
       })
       .finally(() => setLoading(false));
-  }, [department.id]);
+  }, [department, t]);
 
   const parentOptions = allDepartments.filter(
     (item) => item.id !== editData.id,
@@ -65,11 +70,11 @@ export function DepartmentDetailView({
 
   const handleSave = async () => {
     if (!editData.name.trim()) {
-      setError("يرجى إدخال اسم القسم.");
+      setError(t("departments.detail.nameRequired"));
       return;
     }
     if (!editData.managerId) {
-      setError("يرجى اختيار مدير القسم.");
+      setError(t("departments.detail.managerRequired"));
       return;
     }
 
@@ -88,7 +93,7 @@ export function DepartmentDetailView({
         onUpdate(updated);
       }
     } catch (err) {
-      setError(getThrownErrorMessage(err, "فشل تعديل القسم"));
+      setError(getThrownErrorMessage(err, t("departments.detail.saveError")));
     } finally {
       setSaving(false);
     }
@@ -96,7 +101,7 @@ export function DepartmentDetailView({
 
   const handleDelete = async () => {
     const confirmed = await confirm({
-      message: "هل أنت متأكد من حذف هذا القسم؟",
+      message: t("departments.detail.deleteConfirm"),
     });
     if (!confirmed) return;
 
@@ -104,7 +109,7 @@ export function DepartmentDetailView({
       await deleteDepartment(editData.id);
       onDelete(editData.id);
     } catch (err) {
-      setError(getThrownErrorMessage(err, "فشل حذف القسم"));
+      setError(getThrownErrorMessage(err, t("departments.detail.deleteError")));
     }
   };
 
@@ -121,14 +126,14 @@ export function DepartmentDetailView({
   return (
     <main
       className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6"
-      dir="rtl"
+      dir={dir}
     >
-      <DetailBackButton label="العودة إلى قائمة الأقسام" onClick={onBack} />
+      <DetailBackButton label={t("departments.detail.backLabel")} onClick={onBack} />
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-hr-primary sm:text-[22px]">
-            الأقسام <span className="text-hr-muted">›</span> تفاصيل القسم
+            {t("departments.detail.breadcrumb")}
           </h1>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -137,14 +142,14 @@ export function DepartmentDetailView({
             onClick={handleDelete}
             className="h-10 rounded-xl bg-red-500 px-5 text-sm font-bold text-white transition hover:bg-red-600"
           >
-            حذف
+            {t("departments.detail.delete")}
           </button>
           <button
             type="button"
             onClick={onBack}
-            className="h-10 rounded-xl border border-hr-primary bg-white px-5 text-sm font-bold text-hr-primary transition hover:bg-blue-50"
+            className="h-10 rounded-xl border border-hr-primary bg-hr-surface px-5 text-sm font-bold text-hr-primary transition hover:bg-hr-hover"
           >
-            تراجع
+            {t("departments.detail.undo")}
           </button>
           <button
             type="button"
@@ -153,14 +158,14 @@ export function DepartmentDetailView({
             className="inline-flex h-10 items-center gap-2 rounded-xl bg-hr-primary px-5 text-sm font-bold text-white transition hover:bg-hr-primary-hover disabled:opacity-60"
           >
             {saving && <Loader className="size-4 animate-spin" />}
-            تعديل الفرع
+            {t("departments.detail.save")}
           </button>
         </div>
       </div>
 
-      <section className="rounded-2xl bg-white p-5 shadow-card sm:p-6">
+      <section className={`${cardSurfaceClass} p-5 sm:p-6`}>
         {error && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className={`mb-4 ${alertErrorClass}`}>
             {error}
           </div>
         )}
@@ -168,20 +173,20 @@ export function DepartmentDetailView({
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-16 text-hr-muted">
             <Loader className="size-5 animate-spin" />
-            جاري تحميل البيانات...
+            {t("common.loading")}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <DepartmentField label="رقم القسم">
+              <DepartmentField label={t("departments.detail.fields.departmentId")}>
                 <input
                   value={editData.id}
                   readOnly
-                  className={inputClass + " bg-[#FAFCFE]"}
+                  className={readOnlyClass}
                 />
               </DepartmentField>
 
-              <DepartmentField label="اسم القسم">
+              <DepartmentField label={t("departments.detail.fields.name")}>
                 <input
                   value={editData.name}
                   onChange={(e) =>
@@ -191,15 +196,15 @@ export function DepartmentDetailView({
                 />
               </DepartmentField>
 
-              <DepartmentField label="رمز القسم">
+              <DepartmentField label={t("departments.detail.fields.code")}>
                 <input
                   value={editData.name}
                   readOnly
-                  className={inputClass + " bg-[#FAFCFE]"}
+                  className={readOnlyClass}
                 />
               </DepartmentField>
 
-              <DepartmentField label="القسم الأب">
+              <DepartmentField label={t("departments.detail.fields.parent")}>
                 <select
                   value={editData.parentId || ""}
                   onChange={(e) => {
@@ -214,7 +219,7 @@ export function DepartmentDetailView({
                   }}
                   className={inputClass}
                 >
-                  <option value="">بدون قسم أب</option>
+                  <option value="">{t("departments.detail.placeholders.noParent")}</option>
                   {parentOptions.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
@@ -223,7 +228,7 @@ export function DepartmentDetailView({
                 </select>
               </DepartmentField>
 
-              <DepartmentField label="مدير القسم">
+              <DepartmentField label={t("departments.detail.fields.manager")}>
                 <select
                   value={editData.managerId || ""}
                   onChange={(e) => {
@@ -238,7 +243,7 @@ export function DepartmentDetailView({
                   }}
                   className={inputClass}
                 >
-                  <option value="">اختر المدير</option>
+                  <option value="">{t("departments.detail.placeholders.selectManager")}</option>
                   {employeeOptions.map((employee) => (
                     <option key={employee.id} value={employee.id}>
                       {employee.name}
@@ -248,7 +253,7 @@ export function DepartmentDetailView({
               </DepartmentField>
 
               <div className="sm:col-span-2">
-                <DepartmentField label="وصف القسم">
+                <DepartmentField label={t("departments.detail.fields.description")}>
                   <textarea
                     value={editData.description || ""}
                     onChange={(e) =>
@@ -265,7 +270,7 @@ export function DepartmentDetailView({
             </div>
 
             <div>
-              <DepartmentField label="صورة أساسية">
+              <DepartmentField label={t("departments.detail.fields.image")}>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -274,11 +279,11 @@ export function DepartmentDetailView({
                   className="hidden"
                 />
                 <div className="overflow-hidden rounded-2xl border border-hr-border">
-                  <div className="flex h-[100px] w-full max-w-[280px] items-center justify-center bg-[#FAFCFE]">
+                  <div className="flex h-[100px] w-full max-w-[280px] items-center justify-center bg-hr-hover">
                     {imagePreview ? (
                       <img
                         src={imagePreview}
-                        alt="صورة القسم"
+                        alt={t("departments.detail.imageAlt")}
                         className="h-full w-full object-cover"
                       />
                     ) : (
@@ -292,7 +297,7 @@ export function DepartmentDetailView({
                       className="flex flex-1 items-center justify-center gap-1 py-2 text-xs text-red-500"
                     >
                       <Trash2 className="size-3.5" />
-                      حذف الصورة
+                      {t("departments.detail.deleteImage")}
                     </button>
                     <button
                       type="button"
@@ -300,7 +305,7 @@ export function DepartmentDetailView({
                       className="flex flex-1 items-center justify-center gap-1 border-s border-hr-border py-2 text-xs text-hr-primary"
                     >
                       <ImagePlus className="size-3.5" />
-                      تعديل صورة
+                      {t("departments.detail.editImage")}
                     </button>
                   </div>
                 </div>

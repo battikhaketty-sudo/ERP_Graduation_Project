@@ -1,8 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, CheckCircle, Loader, Upload, X } from "lucide-react";
+import { AlertCircle, CheckCircle, Loader, Upload } from "lucide-react";
+import { usePreferences } from "../../context/PreferencesContext";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
+import { useModalAutoFocus } from "../../hooks/useModalAutoFocus";
+import { useTranslation } from "../../i18n";
 import type { DepartmentFormPayload } from "../../types/department";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
+import { mapNamedOptions } from "../../utils/selectOptions";
+import { SearchableSelect } from "../ui/SearchableSelect";
+import {
+  alertErrorClass,
+  alertSuccessClass,
+  cancelBtnLgClass,
+  dashedZoneClass,
+  modalBodyClass,
+  modalFooterClass,
+  ModalCloseButton,
+} from "../ui/modalStyles";
 import { DepartmentField, inputClass } from "./department-ui";
 
 export type { DepartmentFormPayload };
@@ -18,11 +32,14 @@ export function AddDepartmentModal({
   onClose,
   onSubmit,
 }: AddDepartmentModalProps) {
+  const { t } = useTranslation();
+  const { dir } = usePreferences();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const firstFieldRef = useModalAutoFocus<HTMLInputElement>(isOpen);
 
   const {
     departments: departmentOptions,
@@ -90,8 +107,12 @@ export function AddDepartmentModal({
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};
-    if (!formData.name.trim()) nextErrors.name = "اسم القسم مطلوب";
-    if (!formData.managerId) nextErrors.managerId = "يرجى اختيار مدير القسم";
+    if (!formData.name.trim()) {
+      nextErrors.name = t("departments.modal.errors.nameRequired");
+    }
+    if (!formData.managerId) {
+      nextErrors.managerId = t("departments.modal.errors.managerRequired");
+    }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -116,7 +137,7 @@ export function AddDepartmentModal({
         onClose();
       }, 1200);
     } catch (error) {
-      setSubmitError(getThrownErrorMessage(error, "فشل إضافة القسم"));
+      setSubmitError(getThrownErrorMessage(error, t("departments.modal.errors.addFailed")));
     } finally {
       setIsSubmitting(false);
     }
@@ -125,32 +146,22 @@ export function AddDepartmentModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div
-        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-card"
-        dir="rtl"
-      >
-        <div className="relative border-b border-hr-border px-6 py-5 text-center">
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute start-4 top-4 rounded-full p-1 text-hr-muted transition hover:bg-gray-100"
-            aria-label="إغلاق"
-          >
-            <X className="size-5" />
-          </button>
-          <h2 className="text-2xl font-bold text-[#1B91C4]">إضافة قسم جديد</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="hr-modal relative max-w-3xl" dir={dir}>
+        <ModalCloseButton onClick={onClose} disabled={isSubmitting} />
+        <div className="border-b border-hr-border px-6 py-5 pe-12 text-center">
+          <h2 className="text-2xl font-bold text-hr-primary">{t("departments.modal.title")}</h2>
         </div>
 
         {submitSuccess && (
-          <div className="mx-6 mt-4 flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-green-700">
+          <div className={`mx-6 mt-4 flex items-center gap-3 ${alertSuccessClass}`}>
             <CheckCircle className="size-5 shrink-0" />
-            <span>تم إضافة القسم بنجاح</span>
+            <span>{t("departments.toasts.addSuccess")}</span>
           </div>
         )}
 
         {submitError && (
-          <div className="mx-6 mt-4 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+          <div className={`mx-6 mt-4 flex items-center gap-3 ${alertErrorClass}`}>
             <AlertCircle className="size-5 shrink-0" />
             <span>{submitError}</span>
           </div>
@@ -158,62 +169,65 @@ export function AddDepartmentModal({
 
         <form
           onSubmit={handleSubmit}
-          className="flex-1 overflow-y-auto px-6 py-5"
+          className={modalBodyClass}
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <DepartmentField label="اسم القسم" required>
+            <DepartmentField
+              label={t("departments.modal.fields.name")}
+              required
+              error={errors.name}
+              htmlFor="department-name"
+            >
               <input
+                id="department-name"
+                ref={firstFieldRef}
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
                 className={inputClass}
-                placeholder="Front_End"
+                placeholder={t("departments.modal.placeholders.name")}
               />
-              {errors.name && (
-                <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-              )}
             </DepartmentField>
 
-            <DepartmentField label="القسم الأب">
-              <select
-                name="parentId"
+            <DepartmentField
+              label={t("departments.modal.fields.parent")}
+              hint={t("departments.modal.fields.parentHint")}
+            >
+              <SearchableSelect
                 value={formData.parentId}
-                onChange={handleChange}
-                disabled={optionsLoading}
-                className={inputClass}
-              >
-                <option value="">بدون قسم أب</option>
-                {departmentOptions.map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => {
+                  setFormData((prev) => ({ ...prev, parentId: value }));
+                }}
+                options={mapNamedOptions(departmentOptions)}
+                placeholder={t("departments.modal.placeholders.noParent")}
+                loading={optionsLoading}
+              />
             </DepartmentField>
 
-            <DepartmentField label="مدير القسم" required>
-              <select
-                name="managerId"
+            <DepartmentField
+              label={t("departments.modal.fields.manager")}
+              required
+              error={errors.managerId}
+              hint={t("departments.modal.fields.managerHint")}
+            >
+              <SearchableSelect
                 value={formData.managerId}
-                onChange={handleChange}
-                disabled={optionsLoading}
-                className={inputClass}
-              >
-                <option value="">
-                  {optionsLoading ? "جاري التحميل..." : "اختر المدير"}
-                </option>
-                {employeeOptions.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.name}
-                  </option>
-                ))}
-              </select>
-              {errors.managerId && (
-                <p className="mt-1 text-sm text-red-600">{errors.managerId}</p>
-              )}
+                onChange={(value) => {
+                  setFormData((prev) => ({ ...prev, managerId: value }));
+                  if (errors.managerId) {
+                    setErrors((prev) => ({ ...prev, managerId: "" }));
+                  }
+                }}
+                options={mapNamedOptions(employeeOptions, {
+                  description: (employee) => employee.id,
+                })}
+                placeholder={t("departments.modal.placeholders.selectManager")}
+                loading={optionsLoading}
+                hasError={Boolean(errors.managerId)}
+              />
             </DepartmentField>
 
-            <DepartmentField label="صورة أساسية">
+            <DepartmentField label={t("departments.modal.fields.image")}>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -224,39 +238,39 @@ export function AddDepartmentModal({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex h-[100px] w-full max-w-[280px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#B8E4F2] bg-[#FAFCFE] transition hover:border-hr-primary"
+                className={`flex h-[100px] w-full max-w-[280px] flex-col items-center justify-center rounded-2xl ${dashedZoneClass}`}
               >
                 {formData.imagePreview ? (
                   <img
                     src={formData.imagePreview}
-                    alt="معاينة"
+                    alt={t("common.preview")}
                     className="h-full w-full rounded-2xl object-cover"
                   />
                 ) : (
                   <>
                     <Upload className="mb-1 size-6 text-hr-primary" />
-                    <span className="text-xs text-hr-muted">رفع صورة</span>
+                    <span className="text-xs text-hr-muted">{t("departments.modal.uploadImage")}</span>
                   </>
                 )}
               </button>
             </DepartmentField>
 
             <div className="sm:col-span-2">
-              <DepartmentField label="وصف القسم">
+              <DepartmentField label={t("departments.modal.fields.description")}>
                 <textarea
                   name="description"
                   value={formData.description}
                   onChange={handleChange}
                   rows={4}
                   className={inputClass + " h-auto py-3"}
-                  placeholder="وصف مختصر عن القسم..."
+                  placeholder={t("departments.modal.placeholders.description")}
                 />
               </DepartmentField>
             </div>
           </div>
         </form>
 
-        <div className="flex gap-3 border-t border-hr-border bg-[#FAFCFE] px-6 py-4">
+        <div className={modalFooterClass}>
           <button
             type="submit"
             onClick={handleSubmit}
@@ -264,15 +278,15 @@ export function AddDepartmentModal({
             className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-hr-primary text-sm font-bold text-white transition hover:bg-hr-primary-hover disabled:opacity-60"
           >
             {isSubmitting && <Loader className="size-4 animate-spin" />}
-            {isSubmitting ? "جاري الإضافة..." : "إضافة القسم"}
+            {isSubmitting ? t("departments.modal.submitting") : t("departments.modal.submit")}
           </button>
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="h-11 flex-1 rounded-xl bg-gray-400 text-sm font-bold text-white transition hover:bg-gray-500 disabled:opacity-60"
+            className={cancelBtnLgClass}
           >
-            إلغاء
+            {t("common.cancel")}
           </button>
         </div>
       </div>

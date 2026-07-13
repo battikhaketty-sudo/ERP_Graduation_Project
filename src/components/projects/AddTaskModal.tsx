@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import { usePreferences } from "../../context/PreferencesContext";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
+import { useProjectLabels } from "../../hooks/useProjectLabels";
+import { useTranslation } from "../../i18n";
 import type {
   Project,
   ProjectSection,
   TaskFormPayload,
   TaskPriority,
 } from "../../types/project";
+import { sanitizeDecimalInput } from "../../utils/inputConstraints";
+import { alertErrorClass, cancelBtnClass, ModalCloseButton, ModalTitleBar } from "../ui/modalStyles";
 import {
   inputClass,
   modalCardClass,
   modalOverlayClass,
-  PRIORITY_LABELS,
   textareaClass,
 } from "./project-ui";
 
@@ -26,10 +30,10 @@ type AddTaskModalProps = {
 const priorities: TaskPriority[] = ["low", "medium", "high", "urgent"];
 
 const priorityButtonClass: Record<TaskPriority, string> = {
-  low: "bg-orange-100 text-orange-700 border-orange-200",
-  medium: "bg-sky-100 text-sky-700 border-sky-200",
-  high: "bg-green-100 text-green-700 border-green-200",
-  urgent: "bg-red-100 text-red-700 border-red-200",
+  low: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950/50 dark:text-orange-300 dark:border-orange-900/50",
+  medium: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-900/50",
+  high: "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-900/50",
+  urgent: "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-900/50",
 };
 
 export function AddTaskModal({
@@ -39,6 +43,9 @@ export function AddTaskModal({
   onClose,
   onSubmit,
 }: AddTaskModalProps) {
+  const { t } = useTranslation();
+  const { dir } = usePreferences();
+  const { priorityLabel } = useProjectLabels();
   const { employees, loading } = useReferenceOptions(isOpen, {
     departments: true,
     contractTypes: false,
@@ -89,11 +96,11 @@ export function AddTaskModal({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.title.trim()) {
-      setError("عنوان المهمة مطلوب");
+      setError(t("projects.modals.addTask.errors.titleRequired"));
       return;
     }
     if (!form.departmentId) {
-      setError("يرجى اختيار القسم");
+      setError(t("projects.modals.addTask.errors.sectionRequired"));
       return;
     }
 
@@ -114,7 +121,7 @@ export function AddTaskModal({
       setError(
         err && typeof err === "object" && "message" in err
           ? String(err.message)
-          : "فشل إضافة المهمة",
+          : t("projects.modals.addTask.errors.addFailed"),
       );
     } finally {
       setSaving(false);
@@ -122,21 +129,23 @@ export function AddTaskModal({
   };
 
   return (
-    <div className={modalOverlayClass} dir="rtl">
-      <div className={`${modalCardClass} max-w-2xl`}>
-        <div className="mb-6 text-center">
-          <h2 className="text-xl font-bold text-[#1B91C4]">إضافة مهمة جديدة</h2>
-        </div>
+    <div className={modalOverlayClass} dir={dir}>
+      <div className={`${modalCardClass} relative max-w-2xl`}>
+        <ModalCloseButton onClick={onClose} disabled={saving} />
+        <ModalTitleBar
+          title={t("projects.modals.addTask.title")}
+          onClose={onClose}
+          disabled={saving}
+          hideCloseButton
+        />
 
         <form
           onSubmit={(event) => void handleSubmit(event)}
           className="space-y-4"
         >
-          <h3 className="text-sm font-bold text-hr-text">المعلومات الأساسية</h3>
-
           <div>
             <label className="mb-2 block text-sm text-hr-text">
-              عنوان المهمة
+              {t("projects.table.columns.name")}
             </label>
             <input
               value={form.title}
@@ -148,7 +157,9 @@ export function AddTaskModal({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-hr-text">الوصف</label>
+            <label className="mb-2 block text-sm text-hr-text">
+              {t("projects.table.columns.description")}
+            </label>
             <textarea
               value={form.description}
               onChange={(event) =>
@@ -164,7 +175,7 @@ export function AddTaskModal({
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-2 block text-sm text-hr-text">
-                القسم (المشروع)
+                {t("projects.stats.sectionsCount")}
               </label>
               <select
                 value={form.departmentId}
@@ -185,16 +196,17 @@ export function AddTaskModal({
             </div>
             <div>
               <label className="mb-2 block text-sm text-hr-text">
-                عدد الساعات المتوقعة
+                {t("projects.stats.totalTasks")}
               </label>
               <input
-                type="number"
-                min={0}
+                type="text"
+                inputMode="decimal"
+                dir="ltr"
                 value={form.expectedHours}
                 onChange={(event) =>
                   setForm((prev) => ({
                     ...prev,
-                    expectedHours: event.target.value,
+                    expectedHours: sanitizeDecimalInput(event.target.value),
                   }))
                 }
                 className={inputClass}
@@ -204,7 +216,7 @@ export function AddTaskModal({
 
           <div>
             <label className="mb-2 block text-sm text-hr-text">
-              تاريخ الاستحقاق
+              {t("projects.detail.fields.endDate")}
             </label>
             <input
               type="date"
@@ -217,7 +229,9 @@ export function AddTaskModal({
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-hr-text">الأولوية</label>
+            <label className="mb-2 block text-sm text-hr-text">
+              {t("projects.table.columns.status")}
+            </label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {priorities.map((priority) => (
                 <button
@@ -228,10 +242,10 @@ export function AddTaskModal({
                     "rounded-xl border px-3 py-2 text-sm font-medium transition",
                     form.priority === priority
                       ? priorityButtonClass[priority]
-                      : "border-hr-border bg-white text-hr-muted",
+                      : "border-hr-border bg-hr-surface text-hr-muted",
                   ].join(" ")}
                 >
-                  {PRIORITY_LABELS[priority]}
+                  {priorityLabel(priority)}
                 </button>
               ))}
             </div>
@@ -240,7 +254,7 @@ export function AddTaskModal({
           <div>
             <div className="mb-2 flex items-center justify-between">
               <label className="text-sm text-hr-text">
-                الأعضاء المسئولون للمهمة
+                {t("projects.members.columns.name")}
               </label>
               <button
                 type="button"
@@ -249,7 +263,7 @@ export function AddTaskModal({
                 className="inline-flex items-center gap-1 text-sm text-hr-primary"
               >
                 <Plus className="size-4" />
-                إضافة عضو
+                {t("common.add")}
               </button>
             </div>
             <div className="rounded-xl border border-hr-border">
@@ -264,6 +278,7 @@ export function AddTaskModal({
                       type="button"
                       onClick={() => removeAssignee(assignee.id)}
                       className="text-red-400"
+                      aria-label={t("common.remove")}
                     >
                       <Trash2 className="size-4" />
                     </button>
@@ -271,14 +286,14 @@ export function AddTaskModal({
                 ))
               ) : (
                 <p className="px-4 py-6 text-center text-sm text-hr-muted">
-                  لم يتم تعيين أعضاء بعد
+                  {t("common.noData")}
                 </p>
               )}
             </div>
           </div>
 
           {error && (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p className={alertErrorClass}>
               {error}
             </p>
           )}
@@ -289,14 +304,16 @@ export function AddTaskModal({
               disabled={saving}
               className="rounded-xl bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
             >
-              {saving ? "جاري الإضافة…" : "إضافة المهمة"}
+              {saving
+                ? t("projects.modals.addTask.saving")
+                : t("projects.modals.addTask.submit")}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl bg-gray-400 px-8 py-2.5 text-sm font-bold text-white"
+              className={cancelBtnClass}
             >
-              إلغاء
+              {t("common.cancel")}
             </button>
           </div>
         </form>

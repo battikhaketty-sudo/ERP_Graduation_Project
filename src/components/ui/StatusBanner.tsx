@@ -13,8 +13,8 @@ export function StatusBanner({ variant, message, className = "mx-6 mt-4" }: Stat
     <div
       className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${className} ${
         isSuccess
-          ? "border-green-200 bg-green-50 text-green-700"
-          : "border-red-200 bg-red-50 text-red-700"
+          ? "border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-950/40 dark:text-green-300"
+          : "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
       }`}
     >
       {isSuccess ? (

@@ -8,6 +8,7 @@ import { DepartmentsPage } from "./pages/DepartmentsPage";
 import { HrPage } from "./pages/HrPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
+import { AccessManagementPage } from "./pages/AccessManagementPage";
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Route path={ROUTES.projects} element={<ProjectsPage />} />
         <Route path={ROUTES.employees} element={<EmployeesPage />} />
         <Route path={ROUTES.departments} element={<DepartmentsPage />} />
+        <Route path={ROUTES.access} element={<AccessManagementPage />} />
         <Route path={ROUTES.hr} element={<HrPage />} />
         <Route path={ROUTES.notifications} element={<NotificationsPage />} />
       </Route>
