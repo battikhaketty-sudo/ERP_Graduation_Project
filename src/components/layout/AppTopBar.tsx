@@ -17,7 +17,7 @@ export function AppTopBar({ user, onLogout }: AppTopBarProps) {
   const { t } = useTranslation();
 
   return (
-    <header className="theme-transition relative sticky top-0 z-40 flex h-[68px] shrink-0 items-center gap-3 border-b border-hr-border bg-hr-header-bg px-4 sm:gap-4 sm:px-6">
+    <header className="theme-transition relative sticky top-0 z-50 flex h-[68px] shrink-0 items-center gap-3 border-b border-hr-border bg-hr-header-bg px-4 shadow-sm sm:gap-4 sm:px-6">
       <MobileNav onLogout={onLogout} />
 
       <button

@@ -44,13 +44,13 @@ export const readOnlyClass =
   "h-11 w-full rounded-xl border border-hr-border bg-hr-hover px-4 text-start text-sm text-hr-text";
 
 export const EMPLOYEE_TABS_CLASS = {
-  bar: "flex gap-1 overflow-x-auto border-b border-hr-border",
+  bar: "flex w-full border-b border-hr-border",
   tab: (active: boolean) =>
     [
-      "shrink-0 px-4 py-3 text-sm font-medium transition",
+      "min-w-0 flex-1 px-2 py-3 text-center text-xs font-medium transition sm:text-sm",
       active
         ? "border-b-2 border-brand-accent text-brand-accent"
-        : "text-hr-muted hover:text-hr-text",
+        : "border-b-2 border-transparent text-hr-muted hover:text-hr-text",
     ].join(" "),
 };
 

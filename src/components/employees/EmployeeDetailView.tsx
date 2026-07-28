@@ -1,4 +1,4 @@
-import { Loader, UserRound } from "lucide-react";
+import { Loader, Upload, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useTranslation } from "../../i18n";
@@ -187,15 +187,50 @@ export function EmployeeDetailView({
       const updated = await updateEmployee(editData.id, editData);
       const userId = updated.userId || updated.id;
       const nextRoleIds = [...new Set([...selectedRoleIds, ...fixedRoleIds])];
-      await updateUserRoles(userId, nextRoleIds);
-      const userAccount = await getUserById(userId);
+      const previousRoleIds = [
+        ...new Set([
+          ...(editData.userAccount?.roles.map((role) => role.roleId) ?? []),
+          ...fixedRoleIds,
+        ]),
+      ].sort();
+      const rolesChanged =
+        [...nextRoleIds].sort().join("|") !== previousRoleIds.join("|");
+
+      let userAccount = editData.userAccount;
+      let roleWarning: string | null = null;
+
+      if (rolesChanged) {
+        try {
+          await updateUserRoles(userId, nextRoleIds);
+          userAccount = await getUserById(userId);
+        } catch (roleErr) {
+          roleWarning = getThrownErrorMessage(
+            roleErr,
+            t("employees.errors.saveRoles"),
+          );
+        }
+      } else {
+        try {
+          userAccount = (await getUserById(userId)) ?? userAccount;
+        } catch {
+          // Keep previously loaded account info if refresh is forbidden.
+        }
+      }
+
       const merged = { ...updated, userAccount };
       setEditData(merged);
-      setSelectedRoleIds(userAccount.roles.map((role) => role.roleId));
-      setFixedRoleIds(
-        new Set(userAccount.roles.filter((role) => role.isFixed).map((role) => role.roleId)),
-      );
+      if (userAccount) {
+        setSelectedRoleIds(userAccount.roles.map((role) => role.roleId));
+        setFixedRoleIds(
+          new Set(
+            userAccount.roles.filter((role) => role.isFixed).map((role) => role.roleId),
+          ),
+        );
+      }
       onUpdate(merged);
+      if (roleWarning) {
+        setError(roleWarning);
+      }
     } catch (err) {
       setError(getThrownErrorMessage(err, t("employees.errors.save")));
     } finally {
@@ -660,8 +695,8 @@ export function EmployeeDetailView({
               )}
             </div>
 
-            <div className="flex flex-col items-center">
-              <p className="mb-3 self-start text-sm font-medium text-hr-text">
+            <div className="flex flex-col items-center gap-3">
+              <p className="self-start text-sm font-medium text-hr-text">
                 {t("employees.detail.fields.photo")}
               </p>
               <img
@@ -669,6 +704,34 @@ export function EmployeeDetailView({
                 alt={editData.name}
                 className="h-[180px] w-[170px] rounded-2xl border border-hr-border object-cover"
               />
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-hr-border bg-hr-surface px-4 py-2 text-sm font-medium text-hr-text transition hover:border-hr-primary">
+                <Upload className="size-4" />
+                {t("employees.detail.changeIdImage")}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    if (!file.type.startsWith("image/")) {
+                      setError(t("employees.errors.photoInvalid"));
+                      event.target.value = "";
+                      return;
+                    }
+                    setError(null);
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      setEditData((prev) => ({
+                        ...prev,
+                        avatar: (reader.result as string) || prev.avatar,
+                      }));
+                    };
+                    reader.readAsDataURL(file);
+                    event.target.value = "";
+                  }}
+                />
+              </label>
             </div>
           </div>
         )}

@@ -1,4 +1,9 @@
-import type { InvitationStatus, ProjectStatus, TaskPriority } from "../../types/project";
+import type {
+  InvitationStatus,
+  ProjectStatus,
+  TaskPriority,
+  TaskStatus,
+} from "../../types/project";
 import { useProjectLabels } from "../../hooks/useProjectLabels";
 import { STATUS_BADGE_CLASS } from "../ui/formStyles";
 
@@ -21,6 +26,12 @@ const priorityClasses: Record<TaskPriority, string> = {
   medium: STATUS_BADGE_CLASS.info,
   high: STATUS_BADGE_CLASS.success,
   urgent: STATUS_BADGE_CLASS.error,
+};
+
+const taskStatusClasses: Record<TaskStatus, string> = {
+  todo: STATUS_BADGE_CLASS.neutral,
+  in_progress: STATUS_BADGE_CLASS.info,
+  completed: STATUS_BADGE_CLASS.success,
 };
 
 export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
@@ -55,6 +66,18 @@ export function PriorityBadge({ priority }: { priority: TaskPriority }) {
       className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${priorityClasses[priority]}`}
     >
       {priorityLabel(priority)}
+    </span>
+  );
+}
+
+export function TaskStatusBadge({ status }: { status: TaskStatus }) {
+  const { taskStatusLabel } = useProjectLabels();
+
+  return (
+    <span
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${taskStatusClasses[status]}`}
+    >
+      {taskStatusLabel(status)}
     </span>
   );
 }

@@ -497,7 +497,6 @@ export function WorkSchedulePanel({
         <DetailBackButton
           label={t("hr.workSchedule.backLabel")}
           onClick={goBackToScheduleList}
-          className="mb-6"
         />
 
         <div className="mb-6 rounded-2xl border border-hr-border bg-hr-table-alt p-4 sm:p-5">

@@ -1,39 +1,46 @@
-import { ChevronRight } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { useTranslation } from "../../i18n";
 
 type DetailBackButtonProps = {
+  /** Full destination description for accessibility (screen readers + tooltip). */
   label: string;
   onClick: () => void;
   className?: string;
+  /** Kept for compatibility; visual style is unified across surfaces. */
   variant?: "default" | "onPrimary";
 };
 
+/**
+ * Shared back control for all detail pages.
+ * Compact icon + short "Back" label; full destination stays in aria-label/title.
+ */
 export function DetailBackButton({
   label,
   onClick,
   className = "",
-  variant = "default",
 }: DetailBackButtonProps) {
-  if (variant === "onPrimary") {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className={`inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/15 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-white/25 ${className}`}
-      >
-        <ChevronRight className="size-5 shrink-0" />
-        {label}
-      </button>
-    );
-  }
+  const { t } = useTranslation();
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`hr-accent-btn mb-4 shadow-sm ${className}`}
+      title={label}
+      aria-label={label}
+      className={[
+        "group mb-4 inline-flex h-10 items-center gap-2 rounded-xl border border-hr-border",
+        "bg-hr-surface px-3 text-sm font-semibold text-hr-text shadow-sm",
+        "transition hover:border-hr-primary hover:bg-hr-hover hover:text-hr-primary",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hr-primary/40",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
-      <ChevronRight className="size-5 shrink-0" />
-      {label}
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-hr-primary/10 text-hr-primary transition group-hover:bg-hr-primary group-hover:text-white">
+        <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
+      </span>
+      <span className="max-w-[14rem] truncate sm:max-w-none">{t("common.back")}</span>
     </button>
   );
 }

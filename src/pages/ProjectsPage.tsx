@@ -43,6 +43,7 @@ import {
   updateMember,
   updateProject,
   updateSection,
+  updateTask,
 } from "../services/projects";
 
 import type {
@@ -104,6 +105,7 @@ export function ProjectsPage() {
   const [editingSection, setEditingSection] = useState<ProjectSection | null>(
     null,
   );
+  const [editingTask, setEditingTask] = useState<ProjectTask | null>(null);
   const [defaultTaskSectionId, setDefaultTaskSectionId] = useState<
     string | undefined
   >();
@@ -121,27 +123,59 @@ export function ProjectsPage() {
   }, [searchParams, setSearchParams]);
 
   const loadListData = useCallback(async () => {
+    const query = search.trim().toLowerCase();
+
     try {
       setLoading(true);
       setError(null);
 
+      // Fetch a wider set when searching so we can filter locally
+      // (API Name filter is often exact / unreliable for partial match).
       const [projectsResult, invitationsResult, statsResult] =
         await Promise.all([
           getProjects({
-            page: projectsPage,
-            limit: PROJECTS_PAGE_SIZE,
-            name: search.trim() || undefined,
+            page: query ? 1 : projectsPage,
+            limit: query ? 100 : PROJECTS_PAGE_SIZE,
           }),
-          getAllInvitations({
-            employeeName: search.trim() || undefined,
-            projectName: search.trim() || undefined,
-          }),
+          getAllInvitations(),
           getProjectStats(),
         ]);
 
-      setProjects(projectsResult.records);
-      setProjectsTotalPages(projectsResult.meta.totalPages || 1);
-      setInvitations(invitationsResult);
+      let projectRecords = projectsResult.records;
+      if (query) {
+        projectRecords = projectRecords.filter((project) =>
+          [
+            project.name,
+            project.number,
+            project.managerName,
+            project.assignedEmployeeName,
+            project.description,
+          ].some((field) => field.toLowerCase().includes(query)),
+        );
+        const totalPages = Math.max(
+          1,
+          Math.ceil(projectRecords.length / PROJECTS_PAGE_SIZE),
+        );
+        const page = Math.min(projectsPage, totalPages);
+        const start = (page - 1) * PROJECTS_PAGE_SIZE;
+        setProjects(projectRecords.slice(start, start + PROJECTS_PAGE_SIZE));
+        setProjectsTotalPages(totalPages);
+      } else {
+        setProjects(projectRecords);
+        setProjectsTotalPages(projectsResult.meta.totalPages || 1);
+      }
+
+      const invitationRecords = query
+        ? invitationsResult.filter((invitation) =>
+            [
+              invitation.projectName,
+              invitation.projectNumber,
+              invitation.employeeName,
+            ].some((field) => field.toLowerCase().includes(query)),
+          )
+        : invitationsResult;
+
+      setInvitations(invitationRecords);
       setStats(statsResult);
     } catch (err) {
       setError(getThrownErrorMessage(err, t("projects.page.loadError")));
@@ -166,6 +200,7 @@ export function ProjectsPage() {
   useEffect(() => {
     if (!projectId) {
       setSelectedProject(null);
+      setTaskStats({ total: 0, inProgress: 0, completed: 0, late: 0 });
       return;
     }
 
@@ -175,6 +210,8 @@ export function ProjectsPage() {
       try {
         setDetailLoading(true);
         setError(null);
+        // Drop previous project immediately so its sections never flash/mix in.
+        setSelectedProject(null);
         const detail = await getProjectById(projectId);
         const detailStats = await getTaskStats(projectId);
         if (!cancelled) {
@@ -214,9 +251,11 @@ export function ProjectsPage() {
     openProjectInUrl(project.id);
   };
 
-  const refreshSelectedProject = async (projectId: string) => {
-    const detail = await getProjectById(projectId);
-    const detailStats = await getTaskStats(projectId);
+  const refreshSelectedProject = async (targetProjectId: string) => {
+    const detail = await getProjectById(targetProjectId);
+    const detailStats = await getTaskStats(targetProjectId);
+    // Ignore stale refreshes after the user navigated to another project.
+    if (searchParams.get("id") !== targetProjectId) return detail;
     setSelectedProject(detail);
     setTaskStats(detailStats);
     return detail;
@@ -283,6 +322,42 @@ export function ProjectsPage() {
     }
   };
 
+  const handleMoveSection = async (
+    sectionId: string,
+    direction: "earlier" | "later",
+  ) => {
+    if (!selectedProject) return;
+
+    const ordered = [...selectedProject.sections].sort(
+      (left, right) => left.displayOrder - right.displayOrder,
+    );
+    const index = ordered.findIndex((section) => section.id === sectionId);
+    if (index < 0) return;
+
+    const swapIndex = direction === "earlier" ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= ordered.length) return;
+
+    const next = [...ordered];
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+
+    try {
+      await Promise.all(
+        next.map((section, orderIndex) =>
+          updateSection(selectedProject.id, section.id, {
+            name: section.name,
+            displayOrder: orderIndex + 1,
+          }),
+        ),
+      );
+      await refreshSelectedProject(selectedProject.id);
+      setError(null);
+    } catch (err) {
+      setError(
+        getThrownErrorMessage(err, t("projects.page.moveSectionError")),
+      );
+    }
+  };
+
   const handleDeleteTask = async (task: ProjectTask) => {
     if (!selectedProject) return;
 
@@ -300,12 +375,6 @@ export function ProjectsPage() {
     }
   };
 
-  const taskModalProject = useMemo(() => {
-    if (!selectedProject) return null;
-    if (!defaultTaskSectionId) return selectedProject;
-    return selectedProject;
-  }, [defaultTaskSectionId, selectedProject]);
-
   const addLabel =
     activeTab === "projects"
       ? t("pages.projects.addProject")
@@ -314,7 +383,7 @@ export function ProjectsPage() {
   const searchPlaceholder =
     activeTab === "projects"
       ? t("pages.projects.searchPlaceholder")
-      : t("common.searchPlaceholder");
+      : t("projects.invitations.searchPlaceholder");
 
   if (projectId) {
     if (detailLoading && !selectedProject) {
@@ -326,7 +395,24 @@ export function ProjectsPage() {
     }
 
     if (!selectedProject) {
-      return null;
+      return (
+        <div className="mx-6 mt-4 space-y-4">
+          <StatusBanner
+            variant="error"
+            message={error || t("projects.page.loadDetailError")}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              goBackToProjectList();
+              void loadListData();
+            }}
+            className="rounded-xl bg-hr-primary px-4 py-2 text-sm font-medium text-white"
+          >
+            {t("projects.detail.backLabel")}
+          </button>
+        </div>
+      );
     }
 
     return (
@@ -348,6 +434,7 @@ export function ProjectsPage() {
           }}
           onDelete={() => void handleDeleteProject(selectedProject)}
           onAddTask={(sectionId) => {
+            setEditingTask(null);
             setDefaultTaskSectionId(sectionId);
             setIsTaskModalOpen(true);
           }}
@@ -360,6 +447,14 @@ export function ProjectsPage() {
             setIsSectionModalOpen(true);
           }}
           onDeleteSection={(section) => void handleDeleteSection(section)}
+          onMoveSection={(sectionId, direction) =>
+            void handleMoveSection(sectionId, direction)
+          }
+          onEditTask={(task) => {
+            setEditingTask(task);
+            setDefaultTaskSectionId(task.sectionId);
+            setIsTaskModalOpen(true);
+          }}
           onDeleteTask={(task) => void handleDeleteTask(task)}
           onInviteMember={() => setIsInviteModalOpen(true)}
           onEditMember={async (member, role) => {
@@ -387,6 +482,12 @@ export function ProjectsPage() {
         <AddSectionModal
           isOpen={isSectionModalOpen}
           section={editingSection}
+          sections={selectedProject.sections}
+          nextDisplayOrder={
+            selectedProject.sections.length
+              ? Math.max(...selectedProject.sections.map((s) => s.displayOrder)) + 1
+              : 1
+          }
           onClose={() => {
             setIsSectionModalOpen(false);
             setEditingSection(null);
@@ -406,17 +507,23 @@ export function ProjectsPage() {
           }}
         />
 
-        {taskModalProject && (
+        {selectedProject && (
           <AddTaskModal
             isOpen={isTaskModalOpen}
-            project={taskModalProject}
+            project={selectedProject}
+            task={editingTask}
             defaultSectionId={defaultTaskSectionId}
             onClose={() => {
               setIsTaskModalOpen(false);
               setDefaultTaskSectionId(undefined);
+              setEditingTask(null);
             }}
             onSubmit={async (payload) => {
-              await addTask(selectedProject.id, payload);
+              if (editingTask) {
+                await updateTask(selectedProject.id, editingTask.id, payload);
+              } else {
+                await addTask(selectedProject.id, payload);
+              }
               await refreshSelectedProject(selectedProject.id);
             }}
           />

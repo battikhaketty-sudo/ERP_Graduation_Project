@@ -1,4 +1,5 @@
 import type { AuthUser } from "../types/auth";
+import { clearAllLocalProjectData } from "./projects/localProjectData";
 
 const TOKEN_KEY = "token";
 const REFRESH_TOKEN_KEY = "refresh_token";
@@ -41,6 +42,7 @@ export const clearSession = () => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  clearAllLocalProjectData();
 };
 
 export const hasActiveSession = () => Boolean(getToken() && getStoredUser());

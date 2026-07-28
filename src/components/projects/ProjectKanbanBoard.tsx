@@ -1,5 +1,7 @@
 import { Plus } from "lucide-react";
+import { useMemo } from "react";
 import { useTranslation } from "../../i18n";
+import { getSectionFlowGate } from "../../services/projects/sectionDependencies";
 import type { Project, ProjectSection, ProjectTask } from "../../types/project";
 import { accentBtnClass } from "../ui/formStyles";
 import { PriorityBadge } from "./ProjectBadges";
@@ -9,6 +11,12 @@ type ProjectKanbanBoardProps = {
   onAddSection: () => void;
   onAddTask: () => void;
   onSectionClick?: (section: ProjectSection) => void;
+};
+
+const gateBadgeClass: Record<string, string> = {
+  completed: "bg-emerald-500/15 text-emerald-500",
+  ready: "bg-sky-500/15 text-sky-500",
+  blocked: "bg-amber-500/15 text-amber-500",
 };
 
 function TaskCard({ task }: { task: ProjectTask }) {
@@ -58,6 +66,14 @@ export function ProjectKanbanBoard({
 }: ProjectKanbanBoardProps) {
   const { t } = useTranslation();
   const columns = [...project.sections].sort((a, b) => a.displayOrder - b.displayOrder);
+  const sectionIds = new Set(columns.map((section) => section.id));
+  const orphanTasks = project.tasks.filter(
+    (task) => !task.sectionId || !sectionIds.has(task.sectionId),
+  );
+  const sectionsById = useMemo(
+    () => new Map(project.sections.map((section) => [section.id, section])),
+    [project.sections],
+  );
 
   return (
     <section className="hr-panel">
@@ -80,19 +96,32 @@ export function ProjectKanbanBoard({
         </button>
       </div>
 
-      {columns.length ? (
+      {columns.length || orphanTasks.length ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {columns.map((section) => {
             const tasks = project.tasks.filter((task) => task.sectionId === section.id);
+            const gate = getSectionFlowGate(section, sectionsById, project.tasks);
             return (
               <div key={section.id} className="rounded-xl bg-hr-table-head p-3">
                 <button
                   type="button"
                   onClick={() => onSectionClick?.(section)}
-                  className="mb-3 w-full rounded-lg px-2 py-1 text-right text-sm font-bold text-hr-text transition hover:bg-hr-hover"
+                  className="mb-3 flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-sm font-bold text-hr-text transition hover:bg-hr-hover"
                 >
-                  {section.name}
-                  <span className="mr-2 text-xs font-normal text-hr-muted">({tasks.length})</span>
+                  <span>
+                    {section.name}
+                    <span className="mr-2 text-xs font-normal text-hr-muted">
+                      ({tasks.length})
+                    </span>
+                  </span>
+                  <span
+                    className={[
+                      "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                      gateBadgeClass[gate],
+                    ].join(" ")}
+                  >
+                    {t(`projects.detail.sectionFlow.gate.${gate}`)}
+                  </span>
                 </button>
                 <div className="space-y-2">
                   {tasks.length ? (
@@ -106,6 +135,22 @@ export function ProjectKanbanBoard({
               </div>
             );
           })}
+
+          {orphanTasks.length ? (
+            <div className="rounded-xl border border-dashed border-amber-500/40 bg-hr-table-head p-3">
+              <p className="mb-3 px-2 py-1 text-sm font-bold text-amber-500">
+                {t("projects.kanban.unassigned")}
+                <span className="mr-2 text-xs font-normal text-hr-muted">
+                  ({orphanTasks.length})
+                </span>
+              </p>
+              <div className="space-y-2">
+                {orphanTasks.map((task) => (
+                  <TaskCard key={task.id} task={task} />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <p className="rounded-xl border border-dashed border-hr-border px-4 py-10 text-center text-sm text-hr-muted">

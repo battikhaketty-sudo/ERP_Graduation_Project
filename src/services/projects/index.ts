@@ -18,11 +18,14 @@ export {
   getProjectStats,
   getProjects,
   getTaskStats,
+  linkTaskDependency,
   rejectInvitation,
+  unlinkTaskDependency,
   updateInvitationStatus,
   updateMember,
   updateProject,
   updateSection,
+  updateTask,
 } from "./project.service";
 
 export {
