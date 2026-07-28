@@ -64,7 +64,7 @@ export function ProjectDetailView({
   onAddSection,
   onEditSection,
   onDeleteSection,
-  onMoveSection,
+  onMoveSection: _onMoveSection,
   onEditTask,
   onDeleteTask,
   onInviteMember,
