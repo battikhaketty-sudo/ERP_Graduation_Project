@@ -1,5 +1,6 @@
 import { Archive, ArchiveRestore, Eye, Pencil } from "lucide-react";
 import { DEFAULT_PAGE_SIZE } from "../../constants/defaults";
+import { usePreferences } from "../../context/PreferencesContext";
 import { useTranslation } from "../../i18n";
 import type { Employee } from "../../types/employee";
 import { Pagination } from "../Pagination";
@@ -36,6 +37,8 @@ export function EmployeeTable({
   onAddClick,
 }: EmployeeTableProps) {
   const { t } = useTranslation();
+  const { dir } = usePreferences();
+  const nameAlignClass = dir === "rtl" ? "text-right" : "text-left";
   const allSelected =
     employees.length > 0 && employees.every((employee) => selectedIds.has(employee.id));
 
@@ -48,7 +51,7 @@ export function EmployeeTable({
           onAddClick={onAddClick}
         />
       ) : null}
-      <div className="overflow-x-auto">
+      <div className="min-w-0 overflow-x-auto">
         {employees.length === 0 ? (
           <EmptyState
             title={t("employees.table.emptyTitle")}
@@ -61,25 +64,10 @@ export function EmployeeTable({
             onAction={onAddClick}
           />
         ) : (
-          <table className="w-full min-w-[1280px] table-fixed border-collapse text-sm">
-            <colgroup>
-              <col className="w-12" />
-              <col className="w-10" />
-              <col className="w-24" />
-              <col className="w-28" />
-              <col className="w-16" />
-              <col />
-              <col className="w-44" />
-              <col className="w-24" />
-              <col className="w-32" />
-              <col className="w-32" />
-              <col className="w-32" />
-              <col className="w-28" />
-              <col className="w-28" />
-            </colgroup>
+          <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="hr-table-head">
-                <th className="px-3 py-3 text-center font-medium">
+                <th className="w-12 px-3 py-3 text-center font-medium">
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -88,36 +76,25 @@ export function EmployeeTable({
                     aria-label={t("common.selectAll")}
                   />
                 </th>
-                <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>
-                <th className="px-3 py-3 text-center font-medium">{t("table.columns.id")}</th>
-                <th className="px-3 py-3 text-center font-medium">
+                <th className="w-12 px-3 py-3 text-center font-medium">
+                  {t("table.columns.index")}
+                </th>
+                <th className="w-36 px-3 py-3 text-center font-medium">
                   {t("employees.table.columns.userId")}
                 </th>
-                <th className="px-3 py-3 text-center font-medium">
-                  {t("employees.table.columns.avatar")}
-                </th>
-                <th className="px-3 py-3 text-start font-medium">
+                <th className={`min-w-[180px] px-3 py-3 font-medium ${nameAlignClass}`}>
                   {t("employees.table.columns.name")}
                 </th>
-                <th className="px-3 py-3 text-start font-medium">
+                <th className="min-w-[160px] px-3 py-3 text-center font-medium">
                   {t("employees.table.columns.email")}
                 </th>
-                <th className="px-3 py-3 text-center font-medium">
-                  {t("employees.table.columns.gender")}
-                </th>
-                <th className="px-3 py-3 text-start font-medium">
+                <th className="min-w-[120px] px-3 py-3 text-center font-medium">
                   {t("employees.table.columns.phone")}
                 </th>
-                <th className="px-3 py-3 text-start font-medium">
+                <th className="min-w-[100px] px-3 py-3 text-center font-medium">
                   {t("employees.table.columns.department")}
                 </th>
-                <th className="px-3 py-3 text-start font-medium">
-                  {t("employees.table.columns.manager")}
-                </th>
-                <th className="px-3 py-3 text-start font-medium">
-                  {t("employees.table.columns.nationality")}
-                </th>
-                <th className="px-3 py-3 text-center font-medium">
+                <th className="w-28 px-3 py-3 text-center font-medium">
                   {t("employees.table.columns.details")}
                 </th>
               </tr>
@@ -133,7 +110,7 @@ export function EmployeeTable({
                     onEmployeeClick(employee);
                   }}
                 >
-                  <td className="px-3 py-3 text-center">
+                  <td className="px-3 py-3 text-center align-middle">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(employee.id)}
@@ -143,52 +120,60 @@ export function EmployeeTable({
                       onClick={(e) => e.stopPropagation()}
                     />
                   </td>
-                  <td className="px-3 py-3 text-center text-hr-muted">
+                  <td className="px-3 py-3 text-center align-middle text-hr-muted">
                     <TableRowIndex
                       index={index}
                       page={currentPage}
                       pageSize={DEFAULT_PAGE_SIZE}
                     />
                   </td>
-                  <td className="px-3 py-3 text-center">
-                    <CopyableIdCell value={employee.id} />
-                  </td>
-                  <td className="px-3 py-3 text-center">
+                  <td className="px-3 py-3 text-center align-middle">
                     <CopyableIdCell value={employee.userId || employee.employeeId || "-"} />
                   </td>
-                  <td className="px-3 py-3 text-center">
-                    <img
-                      src={employee.avatar}
-                      alt=""
-                      className="mx-auto size-10 rounded-full object-cover ring-1 ring-hr-border"
-                    />
-                  </td>
-                  <td className="truncate px-3 py-3 font-medium text-hr-text">
-                    {employee.name}
-                  </td>
-                  <td className="truncate px-3 py-3 text-hr-muted" dir="ltr">
-                    {employee.email}
-                  </td>
-                  <td className="truncate px-3 py-3 text-center text-hr-muted">
-                    {employee.genderName || t("common.dash")}
-                  </td>
-                  <td className="truncate px-3 py-3 text-hr-muted" dir="ltr">
-                    {employee.phone}
-                  </td>
-                  <td className="truncate px-3 py-3 text-hr-text">
-                    {employee.department || t("common.dash")}
-                  </td>
-                  <td className="truncate px-3 py-3 text-hr-text">
-                    {employee.managerName || t("common.dash")}
-                  </td>
-                  <td className="truncate px-3 py-3 text-hr-text">
-                    {employee.nationality || t("common.dash")}
+                  <td className={`px-3 py-3 align-middle ${nameAlignClass}`}>
+                    <div className="inline-flex max-w-full items-center gap-2">
+                      <img
+                        src={employee.avatar}
+                        alt=""
+                        className="size-9 shrink-0 rounded-full object-cover ring-1 ring-hr-border"
+                      />
+                      <span
+                        className="max-w-[140px] truncate font-medium text-hr-text"
+                        title={employee.name}
+                      >
+                        {employee.name}
+                      </span>
+                    </div>
                   </td>
                   <td
-                    className="px-3 py-3"
+                    className="px-3 py-3 text-center align-middle text-hr-muted"
+                    title={employee.email}
+                  >
+                    <span dir="ltr" className="inline-block max-w-[180px] truncate align-middle">
+                      {employee.email}
+                    </span>
+                  </td>
+                  <td
+                    className="px-3 py-3 text-center align-middle text-hr-muted"
+                    title={employee.phone}
+                  >
+                    <span dir="ltr" className="inline-block max-w-[120px] truncate align-middle">
+                      {employee.phone}
+                    </span>
+                  </td>
+                  <td
+                    className="px-3 py-3 text-center align-middle text-hr-text"
+                    title={employee.department || undefined}
+                  >
+                    <span className="inline-block max-w-[110px] truncate align-middle">
+                      {employee.department || t("common.dash")}
+                    </span>
+                  </td>
+                  <td
+                    className="px-3 py-3 text-center align-middle"
                     onClick={(event) => event.stopPropagation()}
                   >
-                    <div className="flex items-center justify-center gap-1">
+                    <div className="inline-flex items-center justify-center gap-0.5">
                       <button
                         type="button"
                         className="hr-icon-btn text-hr-primary"

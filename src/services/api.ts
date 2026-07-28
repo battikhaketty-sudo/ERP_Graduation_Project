@@ -31,6 +31,9 @@ const getErrorFallback = (status: number, url?: string) => {
   if (status === 400) {
     return "طلب غير صالح (400). تحقق من الحقول المطلوبة.";
   }
+  if (status === 403) {
+    return "ليس لديك صلاحية لتنفيذ هذا الإجراء (403).";
+  }
   return `حدث خطأ من السيرفر (${status}).`;
 };
 

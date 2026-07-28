@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "../../i18n";
 import { useUrlQueryNavigation } from "../../hooks/useUrlQueryNavigation";
 import { DetailBackButton } from "../ui/DetailBackButton";
+import { StatusBanner } from "../ui/StatusBanner";
 import { cardSurfaceClass, subtlePanelClass } from "../ui/formStyles";
 import { buildProjectDetailStats } from "../../services/projects/project.mapper";
 import { getProjectMembers } from "../../services/projects";
@@ -21,6 +22,10 @@ import {
 } from "./ProjectMembersTable";
 import { ProjectStatusBadge } from "./ProjectBadges";
 import { ProjectDetailStatsCards } from "./ProjectStatsCards";
+import { ProjectFlowPanel } from "./ProjectFlowPanel";
+import { ProjectPerformancePanel } from "./ProjectPerformancePanel";
+import { ProjectSectionFlowPanel } from "./ProjectSectionFlowPanel";
+import { ProjectTasksChartPanel } from "./ProjectTasksChartPanel";
 import { SectionDetailView } from "./SectionDetailView";
 
 type ProjectDetailViewProps = {
@@ -33,13 +38,21 @@ type ProjectDetailViewProps = {
   onAddSection: () => void;
   onEditSection: (section: ProjectSection) => void;
   onDeleteSection: (section: ProjectSection) => void;
+  onMoveSection: (sectionId: string, direction: "earlier" | "later") => void;
+  onEditTask: (task: ProjectTask) => void;
   onDeleteTask: (task: ProjectTask) => void;
   onInviteMember: () => void;
   onEditMember: (member: ProjectMember, role: string) => Promise<void>;
   onDeleteMember: (member: ProjectMember) => void;
 };
 
-type DetailTab = "general" | "members" | "kanban";
+type DetailTab =
+  | "general"
+  | "members"
+  | "flow"
+  | "sectionFlow"
+  | "performance"
+  | "kanban";
 
 export function ProjectDetailView({
   project,
@@ -51,6 +64,8 @@ export function ProjectDetailView({
   onAddSection,
   onEditSection,
   onDeleteSection,
+  onMoveSection,
+  onEditTask,
   onDeleteTask,
   onInviteMember,
   onEditMember,
@@ -69,33 +84,48 @@ export function ProjectDetailView({
   const [membersPage, setMembersPage] = useState(1);
   const [membersTotalPages, setMembersTotalPages] = useState(1);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [membersError, setMembersError] = useState<string | null>(null);
   const [editingMember, setEditingMember] = useState<ProjectMember | null>(null);
+  const [membersReloadKey, setMembersReloadKey] = useState(0);
 
   const detailStats: ProjectDetailStats = useMemo(
     () => buildProjectDetailStats(project, taskStats),
     [project, taskStats],
   );
 
-  const loadMembers = useCallback(async () => {
-    setMembersLoading(true);
-    try {
-      const result = await getProjectMembers(project.id, {
-        page: membersPage,
-        limit: MEMBERS_PAGE_SIZE,
-      });
-      setMembers(result.records);
-      setMembersTotalPages(result.meta.totalPages || 1);
-    } catch {
-      setMembers([]);
-      setMembersTotalPages(1);
-    } finally {
-      setMembersLoading(false);
-    }
-  }, [membersPage, project.id]);
+  const reloadMembers = useCallback(() => {
+    setMembersReloadKey((key) => key + 1);
+  }, []);
 
   useEffect(() => {
-    void loadMembers();
-  }, [loadMembers]);
+    let cancelled = false;
+
+    const run = async () => {
+      setMembersLoading(true);
+      setMembersError(null);
+      try {
+        const result = await getProjectMembers(project.id, {
+          page: membersPage,
+          limit: MEMBERS_PAGE_SIZE,
+        });
+        if (cancelled) return;
+        setMembers(result.records);
+        setMembersTotalPages(result.meta.totalPages || 1);
+      } catch {
+        if (cancelled) return;
+        setMembers([]);
+        setMembersTotalPages(1);
+        setMembersError(t("projects.page.loadDetailError"));
+      } finally {
+        if (!cancelled) setMembersLoading(false);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [membersPage, membersReloadKey, project.id, t]);
 
   useEffect(() => {
     if (!sectionId) {
@@ -103,16 +133,30 @@ export function ProjectDetailView({
       return;
     }
 
-    setSelectedSection(
-      project.sections.find((section) => section.id === sectionId) ?? null,
-    );
-  }, [project.sections, sectionId]);
+    const match =
+      project.sections.find((section) => section.id === sectionId) ?? null;
+    setSelectedSection(match);
+    if (!match) {
+      clearSectionFromUrl();
+    }
+  }, [clearSectionFromUrl, project.sections, sectionId]);
 
   const tabs: Array<{ key: DetailTab; label: string }> = [
     { key: "general", label: t("projects.detail.tabs.general") },
     { key: "members", label: t("projects.detail.tabs.members") },
+    { key: "flow", label: t("projects.detail.tabs.flow") },
+    { key: "sectionFlow", label: t("projects.detail.tabs.sectionFlow") },
+    { key: "performance", label: t("projects.detail.tabs.performance") },
     { key: "kanban", label: t("projects.detail.tabs.kanban") },
   ];
+
+  const performanceRevision = useMemo(
+    () =>
+      (project.tasks ?? [])
+        .map((task) => `${task.id}:${task.status}:${task.priority}:${task.assigneeIds.join(",")}`)
+        .join("|"),
+    [project.tasks],
+  );
 
   if (selectedSection) {
     return (
@@ -126,6 +170,7 @@ export function ProjectDetailView({
           clearSectionFromUrl();
         }}
         onAddTask={() => onAddTask(selectedSection.id)}
+        onEditTask={onEditTask}
         onDeleteTask={onDeleteTask}
       />
     );
@@ -136,20 +181,17 @@ export function ProjectDetailView({
 
   return (
     <main className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6">
+      <DetailBackButton
+        label={t("projects.detail.backLabel")}
+        onClick={onBack}
+      />
+
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-hr-primary px-5 py-4 text-white">
-        <div className="flex items-center gap-3">
-          <DetailBackButton
-            variant="onPrimary"
-            label={t("projects.detail.backLabel")}
-            onClick={onBack}
-            className="mb-0"
-          />
-          <div>
-            <h1 className="text-xl font-bold">{project.name}</h1>
-            <p className="text-sm text-white/80">
-              {project.description || t("projects.detail.defaultDescription")}
-            </p>
-          </div>
+        <div>
+          <h1 className="text-xl font-bold">{project.name}</h1>
+          <p className="text-sm text-white/80">
+            {project.description || t("projects.detail.defaultDescription")}
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -190,8 +232,44 @@ export function ProjectDetailView({
         </div>
       </div>
 
-      {(activeTab === "general" || activeTab === "members") && (
+      {(activeTab === "general" ||
+        activeTab === "members" ||
+        activeTab === "flow" ||
+        activeTab === "sectionFlow" ||
+        activeTab === "performance") && (
         <ProjectDetailStatsCards stats={detailStats} />
+      )}
+
+      {activeTab === "flow" && (
+        <>
+          <ProjectFlowPanel
+            project={project}
+            taskStats={taskStats}
+            onAddTask={(sectionId) => onAddTask(sectionId)}
+            onEditTask={onEditTask}
+            onDeleteTask={onDeleteTask}
+          />
+          <ProjectTasksChartPanel
+            project={project}
+            onAddTask={(sectionId) => onAddTask(sectionId)}
+          />
+        </>
+      )}
+
+      {activeTab === "sectionFlow" && (
+        <ProjectSectionFlowPanel
+          project={project}
+          onAddSection={onAddSection}
+          onEditSection={onEditSection}
+          onDeleteSection={onDeleteSection}
+        />
+      )}
+
+      {activeTab === "performance" && (
+        <ProjectPerformancePanel
+          project={project}
+          revision={performanceRevision}
+        />
       )}
 
       {activeTab === "general" && (
@@ -234,6 +312,9 @@ export function ProjectDetailView({
 
       {showMembersTable && (
         <div className="mb-5">
+          {membersError && (
+            <StatusBanner variant="error" message={membersError} className="mb-3" />
+          )}
           <ProjectMembersTable
             members={members}
             currentPage={membersPage}
@@ -261,7 +342,10 @@ export function ProjectDetailView({
         isOpen={Boolean(editingMember)}
         member={editingMember}
         onClose={() => setEditingMember(null)}
-        onSubmit={onEditMember}
+        onSubmit={async (member, role) => {
+          await onEditMember(member, role);
+          reloadMembers();
+        }}
       />
     </main>
   );

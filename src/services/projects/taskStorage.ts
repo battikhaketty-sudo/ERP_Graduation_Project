@@ -1,33 +1,156 @@
 import type { ProjectTask, TaskFormPayload, TaskStats } from "../../types/project";
-
-const STORAGE_KEY = "hr_project_tasks";
+import { PROJECT_TASKS_KEY } from "./localProjectData";
+import { normalizeStoredTask, resolveTaskStatus } from "./taskStatus";
+import {
+  enforceDependencyStatuses,
+  canSetTaskStatus,
+  getBlockingDependencyTitles,
+  sanitizeDependsOn,
+} from "./taskDependencies";
 
 type TaskStore = Record<string, ProjectTask[]>;
 
+const VALID_PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
+const VALID_STATUSES = new Set(["todo", "in_progress", "completed"]);
+
+const isTask = (value: unknown): value is ProjectTask => {
+  if (!value || typeof value !== "object") return false;
+  const task = value as Record<string, unknown>;
+  return (
+    typeof task.id === "string" &&
+    typeof task.projectId === "string" &&
+    typeof task.sectionId === "string" &&
+    typeof task.title === "string"
+  );
+};
+
+const sanitizeTask = (task: ProjectTask): ProjectTask => ({
+  ...task,
+  id: String(task.id),
+  projectId: String(task.projectId),
+  sectionId: String(task.sectionId),
+  number: Number(task.number) || 0,
+  name: String(task.name || task.title || "").slice(0, 200),
+  title: String(task.title || task.name || "").slice(0, 200),
+  description: String(task.description || "").slice(0, 5000),
+  priority: VALID_PRIORITIES.has(task.priority) ? task.priority : "medium",
+  status: VALID_STATUSES.has(task.status) ? task.status : "todo",
+  expectedHours: Math.max(0, Number(task.expectedHours) || 0),
+  startDate: String(task.startDate || ""),
+  dueDate: String(task.dueDate || ""),
+  assigneeIds: Array.isArray(task.assigneeIds)
+    ? task.assigneeIds.map(String).filter(Boolean)
+    : [],
+  assigneeNames: Array.isArray(task.assigneeNames)
+    ? task.assigneeNames.map(String)
+    : [],
+  dependsOnTaskIds: Array.isArray(task.dependsOnTaskIds)
+    ? [...new Set(task.dependsOnTaskIds.map(String).filter(Boolean))]
+    : [],
+});
+
 const readStore = (): TaskStore => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(PROJECT_TASKS_KEY);
     if (!raw) return {};
-    return JSON.parse(raw) as TaskStore;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+
+    const store: TaskStore = {};
+    for (const [projectId, tasks] of Object.entries(
+      parsed as Record<string, unknown>,
+    )) {
+      if (!projectId || !Array.isArray(tasks)) continue;
+      store[projectId] = tasks.filter(isTask).map(sanitizeTask);
+    }
+    return store;
   } catch {
     return {};
   }
 };
 
 const writeStore = (store: TaskStore) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  localStorage.setItem(PROJECT_TASKS_KEY, JSON.stringify(store));
 };
 
-export const getProjectTasks = (projectId: string): ProjectTask[] => {
-  const tasks = readStore()[projectId] ?? [];
-  return JSON.parse(JSON.stringify(tasks)) as ProjectTask[];
+export const getProjectTasks = (
+  projectId: string,
+  sections: Array<{ id: string; name: string }> = [],
+): ProjectTask[] => {
+  const store = readStore();
+  const raw = store[projectId] ?? [];
+  const normalized = raw.map((task) => normalizeStoredTask(task, sections));
+  const enforced = enforceDependencyStatuses(normalized);
+
+  const sectionIds = new Set(sections.map((section) => section.id).filter(Boolean));
+  const fallbackSectionId = sections[0]?.id ?? "";
+  let sectionChanged = false;
+
+  const reconciled = enforced.map((task) => {
+    if (!sectionIds.size) return task;
+    if (task.sectionId && sectionIds.has(task.sectionId)) return task;
+    if (!fallbackSectionId || task.sectionId === fallbackSectionId) return task;
+    sectionChanged = true;
+    return { ...task, sectionId: fallbackSectionId };
+  });
+
+  if (enforced !== normalized || sectionChanged) {
+    store[projectId] = reconciled;
+    writeStore(store);
+  }
+
+  return reconciled;
+};
+
+export const clearProjectTasks = (projectId: string) => {
+  const store = readStore();
+  delete store[projectId];
+  writeStore(store);
+};
+
+export const deleteTasksForSection = (projectId: string, sectionId: string) => {
+  const store = readStore();
+  const tasks = store[projectId] ?? [];
+  const removed = tasks.filter((task) => task.sectionId === sectionId);
+  const removedIds = new Set(removed.map((task) => task.id));
+  store[projectId] = tasks
+    .filter((task) => task.sectionId !== sectionId)
+    .map((task) => ({
+      ...task,
+      dependsOnTaskIds: (task.dependsOnTaskIds ?? []).filter(
+        (id) => !removedIds.has(id),
+      ),
+    }));
+  writeStore(store);
+  return removed;
 };
 
 export const addProjectTask = (projectId: string, payload: TaskFormPayload): ProjectTask => {
   const store = readStore();
   const tasks = store[projectId] ?? [];
-  const task: ProjectTask = {
-    id: crypto.randomUUID(),
+  const taskId = crypto.randomUUID();
+  const dependsOnTaskIds = sanitizeDependsOn({
+    taskId,
+    dependsOnTaskIds: payload.dependsOnTaskIds ?? [],
+    tasks,
+  });
+
+  const requestedStatus = payload.status || "todo";
+  const draft = {
+    id: taskId,
+    dependsOnTaskIds,
+  };
+  if (!canSetTaskStatus(draft, requestedStatus, tasks)) {
+    const blockers = getBlockingDependencyTitles(draft, tasks);
+    throw new Error(
+      blockers.length
+        ? `Cannot start until completed: ${blockers.join(", ")}`
+        : "Cannot start until dependencies are completed",
+    );
+  }
+
+  const task = sanitizeTask({
+    id: taskId,
     projectId,
     sectionId: payload.sectionId,
     number: tasks.length + 1,
@@ -35,12 +158,14 @@ export const addProjectTask = (projectId: string, payload: TaskFormPayload): Pro
     title: payload.title.trim(),
     description: payload.description.trim(),
     priority: payload.priority,
+    status: requestedStatus,
     expectedHours: payload.expectedHours,
-    startDate: new Date().toISOString().slice(0, 10),
+    startDate: payload.startDate || new Date().toISOString().slice(0, 10),
     dueDate: payload.dueDate,
     assigneeIds: payload.assigneeIds,
     assigneeNames: payload.assigneeNames,
-  };
+    dependsOnTaskIds,
+  });
 
   store[projectId] = [task, ...tasks];
   writeStore(store);
@@ -49,39 +174,153 @@ export const addProjectTask = (projectId: string, payload: TaskFormPayload): Pro
 
 export const deleteProjectTask = (projectId: string, taskId: string) => {
   const store = readStore();
-  store[projectId] = (store[projectId] ?? []).filter((task) => task.id !== taskId);
+  store[projectId] = (store[projectId] ?? [])
+    .filter((task) => task.id !== taskId)
+    .map((task) => ({
+      ...task,
+      dependsOnTaskIds: (task.dependsOnTaskIds ?? []).filter((id) => id !== taskId),
+    }));
   writeStore(store);
 };
 
+export const updateProjectTask = (
+  projectId: string,
+  taskId: string,
+  payload: TaskFormPayload,
+): ProjectTask => {
+  const store = readStore();
+  const tasks = store[projectId] ?? [];
+  const index = tasks.findIndex((task) => task.id === taskId);
+  if (index < 0) throw new Error("Task not found");
+
+  const current = tasks[index];
+  const dependsOnTaskIds = sanitizeDependsOn({
+    taskId,
+    dependsOnTaskIds:
+      payload.dependsOnTaskIds !== undefined
+        ? payload.dependsOnTaskIds
+        : (current.dependsOnTaskIds ?? []),
+    tasks,
+  });
+
+  const requestedStatus = payload.status || current.status || "todo";
+  const draft = { id: taskId, dependsOnTaskIds };
+  // Evaluate against siblings with this task's current status (deps are other tasks).
+  if (!canSetTaskStatus(draft, requestedStatus, tasks)) {
+    const blockers = getBlockingDependencyTitles(draft, tasks);
+    throw new Error(
+      blockers.length
+        ? `Cannot start until completed: ${blockers.join(", ")}`
+        : "Cannot start until dependencies are completed",
+    );
+  }
+
+  const updated = sanitizeTask({
+    ...current,
+    sectionId: payload.sectionId,
+    name: payload.title.trim(),
+    title: payload.title.trim(),
+    description: payload.description.trim(),
+    priority: payload.priority,
+    status: requestedStatus,
+    expectedHours: payload.expectedHours,
+    startDate: payload.startDate || current.startDate,
+    dueDate: payload.dueDate,
+    assigneeIds: payload.assigneeIds,
+    assigneeNames: payload.assigneeNames,
+    dependsOnTaskIds,
+  });
+
+  tasks[index] = updated;
+  store[projectId] = tasks;
+  writeStore(store);
+  return { ...updated };
+};
+
+/** Add a dependency edge: `fromId` must complete before `toId` (arrow from → to). */
+export const addTaskDependency = (
+  projectId: string,
+  fromId: string,
+  toId: string,
+): ProjectTask | null => {
+  if (!fromId || !toId || fromId === toId) return null;
+  const store = readStore();
+  const tasks = store[projectId] ?? [];
+  const target = tasks.find((task) => task.id === toId);
+  if (!target || !tasks.some((task) => task.id === fromId)) return null;
+
+  const nextDeps = sanitizeDependsOn({
+    taskId: toId,
+    dependsOnTaskIds: [...(target.dependsOnTaskIds ?? []), fromId],
+    tasks,
+  });
+
+  if (
+    nextDeps.length === (target.dependsOnTaskIds ?? []).length &&
+    (target.dependsOnTaskIds ?? []).includes(fromId)
+  ) {
+    return target;
+  }
+
+  const index = tasks.findIndex((task) => task.id === toId);
+  const updated = sanitizeTask({ ...target, dependsOnTaskIds: nextDeps });
+  tasks[index] = updated;
+  store[projectId] = tasks;
+  writeStore(store);
+  return updated;
+};
+
+export const removeTaskDependency = (
+  projectId: string,
+  fromId: string,
+  toId: string,
+): ProjectTask | null => {
+  const store = readStore();
+  const tasks = store[projectId] ?? [];
+  const index = tasks.findIndex((task) => task.id === toId);
+  if (index < 0) return null;
+
+  const target = tasks[index];
+  const updated = sanitizeTask({
+    ...target,
+    dependsOnTaskIds: (target.dependsOnTaskIds ?? []).filter((id) => id !== fromId),
+  });
+  tasks[index] = updated;
+  store[projectId] = tasks;
+  writeStore(store);
+  return updated;
+};
+
+export const countAllLocalTasks = (projectIds: string[]): number =>
+  projectIds.reduce((sum, id) => sum + (readStore()[id]?.length ?? 0), 0);
+
 export const buildTaskStatsFromTasks = (
   tasks: ProjectTask[],
-  sections: Array<{ id: string; name: string }>,
+  sections: Array<{ id: string; name: string }> = [],
 ): TaskStats => {
   const today = new Date().toISOString().slice(0, 10);
-  const completedSectionIds = new Set(
-    sections.filter((section) => section.name.includes("مكتمل")).map((section) => section.id),
-  );
-  const progressSectionIds = new Set(
-    sections
-      .filter((section) => section.name.includes("قيد") || section.name.includes("تنفيذ"))
-      .map((section) => section.id),
-  );
 
   let completed = 0;
   let inProgress = 0;
   let late = 0;
 
   tasks.forEach((task) => {
-    if (completedSectionIds.has(task.sectionId)) {
+    const status = resolveTaskStatus(task, sections);
+    const overdue = Boolean(task.dueDate && task.dueDate < today);
+
+    if (status === "completed") {
       completed += 1;
       return;
     }
-    if (progressSectionIds.has(task.sectionId)) {
-      inProgress += 1;
-      if (task.dueDate && task.dueDate < today) late += 1;
+
+    if (overdue) {
+      late += 1;
       return;
     }
-    if (task.dueDate && task.dueDate < today) late += 1;
+
+    if (status === "in_progress") {
+      inProgress += 1;
+    }
   });
 
   return {

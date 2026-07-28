@@ -6,7 +6,7 @@ import type { Project, ProjectSection, ProjectTask } from "../../types/project";
 import { Pagination } from "../Pagination";
 import { TableAddButton } from "../ui/TableToolbar";
 import { TableRowIndex } from "../ui/TableRowIndex";
-import { PriorityBadge } from "./ProjectBadges";
+import { PriorityBadge, TaskStatusBadge } from "./ProjectBadges";
 
 export const SECTION_TASKS_PAGE_SIZE = 5;
 
@@ -17,6 +17,7 @@ type SectionDetailViewProps = {
   onEditSection: () => void;
   onDeleteSection: () => void;
   onAddTask: () => void;
+  onEditTask: (task: ProjectTask) => void;
   onDeleteTask: (task: ProjectTask) => void;
 };
 
@@ -27,6 +28,7 @@ export function SectionDetailView({
   onEditSection,
   onDeleteSection,
   onAddTask,
+  onEditTask,
   onDeleteTask,
 }: SectionDetailViewProps) {
   const { t } = useTranslation();
@@ -45,14 +47,13 @@ export function SectionDetailView({
 
   return (
     <main className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6">
+      <DetailBackButton
+        label={t("projects.sectionDetail.backLabel")}
+        onClick={onBack}
+      />
+
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-hr-primary px-5 py-4 text-white">
-        <div className="flex flex-col gap-2">
-          <DetailBackButton
-            variant="onPrimary"
-            label={t("projects.sectionDetail.backLabel")}
-            onClick={onBack}
-            className="mb-0 self-start"
-          />
+        <div>
           <h1 className="text-xl font-bold">{section.name}</h1>
         </div>
         <div className="flex gap-2">
@@ -89,7 +90,8 @@ export function SectionDetailView({
               <col className="w-12" />
               <col />
               <col className="w-[5.25rem]" />
-              <col className="w-[22%]" />
+              <col className="w-[5.5rem]" />
+              <col className="w-[18%]" />
               <col className="w-14" />
               <col className="w-[5.5rem]" />
               <col className="w-[5.5rem]" />
@@ -109,6 +111,9 @@ export function SectionDetailView({
                 </th>
                 <th className="px-2 py-2.5 text-center text-xs font-medium">
                   {t("projects.sectionDetail.columns.priority")}
+                </th>
+                <th className="px-2 py-2.5 text-center text-xs font-medium">
+                  {t("projects.sectionDetail.columns.status")}
                 </th>
                 <th className="px-2 py-2.5 text-center text-xs font-medium">
                   {t("projects.table.columns.description")}
@@ -148,6 +153,9 @@ export function SectionDetailView({
                     <td className="px-2 py-2.5 text-center">
                       <PriorityBadge priority={task.priority} />
                     </td>
+                    <td className="px-2 py-2.5 text-center">
+                      <TaskStatusBadge status={task.status || "todo"} />
+                    </td>
                     <td
                       className="truncate px-2 py-2.5 text-center text-xs text-hr-muted"
                       title={task.description || undefined}
@@ -173,7 +181,12 @@ export function SectionDetailView({
                     </td>
                     <td className="px-2 py-2.5">
                       <div className="flex items-center justify-center gap-1.5">
-                        <button type="button" className="text-amber-500" aria-label={t("common.edit")}>
+                        <button
+                          type="button"
+                          onClick={() => onEditTask(task)}
+                          className="text-amber-500"
+                          aria-label={t("common.edit")}
+                        >
                           <Pencil className="size-4" />
                         </button>
                         <button
@@ -190,7 +203,7 @@ export function SectionDetailView({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10} className="px-3 py-10 text-center text-hr-muted">
+                  <td colSpan={11} className="px-3 py-10 text-center text-hr-muted">
                     {t("common.noData")}
                   </td>
                 </tr>

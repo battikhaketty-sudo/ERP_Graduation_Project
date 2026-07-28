@@ -5,6 +5,7 @@ import { CopyableIdCell } from "../ui/CopyableIdCell";
 import { TableRowIndex } from "../ui/TableRowIndex";
 import { EmptyState } from "../EmptyState";
 import { ProjectStatusBadge } from "./ProjectBadges";
+import { getProjectListProgressPercent } from "./projectProgress";
 import type { Project } from "../../types/project";
 
 type ProjectsTableProps = {
@@ -18,6 +19,20 @@ type ProjectsTableProps = {
 };
 
 const PAGE_SIZE = 5;
+
+function ProgressCell({ percent }: { percent: number }) {
+  return (
+    <div className="mx-auto flex w-full max-w-[120px] flex-col items-center gap-1">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-hr-border">
+        <div
+          className="h-full rounded-full bg-hr-primary transition-all"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <span className="text-[11px] font-medium text-hr-muted">{percent}%</span>
+    </div>
+  );
+}
 
 export function ProjectsTable({
   projects,
@@ -41,7 +56,7 @@ export function ProjectsTable({
   return (
     <section className="hr-card">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] table-fixed border-collapse text-sm">
+        <table className="w-full min-w-[1040px] table-fixed border-collapse text-sm">
           <thead>
             <tr className="hr-table-head">
               <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>
@@ -59,10 +74,7 @@ export function ProjectsTable({
                 {t("projects.table.columns.description")}
               </th>
               <th className="px-3 py-3 text-center font-medium">
-                {t("projects.table.columns.startDate")}
-              </th>
-              <th className="px-3 py-3 text-center font-medium">
-                {t("projects.table.columns.endDate")}
+                {t("projects.table.columns.progress")}
               </th>
               <th className="px-3 py-3 text-center font-medium">
                 {t("projects.table.columns.status")}
@@ -91,9 +103,12 @@ export function ProjectsTable({
                 </td>
                 <td className="px-3 py-3 text-center">{project.managerName}</td>
                 <td className="px-3 py-3 text-center">{project.assignedEmployeeName}</td>
-                <td className="truncate px-3 py-3 text-center text-hr-muted">{project.description}</td>
-                <td className="px-3 py-3 text-center">{project.startDate}</td>
-                <td className="px-3 py-3 text-center">{project.endDate}</td>
+                <td className="truncate px-3 py-3 text-center text-hr-muted">
+                  {project.description}
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <ProgressCell percent={getProjectListProgressPercent(project)} />
+                </td>
                 <td className="px-3 py-3 text-center">
                   <ProjectStatusBadge status={project.status} />
                 </td>

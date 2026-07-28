@@ -16,23 +16,67 @@ const formatDate = (value?: string | null) => {
   return value.slice(0, 10);
 };
 
+const readId = (...candidates: unknown[]): string => {
+  for (const candidate of candidates) {
+    if (candidate == null) continue;
+    const value = String(candidate).trim();
+    if (value) return value;
+  }
+  return "";
+};
+
 export const normalizeSection = (
   item: Record<string, unknown>,
-  projectId: string,
-): ProjectSection => ({
-  id: String(item.sectionId ?? item.id ?? crypto.randomUUID()),
-  projectId,
-  name: String(item.name ?? "بدون اسم"),
-  displayOrder: Number(item.displayOrder ?? 0),
-  createdAt: formatDate(typeof item.createdAtUtc === "string" ? item.createdAtUtc : null),
-});
+  fallbackProjectId: string,
+): ProjectSection | null => {
+  const id = readId(item.sectionId, item.id);
+  if (!id) return null;
 
-export const normalizeMember = (item: Record<string, unknown>): ProjectMember => {
-  const employeeId = String(item.employeeId ?? item.memberId ?? "");
+  const rawProjectId = item.projectId ?? item.ProjectId ?? item.projectID;
+  const projectId =
+    rawProjectId != null && String(rawProjectId).trim()
+      ? String(rawProjectId)
+      : fallbackProjectId;
+
   return {
-    id: String(item.memberId ?? item.employeeId ?? crypto.randomUUID()),
+    id,
+    projectId,
+    name: String(item.name ?? "Untitled").slice(0, 200),
+    displayOrder: Number(item.displayOrder ?? 0) || 0,
+    createdAt: formatDate(
+      typeof item.createdAtUtc === "string" ? item.createdAtUtc : null,
+    ),
+    dependsOnSectionIds: [],
+  };
+};
+
+/** Keep only sections that belong to the given project. */
+export const filterProjectSections = (
+  sections: Array<ProjectSection | null | undefined>,
+  projectId: string,
+): ProjectSection[] => {
+  const seen = new Set<string>();
+  return sections
+    .filter((section): section is ProjectSection => Boolean(section?.id))
+    .filter((section) => {
+      if (section.projectId && section.projectId !== projectId) return false;
+      if (seen.has(section.id)) return false;
+      seen.add(section.id);
+      return true;
+    })
+    .map((section) => ({ ...section, projectId }))
+    .sort((left, right) => left.displayOrder - right.displayOrder);
+};
+
+export const normalizeMember = (item: Record<string, unknown>): ProjectMember | null => {
+  const employeeId = readId(item.employeeId, item.memberId);
+  const id = readId(item.memberId, item.employeeId);
+  if (!id || !employeeId) return null;
+
+  return {
+    id,
     employeeId,
-    employeeName: String(item.employeeName ?? "-"),
+    employeeName: String(item.employeeName ?? "-").slice(0, 200),
     role: roleLabelFromApi(item.role),
     joinedAt: formatDate(typeof item.joinedAtUtc === "string" ? item.joinedAtUtc : null),
     leftAt: formatDate(typeof item.leftAtUtc === "string" ? item.leftAtUtc : null),
@@ -40,18 +84,19 @@ export const normalizeMember = (item: Record<string, unknown>): ProjectMember =>
   };
 };
 
-export const normalizeProjectListItem = (item: Record<string, unknown>): Project => {
-  const id = String(item.projectId ?? item.id ?? crypto.randomUUID());
+export const normalizeProjectListItem = (item: Record<string, unknown>): Project | null => {
+  const id = readId(item.projectId, item.id);
+  if (!id) return null;
 
   return {
     id,
     number: id,
-    name: String(item.name ?? "بدون اسم"),
+    name: String(item.name ?? "Untitled").slice(0, 200),
     managerId: String(item.managerId ?? ""),
-    managerName: String(item.managerName ?? "-"),
+    managerName: String(item.managerName ?? "-").slice(0, 200),
     assignedEmployeeId: "",
     assignedEmployeeName: "-",
-    description: String(item.description ?? ""),
+    description: String(item.description ?? "").slice(0, 5000),
     startDate: formatDate(typeof item.startDate === "string" ? item.startDate : null),
     endDate: formatDate(typeof item.endDate === "string" ? item.endDate : null),
     status: projectStatusFromApi(item.status),
@@ -64,22 +109,29 @@ export const normalizeProjectListItem = (item: Record<string, unknown>): Project
 };
 
 export const normalizeProjectDetail = (item: Record<string, unknown>): Project => {
-  const id = String(item.projectId ?? item.id ?? crypto.randomUUID());
-  const sections = Array.isArray(item.sections)
-    ? item.sections.map((section) =>
-        normalizeSection(section as Record<string, unknown>, id),
-      )
-    : [];
+  const id = readId(item.projectId, item.id);
+  if (!id) {
+    throw new Error("Project id missing from API response");
+  }
+
+  const sections = filterProjectSections(
+    Array.isArray(item.sections)
+      ? item.sections.map((section) =>
+          normalizeSection(section as Record<string, unknown>, id),
+        )
+      : [],
+    id,
+  );
 
   return {
     id,
     number: id,
-    name: String(item.name ?? "بدون اسم"),
+    name: String(item.name ?? "Untitled").slice(0, 200),
     managerId: String(item.managerId ?? ""),
-    managerName: String(item.managerName ?? "-"),
+    managerName: String(item.managerName ?? "-").slice(0, 200),
     assignedEmployeeId: "",
     assignedEmployeeName: "-",
-    description: String(item.description ?? ""),
+    description: String(item.description ?? "").slice(0, 5000),
     startDate: formatDate(typeof item.startDate === "string" ? item.startDate : null),
     endDate: formatDate(typeof item.endDate === "string" ? item.endDate : null),
     status: projectStatusFromApi(item.status),
@@ -95,19 +147,25 @@ export const normalizeProjectDetail = (item: Record<string, unknown>): Project =
   };
 };
 
-export const normalizeInvitation = (item: Record<string, unknown>): ProjectInvitation => {
-  const projectId = String(item.projectId ?? "");
-  const id = String(item.invitationId ?? item.id ?? crypto.randomUUID());
+export const normalizeInvitation = (
+  item: Record<string, unknown>,
+): ProjectInvitation | null => {
+  const projectId = readId(item.projectId);
+  const id = readId(item.invitationId, item.id);
+  if (!id || !projectId) return null;
 
   return {
     id,
     projectId,
-    projectName: String(item.projectName ?? "بدون اسم"),
+    projectName: String(item.projectName ?? "Untitled").slice(0, 200),
     projectNumber: projectId,
     employeeId: String(item.invitedEmployeeId ?? item.employeeId ?? ""),
-    employeeName: String(item.invitedEmployeeName ?? item.employeeName ?? "-"),
+    employeeName: String(item.invitedEmployeeName ?? item.employeeName ?? "-").slice(
+      0,
+      200,
+    ),
     role: roleLabelFromApi(item.role),
-    message: typeof item.message === "string" ? item.message : undefined,
+    message: typeof item.message === "string" ? item.message.slice(0, 2000) : undefined,
     status: invitationStatusFromApi(item.status),
     startDate: "",
     endDate: "",
@@ -144,7 +202,10 @@ export const buildProjectStats = (
 export const buildTaskStats = (project: Project): TaskStats =>
   buildTaskStatsFromTasks(project.tasks, project.sections);
 
-export const buildProjectDetailStats = (project: Project, taskStats: TaskStats): ProjectDetailStats => ({
+export const buildProjectDetailStats = (
+  project: Project,
+  taskStats: TaskStats,
+): ProjectDetailStats => ({
   membersCount: project.membersCount ?? 0,
   tasksCount: project.tasksCount ?? project.tasks.length,
   sectionsCount: project.sectionsCount ?? project.sections.length,

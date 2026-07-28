@@ -11,11 +11,19 @@ const appendImageIfDataUrl = async (
   formData: FormData,
   fieldName: string,
   value: string | undefined,
-  fileName: string,
+  fileNameBase: string,
 ) => {
   if (!value?.startsWith("data:")) return;
   const blob = await toBlob(value);
-  formData.append(fieldName, blob, fileName);
+  const extension =
+    blob.type === "image/png"
+      ? "png"
+      : blob.type === "image/webp"
+        ? "webp"
+        : blob.type === "image/gif"
+          ? "gif"
+          : "jpg";
+  formData.append(fieldName, blob, `${fileNameBase}.${extension}`);
 };
 
 export const buildEmployeeFormData = async (
@@ -68,19 +76,19 @@ export const buildEmployeeFormData = async (
     formData,
     "PersonalInfo.ProfileImage",
     data.avatar,
-    "avatar.jpg",
+    "avatar",
   );
   await appendImageIfDataUrl(
     formData,
     "CitizenshipInfo.IdCardFrontImage",
     data.idCardFrontImage,
-    "id-front.jpg",
+    "id-front",
   );
   await appendImageIfDataUrl(
     formData,
     "CitizenshipInfo.IdCardBackImage",
     data.idCardBackImage,
-    "id-back.jpg",
+    "id-back",
   );
 
   return formData;

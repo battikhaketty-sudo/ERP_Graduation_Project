@@ -21,7 +21,7 @@ function AppShell() {
   };
 
   return (
-    <div className="theme-transition flex min-h-dvh overflow-hidden bg-hr-bg" dir={dir}>
+    <div className="theme-transition flex h-dvh max-h-dvh overflow-hidden bg-hr-bg" dir={dir}>
       <Sidebar onLogout={handleLogout} />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

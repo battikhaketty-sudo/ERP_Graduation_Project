@@ -9,12 +9,16 @@ export type InvitationStatus =
 
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
+export type TaskStatus = "todo" | "in_progress" | "completed";
+
 export type ProjectSection = {
   id: string;
   projectId: string;
   name: string;
   displayOrder: number;
   createdAt?: string;
+  /** Section ids that should complete before this stage (local workflow graph). */
+  dependsOnSectionIds: string[];
 };
 
 export type ProjectMember = {
@@ -36,11 +40,14 @@ export type ProjectTask = {
   title: string;
   description: string;
   priority: TaskPriority;
+  status: TaskStatus;
   expectedHours: number;
   startDate: string;
   dueDate: string;
   assigneeIds: string[];
   assigneeNames: string[];
+  /** Task ids that must be completed before this task is unblocked. */
+  dependsOnTaskIds: string[];
 };
 
 export type Project = {
@@ -114,6 +121,7 @@ export type InvitationFormPayload = {
 export type SectionFormPayload = {
   name: string;
   displayOrder: number;
+  dependsOnSectionIds?: string[];
 };
 
 export type TaskFormPayload = {
@@ -121,10 +129,13 @@ export type TaskFormPayload = {
   description: string;
   sectionId: string;
   expectedHours: number;
+  startDate: string;
   dueDate: string;
   priority: TaskPriority;
+  status: TaskStatus;
   assigneeIds: string[];
   assigneeNames: string[];
+  dependsOnTaskIds?: string[];
 };
 
 export type ProjectStats = {

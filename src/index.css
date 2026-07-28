@@ -167,6 +167,55 @@ html[lang="en"] {
   .hr-tab-pill-inactive {
     @apply hr-tab-pill bg-hr-nav-active text-hr-accent-text hover:opacity-90;
   }
+
+  /* React Flow controls — readable in light and dark themes */
+  .task-flow-controls.react-flow__controls {
+    @apply shadow-md;
+    box-shadow: var(--hr-card-shadow);
+  }
+
+  .task-flow-controls .react-flow__controls-button {
+    @apply !m-0 !border-0 !border-b !border-hr-border !bg-hr-surface !text-hr-text;
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .task-flow-controls .react-flow__controls-button:last-child {
+    @apply !border-b-0;
+  }
+
+  .task-flow-controls .react-flow__controls-button:hover {
+    @apply !bg-hr-hover;
+  }
+
+  .task-flow-controls .react-flow__controls-button svg {
+    @apply !max-h-4 !max-w-4;
+    fill: none;
+    stroke: rgb(var(--hr-text));
+    color: rgb(var(--hr-text));
+  }
+
+  .task-flow-controls .react-flow__controls-button svg path,
+  .task-flow-controls .react-flow__controls-button svg line,
+  .task-flow-controls .react-flow__controls-button svg polyline,
+  .task-flow-controls .react-flow__controls-button svg rect,
+  .task-flow-controls .react-flow__controls-button svg circle {
+    fill: rgb(var(--hr-text));
+    stroke: rgb(var(--hr-text));
+  }
+
+  .dark .task-flow-controls .react-flow__controls-button svg path,
+  .dark .task-flow-controls .react-flow__controls-button svg line,
+  .dark .task-flow-controls .react-flow__controls-button svg polyline,
+  .dark .task-flow-controls .react-flow__controls-button svg rect,
+  .dark .task-flow-controls .react-flow__controls-button svg circle {
+    fill: rgb(var(--hr-text));
+    stroke: rgb(var(--hr-text));
+  }
+
+  .task-flow-minimap.react-flow__minimap {
+    @apply !shadow-md;
+  }
 }
 
 @layer utilities {

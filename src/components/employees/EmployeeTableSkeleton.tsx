@@ -1,13 +1,13 @@
 export function EmployeeTableSkeleton() {
   return (
     <section className="hr-card animate-pulse">
-      <div className="overflow-x-auto p-1">
-        <table className="w-full min-w-[920px]">
+      <div className="min-w-0 p-1">
+        <table className="w-full border-collapse">
           <thead>
             <tr className="hr-table-head">
               {[...Array(8)].map((_, index) => (
                 <th key={index} className="px-3 py-3">
-                  <div className="mx-auto h-4 w-16 rounded bg-hr-border" />
+                  <div className="mx-auto h-4 w-14 rounded bg-hr-border" />
                 </th>
               ))}
             </tr>
@@ -19,11 +19,20 @@ export function EmployeeTableSkeleton() {
                   <div className="mx-auto size-4 rounded bg-hr-border" />
                 </td>
                 <td className="px-3 py-3 text-center">
-                  <div className="mx-auto size-10 rounded-full bg-hr-border" />
+                  <div className="mx-auto h-4 w-6 rounded bg-hr-border" />
                 </td>
-                {[...Array(6)].map((_, col) => (
-                  <td key={col} className="px-3 py-3">
-                    <div className="h-4 rounded bg-hr-border" />
+                <td className="px-3 py-3 text-center">
+                  <div className="mx-auto h-4 w-16 rounded bg-hr-border" />
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <div className="mx-auto flex w-fit items-center gap-2">
+                    <div className="size-9 shrink-0 rounded-full bg-hr-border" />
+                    <div className="h-4 w-24 rounded bg-hr-border" />
+                  </div>
+                </td>
+                {[...Array(4)].map((_, col) => (
+                  <td key={col} className="px-3 py-3 text-center">
+                    <div className="mx-auto h-4 w-20 rounded bg-hr-border" />
                   </td>
                 ))}
               </tr>

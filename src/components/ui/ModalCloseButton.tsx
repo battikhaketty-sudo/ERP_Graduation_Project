@@ -17,7 +17,11 @@ export function ModalCloseButton({ onClick, disabled, className }: ModalCloseBut
       onClick={onClick}
       disabled={disabled}
       aria-label={t("common.close")}
-      className={["absolute right-1 top-1 z-10 sm:right-2 sm:top-2", closeBtnClass, className]
+      className={[
+        "absolute end-1 top-1 z-20 sm:end-2 sm:top-2",
+        closeBtnClass,
+        className,
+      ]
         .filter(Boolean)
         .join(" ")}
     >
