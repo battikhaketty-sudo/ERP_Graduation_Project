@@ -4,6 +4,7 @@ import { useUrlQueryNavigation } from "../hooks/useUrlQueryNavigation";
 
 import { StatusBanner } from "../components/ui/StatusBanner";
 import { useConfirmDialog } from "../context/ConfirmDialogContext";
+import { useToast } from "../context/ToastContext";
 import { useTranslation } from "../i18n";
 
 import { AddProjectModal } from "../components/projects/AddProjectModal";
@@ -44,6 +45,7 @@ import {
   updateProject,
   updateSection,
   updateTask,
+  updateTaskStatus,
 } from "../services/projects";
 
 import type {
@@ -54,9 +56,11 @@ import type {
   ProjectStats,
   ProjectTask,
   TaskStats,
+  TaskStatus,
 } from "../types/project";
 
 import { getThrownErrorMessage } from "../utils/apiResponse";
+import { pointsForPriority } from "../services/projects/performancePoints";
 
 type ActiveTab = "projects" | "invitations";
 
@@ -69,6 +73,7 @@ const emptyStats: ProjectStats = {
 
 export function ProjectsPage() {
   const { confirm } = useConfirmDialog();
+  const { showToast } = useToast();
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -109,6 +114,7 @@ export function ProjectsPage() {
   const [defaultTaskSectionId, setDefaultTaskSectionId] = useState<
     string | undefined
   >();
+  const [pendingOpenTaskModal, setPendingOpenTaskModal] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("add") !== "1") return;
@@ -119,6 +125,15 @@ export function ProjectsPage() {
 
     const next = new URLSearchParams(searchParams);
     next.delete("add");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab !== "invitations" && tab !== "projects") return;
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams);
+    next.delete("tab");
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
@@ -198,6 +213,14 @@ export function ProjectsPage() {
   }, [projectId, loadListData, search]);
 
   useEffect(() => {
+    if (!selectedProject || !pendingOpenTaskModal) return;
+    setEditingTask(null);
+    setDefaultTaskSectionId(undefined);
+    setIsTaskModalOpen(true);
+    setPendingOpenTaskModal(false);
+  }, [selectedProject, pendingOpenTaskModal]);
+
+  useEffect(() => {
     if (!projectId) {
       setSelectedProject(null);
       setTaskStats({ total: 0, inProgress: 0, completed: 0, late: 0 });
@@ -270,13 +293,16 @@ export function ProjectsPage() {
     try {
       await deleteProject(project.id);
       setError(null);
+      showToast(t("projects.toasts.deleteSuccess"), "success");
       if (selectedProject?.id === project.id) {
         setSelectedProject(null);
         clearProjectFromUrl();
       }
       await loadListData();
     } catch (err) {
-      setError(getThrownErrorMessage(err, t("projects.page.deleteError")));
+      const message = getThrownErrorMessage(err, t("projects.page.deleteError"));
+      setError(message);
+      showToast(message, "error");
     }
   };
 
@@ -296,10 +322,14 @@ export function ProjectsPage() {
       await deleteMember(selectedProject.id, member.id);
       await refreshSelectedProject(selectedProject.id);
       setError(null);
+      showToast(t("projects.toasts.memberRemoved"), "success");
     } catch (err) {
-      setError(
-        getThrownErrorMessage(err, t("projects.page.deleteMemberError")),
+      const message = getThrownErrorMessage(
+        err,
+        t("projects.page.deleteMemberError"),
       );
+      setError(message);
+      showToast(message, "error");
     }
   };
 
@@ -315,10 +345,14 @@ export function ProjectsPage() {
       await deleteSection(selectedProject.id, section.id);
       await refreshSelectedProject(selectedProject.id);
       setError(null);
+      showToast(t("projects.toasts.sectionDeleted"), "success");
     } catch (err) {
-      setError(
-        getThrownErrorMessage(err, t("projects.page.deleteSectionError")),
+      const message = getThrownErrorMessage(
+        err,
+        t("projects.page.deleteSectionError"),
       );
+      setError(message);
+      showToast(message, "error");
     }
   };
 
@@ -370,8 +404,42 @@ export function ProjectsPage() {
       await deleteTask(selectedProject.id, task.id);
       await refreshSelectedProject(selectedProject.id);
       setError(null);
+      showToast(t("projects.toasts.taskDeleted"), "success");
     } catch (err) {
-      setError(getThrownErrorMessage(err, t("projects.page.deleteTaskError")));
+      const message = getThrownErrorMessage(err, t("projects.page.deleteTaskError"));
+      setError(message);
+      showToast(message, "error");
+    }
+  };
+
+  const handleSetTaskStatus = async (task: ProjectTask, status: TaskStatus) => {
+    if (!selectedProject) return;
+
+    try {
+      await updateTaskStatus(selectedProject.id, task.id, status);
+      await refreshSelectedProject(selectedProject.id);
+      setError(null);
+
+      if (status === "completed") {
+        showToast(
+          t("projects.toasts.taskCompleted", {
+            points: pointsForPriority(task.priority),
+            count: Math.max(1, task.assigneeIds.length),
+          }),
+          "success",
+        );
+      } else if (task.status === "completed") {
+        showToast(t("projects.toasts.taskReopened"), "success");
+      } else if (status === "in_progress") {
+        showToast(t("projects.toasts.taskInProgress"), "success");
+      }
+    } catch (err) {
+      const message = getThrownErrorMessage(
+        err,
+        t("projects.modals.addTask.errors.saveFailed"),
+      );
+      setError(message);
+      showToast(message, "error");
     }
   };
 
@@ -456,10 +524,23 @@ export function ProjectsPage() {
             setIsTaskModalOpen(true);
           }}
           onDeleteTask={(task) => void handleDeleteTask(task)}
+          onSetTaskStatus={(task, status) =>
+            void handleSetTaskStatus(task, status)
+          }
           onInviteMember={() => setIsInviteModalOpen(true)}
           onEditMember={async (member, role) => {
-            await updateMember(selectedProject.id, member.id, { role });
-            await refreshSelectedProject(selectedProject.id);
+            try {
+              await updateMember(selectedProject.id, member.id, { role });
+              await refreshSelectedProject(selectedProject.id);
+              showToast(t("projects.toasts.memberUpdated"), "success");
+            } catch (err) {
+              const message = getThrownErrorMessage(
+                err,
+                t("projects.page.loadError"),
+              );
+              setError(message);
+              showToast(message, "error");
+            }
           }}
           onDeleteMember={(member) => void handleDeleteMember(member)}
         />
@@ -476,6 +557,7 @@ export function ProjectsPage() {
             await updateProject(editingProject.id, payload);
             await refreshSelectedProject(editingProject.id);
             await loadListData();
+            showToast(t("projects.toasts.saveSuccess"), "success");
           }}
         />
 
@@ -499,8 +581,10 @@ export function ProjectsPage() {
                 editingSection.id,
                 payload,
               );
+              showToast(t("projects.toasts.sectionUpdated"), "success");
             } else {
               await addSection(selectedProject.id, payload);
+              showToast(t("projects.toasts.sectionAdded"), "success");
             }
             await refreshSelectedProject(selectedProject.id);
             await loadListData();
@@ -519,10 +603,35 @@ export function ProjectsPage() {
               setEditingTask(null);
             }}
             onSubmit={async (payload) => {
+              const wasCompleted = editingTask?.status === "completed";
               if (editingTask) {
                 await updateTask(selectedProject.id, editingTask.id, payload);
+                if (payload.status === "completed" && !wasCompleted) {
+                  showToast(
+                    t("projects.toasts.taskCompleted", {
+                      points: pointsForPriority(payload.priority),
+                      count: Math.max(1, payload.assigneeIds.length),
+                    }),
+                    "success",
+                  );
+                } else if (wasCompleted && payload.status !== "completed") {
+                  showToast(t("projects.toasts.taskReopened"), "success");
+                } else {
+                  showToast(t("projects.toasts.taskUpdated"), "success");
+                }
               } else {
                 await addTask(selectedProject.id, payload);
+                if (payload.status === "completed") {
+                  showToast(
+                    t("projects.toasts.taskCompleted", {
+                      points: pointsForPriority(payload.priority),
+                      count: Math.max(1, payload.assigneeIds.length),
+                    }),
+                    "success",
+                  );
+                } else {
+                  showToast(t("projects.toasts.taskAdded"), "success");
+                }
               }
               await refreshSelectedProject(selectedProject.id);
             }}
@@ -538,6 +647,7 @@ export function ProjectsPage() {
             await addInvitation(payload);
             await refreshSelectedProject(selectedProject.id);
             await loadListData();
+            showToast(t("projects.toasts.inviteSent"), "success");
           }}
         />
       </>
@@ -590,6 +700,14 @@ export function ProjectsPage() {
               setIsProjectModalOpen(true);
             }}
             onDelete={(project) => void handleDeleteProject(project)}
+            onAddTask={(project) => {
+              setPendingOpenTaskModal(true);
+              openProjectDetail(project);
+            }}
+            onAddClick={() => {
+              setEditingProject(null);
+              setIsProjectModalOpen(true);
+            }}
           />
         ) : (
           <InvitationsTable
@@ -601,30 +719,42 @@ export function ProjectsPage() {
               try {
                 await updateInvitationStatus(invitation, "accepted");
                 await loadListData();
+                showToast(t("projects.toasts.inviteAccepted"), "success");
               } catch (err) {
-                setError(
-                  getThrownErrorMessage(err, t("projects.page.loadError")),
+                const message = getThrownErrorMessage(
+                  err,
+                  t("projects.page.loadError"),
                 );
+                setError(message);
+                showToast(message, "error");
               }
             }}
             onReject={async (invitation) => {
               try {
                 await updateInvitationStatus(invitation, "rejected");
                 await loadListData();
+                showToast(t("projects.toasts.inviteRejected"), "success");
               } catch (err) {
-                setError(
-                  getThrownErrorMessage(err, t("projects.page.loadError")),
+                const message = getThrownErrorMessage(
+                  err,
+                  t("projects.page.loadError"),
                 );
+                setError(message);
+                showToast(message, "error");
               }
             }}
             onCancel={async (invitation) => {
               try {
                 await updateInvitationStatus(invitation, "cancelled");
                 await loadListData();
+                showToast(t("projects.toasts.inviteCancelled"), "success");
               } catch (err) {
-                setError(
-                  getThrownErrorMessage(err, t("projects.page.loadError")),
+                const message = getThrownErrorMessage(
+                  err,
+                  t("projects.page.loadError"),
                 );
+                setError(message);
+                showToast(message, "error");
               }
             }}
           />
@@ -641,9 +771,11 @@ export function ProjectsPage() {
         onSubmit={async (payload) => {
           if (editingProject) {
             await updateProject(editingProject.id, payload);
+            showToast(t("projects.toasts.saveSuccess"), "success");
           } else {
             await addProject(payload);
             setProjectsPage(1);
+            showToast(t("projects.toasts.addSuccess"), "success");
           }
           await loadListData();
         }}
@@ -656,6 +788,7 @@ export function ProjectsPage() {
         onSubmit={async (payload) => {
           await addInvitation(payload);
           await loadListData();
+          showToast(t("projects.toasts.inviteSent"), "success");
         }}
       />
     </>

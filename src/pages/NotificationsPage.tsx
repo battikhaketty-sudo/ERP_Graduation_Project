@@ -1,8 +1,9 @@
-import { Search } from "lucide-react";
+import { CheckCheck, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getNotificationsSeed } from "../data/notifications";
 import { AddProjectButton } from "../components/ui/AddProjectButton";
+import { useToast } from "../context/ToastContext";
 import { usePreferences } from "../context/PreferencesContext";
+import { useNotifications } from "../hooks/useNotifications";
 import { useTranslation } from "../i18n";
 
 const PAGE_SIZE = 3;
@@ -10,11 +11,11 @@ const PAGE_SIZE = 3;
 export function NotificationsPage() {
   const { dir, locale } = usePreferences();
   const { t } = useTranslation();
+  const { showToast } = useToast();
+  const { notifications, markRead, remove } = useNotifications(locale);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  const notifications = useMemo(() => getNotificationsSeed(locale), [locale]);
 
   const filteredNotifications = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -42,6 +43,15 @@ export function NotificationsPage() {
     return pages.slice(0, 5);
   }, [totalPages]);
 
+  const pageIds = useMemo(
+    () => pageNotifications.map((item) => item.id),
+    [pageNotifications],
+  );
+
+  const selectedCount = selectedIds.size;
+  const allPageSelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
@@ -52,6 +62,14 @@ export function NotificationsPage() {
     setCurrentPage(1);
   }, [search, locale]);
 
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const available = new Set(notifications.map((item) => item.id));
+      const next = new Set([...prev].filter((id) => available.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [notifications]);
+
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -59,6 +77,46 @@ export function NotificationsPage() {
       else next.add(id);
       return next;
     });
+  };
+
+  const toggleSelectPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        pageIds.forEach((id) => next.delete(id));
+      } else {
+        pageIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleMarkRead = () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    markRead(ids);
+    clearSelection();
+    showToast(
+      t("notifications.toasts.markedRead", { count: String(ids.length) }),
+      "success",
+    );
+  };
+
+  const handleDelete = () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    const confirmed = window.confirm(
+      t("notifications.confirmDelete", { count: String(ids.length) }),
+    );
+    if (!confirmed) return;
+    remove(ids);
+    clearSelection();
+    showToast(
+      t("notifications.toasts.deleted", { count: String(ids.length) }),
+      "success",
+    );
   };
 
   return (
@@ -92,11 +150,60 @@ export function NotificationsPage() {
       </header>
 
       <section className="hr-card border border-hr-border">
+        {selectedCount > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-hr-border bg-hr-hover/40 px-4 py-3 sm:px-6">
+            <span className="me-auto text-sm font-medium text-hr-text">
+              {t("notifications.selectedCount", { count: String(selectedCount) })}
+            </span>
+            <button
+              type="button"
+              onClick={handleMarkRead}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-hr-border bg-hr-surface px-3 text-sm font-medium text-hr-text transition hover:border-hr-primary hover:text-hr-primary"
+            >
+              <CheckCheck className="size-4" />
+              {t("notifications.markRead")}
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-200 bg-hr-surface px-3 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-950/30"
+            >
+              <Trash2 className="size-4" />
+              {t("notifications.deleteSelected")}
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="h-9 rounded-lg px-3 text-sm text-hr-muted transition hover:text-hr-text"
+            >
+              {t("notifications.clearSelection")}
+            </button>
+          </div>
+        )}
+
+        {pageNotifications.length > 0 && (
+          <div className="flex items-center gap-3 border-b border-hr-border px-4 py-2.5 sm:px-6">
+            <input
+              type="checkbox"
+              checked={allPageSelected}
+              onChange={toggleSelectPage}
+              className="size-4 rounded border-hr-border text-hr-primary focus:ring-hr-primary/30"
+              aria-label={t("notifications.selectAllPage")}
+            />
+            <span className="text-xs text-hr-muted">
+              {t("notifications.selectAllPage")}
+            </span>
+          </div>
+        )}
+
         <div className="divide-y divide-hr-border">
           {pageNotifications.map((item) => (
             <article
               key={item.id}
-              className="flex items-start gap-4 px-4 py-4 sm:px-6 sm:py-5"
+              className={[
+                "flex items-start gap-4 px-4 py-4 sm:px-6 sm:py-5",
+                item.read ? "opacity-80" : "bg-hr-primary/[0.03]",
+              ].join(" ")}
             >
               <input
                 type="checkbox"
@@ -107,9 +214,23 @@ export function NotificationsPage() {
               />
 
               <div className="min-w-0 flex-1">
-                <h2 className="mb-1 text-sm font-bold text-hr-text sm:text-base">
-                  {item.title}
-                </h2>
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <h2
+                    className={[
+                      "text-sm sm:text-base",
+                      item.read
+                        ? "font-medium text-hr-text"
+                        : "font-bold text-hr-text",
+                    ].join(" ")}
+                  >
+                    {item.title}
+                  </h2>
+                  {!item.read && (
+                    <span className="rounded-full bg-hr-primary/15 px-2 py-0.5 text-[10px] font-bold text-hr-primary">
+                      {t("notifications.unreadBadge")}
+                    </span>
+                  )}
+                </div>
                 <p className="line-clamp-2 text-xs leading-6 text-hr-muted sm:text-sm">
                   {item.description}
                 </p>

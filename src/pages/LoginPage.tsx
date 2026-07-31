@@ -14,7 +14,7 @@ export function LoginPage() {
   const { dir } = usePreferences();
   const from =
     (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ||
-    ROUTES.projects;
+    ROUTES.dashboard;
   const sessionExpiredMessage = (
     location.state as { sessionExpired?: boolean; message?: string } | null
   )?.message;

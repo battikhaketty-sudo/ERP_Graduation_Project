@@ -18,10 +18,20 @@ import {
   isValidPhone,
   sanitizeEmployeeField,
 } from "../../utils/inputConstraints";
+import {
+  getBirthDateIssue,
+  normalizeBirthDateValue,
+} from "../../utils/employeeDates";
+import {
+  afterValidationPaint,
+  focusAndScrollToFirstError,
+} from "../../utils/formUx";
 import { mapNamedOptions } from "../../utils/selectOptions";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
+import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { PasswordInput } from "../ui/PasswordInput";
+import { ManualDateInput } from "../ui/ManualDateInput";
 import { EmployeeResumeSkillsEditor } from "./EmployeeResumeSkillsEditor";
 import {
   emptyEmployeeSkillRow,
@@ -74,6 +84,7 @@ export function AddEmployeeModal({
   );
   const [activeTab, setActiveTab] = useState<TabType>("personal");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  useModalDismiss(onClose, isOpen && !isSubmitting);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -138,6 +149,25 @@ export function AddEmployeeModal({
     >,
   ) => {
     const { name, value } = e.target;
+    if (name === "birthDate") {
+      const normalized = normalizeBirthDateValue(value) || value;
+      setFormData((prev) => ({ ...prev, birthDate: normalized }));
+      const issue = getBirthDateIssue(normalized);
+      setErrors((prev) => ({
+        ...prev,
+        birthDate:
+          issue === "invalid"
+            ? t("employees.errors.birthDateInvalid")
+            : issue === "future"
+              ? t("employees.errors.birthDateFuture")
+              : issue === "tooYoung"
+                ? t("employees.errors.birthDateTooYoung")
+                : issue === "tooOld"
+                  ? t("employees.errors.birthDateTooOld")
+                  : "",
+      }));
+      return;
+    }
     const sanitized = sanitizeEmployeeField(name, value);
     setFormData((prev) => ({ ...prev, [name]: sanitized }));
     if (errors[name]) {
@@ -149,12 +179,34 @@ export function AddEmployeeModal({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!file.type.startsWith("image/")) {
+      setErrors((prev) => ({
+        ...prev,
+        personalImage: t("employees.errors.photoInvalid"),
+      }));
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors((prev) => ({
+        ...prev,
+        personalImage: t("employees.errors.photoTooLarge"),
+      }));
+      e.target.value = "";
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       setFormData((prev) => ({
         ...prev,
         personalImage: (event.target?.result as string) || "",
       }));
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.personalImage;
+        return next;
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -191,19 +243,37 @@ export function AddEmployeeModal({
       nextErrors.contractTypeId = t("employees.errors.contractTypeRequired");
     }
 
+    const birthIssue = getBirthDateIssue(formData.birthDate);
+    if (birthIssue === "invalid") {
+      nextErrors.birthDate = t("employees.errors.birthDateInvalid");
+    } else if (birthIssue === "future") {
+      nextErrors.birthDate = t("employees.errors.birthDateFuture");
+    } else if (birthIssue === "tooYoung") {
+      nextErrors.birthDate = t("employees.errors.birthDateTooYoung");
+    } else if (birthIssue === "tooOld") {
+      nextErrors.birthDate = t("employees.errors.birthDateTooOld");
+    }
+
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
-      if (nextErrors.fullName || nextErrors.email || nextErrors.phone) {
+      if (
+        nextErrors.fullName ||
+        nextErrors.email ||
+        nextErrors.phone ||
+        nextErrors.birthDate
+      ) {
         setActiveTab("personal");
       } else if (nextErrors.departmentId) {
         setActiveTab("work");
       } else if (nextErrors.contractTypeId) {
         setActiveTab("payroll");
       }
+      afterValidationPaint(() => focusAndScrollToFirstError());
+      return false;
     }
 
-    return Object.keys(nextErrors).length === 0;
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -337,13 +407,31 @@ export function AddEmployeeModal({
                   />
                 </EmployeeField>
 
-                <EmployeeField label={t("employees.modal.fields.birthDate")}>
-                  <input
-                    type="date"
+                <EmployeeField
+                  label={t("employees.modal.fields.birthDate")}
+                  error={errors.birthDate}
+                >
+                  <ManualDateInput
                     name="birthDate"
                     value={formData.birthDate}
-                    onChange={handleChange}
-                    className={inputClass}
+                    onChange={(birthDate) => {
+                      setFormData((prev) => ({ ...prev, birthDate }));
+                      const issue = getBirthDateIssue(birthDate);
+                      setErrors((prev) => ({
+                        ...prev,
+                        birthDate:
+                          issue === "invalid"
+                            ? t("employees.errors.birthDateInvalid")
+                            : issue === "future"
+                              ? t("employees.errors.birthDateFuture")
+                              : issue === "tooYoung"
+                                ? t("employees.errors.birthDateTooYoung")
+                                : issue === "tooOld"
+                                  ? t("employees.errors.birthDateTooOld")
+                                  : "",
+                      }));
+                    }}
+                    aria-invalid={Boolean(errors.birthDate)}
                   />
                 </EmployeeField>
 
@@ -432,7 +520,10 @@ export function AddEmployeeModal({
                 </EmployeeField>
               </div>
 
-              <EmployeeField label={t("employees.modal.fields.photo")}>
+              <EmployeeField
+                label={t("employees.modal.fields.photo")}
+                error={errors.personalImage}
+              >
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -601,12 +692,12 @@ export function AddEmployeeModal({
                   label={t("employees.modal.fields.contractStart")}
                   hint={t("employees.modal.fields.contractStartHint")}
                 >
-                  <input
-                    type="date"
+                  <ManualDateInput
                     name="joiningDate"
                     value={formData.joiningDate}
-                    onChange={handleChange}
-                    className={inputClass}
+                    onChange={(joiningDate) =>
+                      setFormData((prev) => ({ ...prev, joiningDate }))
+                    }
                   />
                 </EmployeeField>
 
@@ -614,12 +705,12 @@ export function AddEmployeeModal({
                   label={t("employees.modal.fields.contractEnd")}
                   hint={t("employees.modal.fields.contractEndHint")}
                 >
-                  <input
-                    type="date"
+                  <ManualDateInput
                     name="contractEndDate"
                     value={formData.contractEndDate}
-                    onChange={handleChange}
-                    className={inputClass}
+                    onChange={(contractEndDate) =>
+                      setFormData((prev) => ({ ...prev, contractEndDate }))
+                    }
                   />
                 </EmployeeField>
               </div>

@@ -11,6 +11,7 @@ import { AttendanceRowActions } from "../components/hr/AttendanceRowActions";
 import { TableAddButton, TableToolbar } from "../components/ui/TableToolbar";
 import { useAuth } from "../hooks/useAuth";
 import { DateTimeInput } from "../components/ui/DateTimeInput";
+import { ManualDateInput } from "../components/ui/ManualDateInput";
 import { FormField } from "../components/ui/FormField";
 import {
   alertErrorClass,
@@ -1240,24 +1241,22 @@ export function HrPage() {
             />
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex min-w-[150px] items-center gap-1.5">
             <span className="text-sm text-hr-muted">{t("common.from")}</span>
-            <input
-              type="date"
+            <ManualDateInput
               value={attendanceDateFrom}
-              onChange={(e) => setAttendanceDateFrom(e.target.value)}
-              className="h-9 rounded-lg border border-hr-border bg-hr-surface px-2 text-sm outline-none focus:border-hr-primary"
+              onChange={setAttendanceDateFrom}
+              className="!h-9"
               aria-label={t("common.from")}
             />
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex min-w-[150px] items-center gap-1.5">
             <span className="text-sm text-hr-muted">{t("common.to")}</span>
-            <input
-              type="date"
+            <ManualDateInput
               value={attendanceDateTo}
-              onChange={(e) => setAttendanceDateTo(e.target.value)}
-              className="h-9 rounded-lg border border-hr-border bg-hr-surface px-2 text-sm outline-none focus:border-hr-primary"
+              onChange={setAttendanceDateTo}
+              className="!h-9"
               aria-label={t("common.to")}
             />
           </div>

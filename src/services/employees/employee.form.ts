@@ -1,5 +1,9 @@
 import type { Employee } from "../../types/employee";
 import { DEFAULT_EMPLOYEE_PASSWORD } from "../../constants/defaults";
+import {
+  getBirthDateIssue,
+  normalizeBirthDateValue,
+} from "../../utils/employeeDates";
 import { toApiGender } from "./employee.mapper";
 
 const toBlob = async (base64Image: string) => {
@@ -15,15 +19,18 @@ const appendImageIfDataUrl = async (
 ) => {
   if (!value?.startsWith("data:")) return;
   const blob = await toBlob(value);
+  const mime = blob.type || "image/jpeg";
   const extension =
-    blob.type === "image/png"
+    mime === "image/png"
       ? "png"
-      : blob.type === "image/webp"
+      : mime === "image/webp"
         ? "webp"
-        : blob.type === "image/gif"
+        : mime === "image/gif"
           ? "gif"
           : "jpg";
-  formData.append(fieldName, blob, `${fileNameBase}.${extension}`);
+  // File (not bare Blob) binds more reliably to ASP.NET IFormFile.
+  const file = new File([blob], `${fileNameBase}.${extension}`, { type: mime });
+  formData.append(fieldName, file);
 };
 
 export const buildEmployeeFormData = async (
@@ -43,7 +50,12 @@ export const buildEmployeeFormData = async (
   formData.append("PersonalInfo.MobileNumber", data.phone.trim());
 
   if (data.birthDate) {
-    formData.append("PersonalInfo.Birthday", new Date(data.birthDate).toISOString());
+    const normalized = normalizeBirthDateValue(data.birthDate);
+    if (!normalized || getBirthDateIssue(normalized)) {
+      throw new Error("INVALID_BIRTH_DATE");
+    }
+    // Noon UTC avoids day-shift when the browser is behind/ahead of UTC.
+    formData.append("PersonalInfo.Birthday", `${normalized}T12:00:00.000Z`);
   }
 
   formData.append("WorkInfo.DepartmentId", data.departmentId || "");

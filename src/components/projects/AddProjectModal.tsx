@@ -3,6 +3,7 @@ import { usePreferences } from "../../context/PreferencesContext";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
 import { useProjectLabels } from "../../hooks/useProjectLabels";
 import { useModalAutoFocus } from "../../hooks/useModalAutoFocus";
+import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { useTranslation } from "../../i18n";
 import type {
   Project,
@@ -11,8 +12,14 @@ import type {
 } from "../../types/project";
 import { mapNamedOptions } from "../../utils/selectOptions";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { ManualDateInput } from "../ui/ManualDateInput";
 import { readOnlyClass } from "../ui/formStyles";
-import { alertErrorClass, cancelBtnClass, ModalCloseButton, ModalTitleBar } from "../ui/modalStyles";
+import {
+  alertErrorClass,
+  cancelBtnClass,
+  ModalCloseButton,
+  ModalTitleBar,
+} from "../ui/modalStyles";
 import {
   inputClass,
   modalCardClass,
@@ -60,6 +67,7 @@ export function AddProjectModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstFieldRef = useModalAutoFocus<HTMLInputElement>(isOpen);
+  useModalDismiss(onClose, isOpen && !saving);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -208,32 +216,28 @@ export function AddProjectModal({
               <label className="mb-2 block text-sm text-hr-text">
                 {t("projects.modals.addProject.fields.startDate")}
               </label>
-              <input
-                type="date"
+              <ManualDateInput
                 value={form.startDate}
-                onChange={(event) =>
+                onChange={(startDate) =>
                   setForm((prev) => ({
                     ...prev,
-                    startDate: event.target.value,
+                    startDate,
                   }))
                 }
-                className={inputClass}
               />
             </div>
             <div>
               <label className="mb-2 block text-sm text-hr-text">
                 {t("projects.modals.addProject.fields.endDate")}
               </label>
-              <input
-                type="date"
+              <ManualDateInput
                 value={form.endDate}
-                onChange={(event) =>
+                onChange={(endDate) =>
                   setForm((prev) => ({
                     ...prev,
-                    endDate: event.target.value,
+                    endDate,
                   }))
                 }
-                className={inputClass}
               />
             </div>
           </div>

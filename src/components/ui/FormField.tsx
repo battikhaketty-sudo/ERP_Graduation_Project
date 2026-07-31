@@ -18,7 +18,10 @@ export function FormField({
   htmlFor,
 }: FormFieldProps) {
   return (
-    <div className="mb-4 text-start">
+    <div
+      className="mb-4 text-start"
+      data-field-error={error ? "true" : undefined}
+    >
       <label htmlFor={htmlFor} className="mb-2 block text-sm font-medium text-hr-text">
         {label}
         {required && <span className="text-red-500"> *</span>}

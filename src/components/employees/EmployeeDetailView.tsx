@@ -17,9 +17,19 @@ import {
   sanitizeDecimalInput,
   sanitizeEmployeeField,
 } from "../../utils/inputConstraints";
+import {
+  getBirthDateIssue,
+  normalizeBirthDateValue,
+} from "../../utils/employeeDates";
+import {
+  afterValidationPaint,
+  focusAndScrollToFirstError,
+} from "../../utils/formUx";
 import { mapNamedOptions } from "../../utils/selectOptions";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { ManualDateInput } from "../ui/ManualDateInput";
+import { EmployeeAvatar } from "./EmployeeAvatar";
 import { EmployeeIdImageField } from "./EmployeeIdImageField";
 import {
   alertErrorClass,
@@ -154,6 +164,37 @@ export function EmployeeDetailView({
     }
   };
 
+  const birthDateErrorMessage = (issue: ReturnType<typeof getBirthDateIssue>) => {
+    if (issue === "invalid") return t("employees.errors.birthDateInvalid");
+    if (issue === "future") return t("employees.errors.birthDateFuture");
+    if (issue === "tooYoung") return t("employees.errors.birthDateTooYoung");
+    if (issue === "tooOld") return t("employees.errors.birthDateTooOld");
+    return null;
+  };
+
+  useEffect(() => {
+    const normalized = normalizeBirthDateValue(editData.birthDate);
+    if (normalized && normalized !== editData.birthDate) {
+      setEditData((prev) => ({ ...prev, birthDate: normalized }));
+      return;
+    }
+    const message = birthDateErrorMessage(getBirthDateIssue(editData.birthDate));
+    setFieldErrors((prev) => {
+      const current = prev.birthDate || "";
+      const next = message || "";
+      if (current === next) return prev;
+      return { ...prev, birthDate: next };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only recheck when birthDate changes
+  }, [editData.birthDate, t]);
+
+  const handleBirthDateChange = (raw: string) => {
+    const value = normalizeBirthDateValue(raw) || raw;
+    setEditData((prev) => ({ ...prev, birthDate: value }));
+    const message = birthDateErrorMessage(getBirthDateIssue(value));
+    setFieldErrors((prev) => ({ ...prev, birthDate: message || "" }));
+  };
+
   const validateBeforeSave = () => {
     const nextErrors: Record<string, string> = {};
 
@@ -172,9 +213,20 @@ export function EmployeeDetailView({
     if (editData.email?.trim() && !isValidEmail(editData.email)) {
       nextErrors.email = t("employees.errors.emailInvalid");
     }
+    const birthMessage = birthDateErrorMessage(
+      getBirthDateIssue(editData.birthDate),
+    );
+    if (birthMessage) {
+      nextErrors.birthDate = birthMessage;
+      setActiveTab("personal");
+    }
 
     setFieldErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    if (Object.keys(nextErrors).length > 0) {
+      afterValidationPaint(() => focusAndScrollToFirstError());
+      return false;
+    }
+    return true;
   };
 
   const handleSave = async () => {
@@ -217,7 +269,12 @@ export function EmployeeDetailView({
         }
       }
 
-      const merged = { ...updated, userAccount };
+      const keptLocalPhoto =
+        editData.avatar?.startsWith("data:") &&
+        (!updated.avatar || updated.avatar.includes("ui-avatars.com"))
+          ? editData.avatar
+          : updated.avatar;
+      const merged = { ...updated, userAccount, avatar: keptLocalPhoto };
       setEditData(merged);
       if (userAccount) {
         setSelectedRoleIds(userAccount.roles.map((role) => role.roleId));
@@ -232,7 +289,22 @@ export function EmployeeDetailView({
         setError(roleWarning);
       }
     } catch (err) {
-      setError(getThrownErrorMessage(err, t("employees.errors.save")));
+      const message = getThrownErrorMessage(err, t("employees.errors.save"));
+      if (
+        err &&
+        typeof err === "object" &&
+        "message" in err &&
+        String(err.message) === "INVALID_BIRTH_DATE"
+      ) {
+        setActiveTab("personal");
+        setFieldErrors((prev) => ({
+          ...prev,
+          birthDate: t("employees.errors.birthDateTooYoung"),
+        }));
+        setError(t("employees.errors.birthDateTooYoung"));
+      } else {
+        setError(message);
+      }
     } finally {
       setSaving(false);
     }
@@ -254,7 +326,7 @@ export function EmployeeDetailView({
 
   return (
     <main
-      className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6"
+      className="min-w-0 flex-1 bg-hr-bg px-4 py-4 sm:px-6 sm:py-6"
       dir={dir}
     >
       <DetailBackButton
@@ -320,14 +392,14 @@ export function EmployeeDetailView({
                       className={inputClass}
                     />
                   </EmployeeField>
-                  <EmployeeField label={t("employees.detail.fields.birthDate")}>
-                    <input
-                      type="date"
+                  <EmployeeField
+                    label={t("employees.detail.fields.birthDate")}
+                    error={fieldErrors.birthDate}
+                  >
+                    <ManualDateInput
                       value={editData.birthDate || ""}
-                      onChange={(e) =>
-                        handleChange("birthDate", e.target.value)
-                      }
-                      className={inputClass}
+                      onChange={handleBirthDateChange}
+                      aria-invalid={Boolean(fieldErrors.birthDate)}
                     />
                   </EmployeeField>
                   <EmployeeField label={t("employees.detail.fields.gender")}>
@@ -465,21 +537,17 @@ export function EmployeeDetailView({
                   </EmployeeField>
                   <EmployeeField label={t("employees.detail.fields.contractDuration")}>
                     <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="date"
+                      <ManualDateInput
                         value={editData.joiningDate || ""}
-                        onChange={(e) =>
-                          handleChange("joiningDate", e.target.value)
+                        onChange={(joiningDate) =>
+                          handleChange("joiningDate", joiningDate)
                         }
-                        className={inputClass}
                       />
-                      <input
-                        type="date"
+                      <ManualDateInput
                         value={editData.contractEndDate || ""}
-                        onChange={(e) =>
-                          handleChange("contractEndDate", e.target.value)
+                        onChange={(contractEndDate) =>
+                          handleChange("contractEndDate", contractEndDate)
                         }
-                        className={inputClass}
                       />
                     </div>
                   </EmployeeField>
@@ -699,8 +767,9 @@ export function EmployeeDetailView({
               <p className="self-start text-sm font-medium text-hr-text">
                 {t("employees.detail.fields.photo")}
               </p>
-              <img
+              <EmployeeAvatar
                 src={editData.avatar}
+                name={editData.name}
                 alt={editData.name}
                 className="h-[180px] w-[170px] rounded-2xl border border-hr-border object-cover"
               />
@@ -716,6 +785,12 @@ export function EmployeeDetailView({
                     if (!file) return;
                     if (!file.type.startsWith("image/")) {
                       setError(t("employees.errors.photoInvalid"));
+                      event.target.value = "";
+                      return;
+                    }
+                    // Keep uploads reasonable for multipart forms (~5MB).
+                    if (file.size > 5 * 1024 * 1024) {
+                      setError(t("employees.errors.photoTooLarge"));
                       event.target.value = "";
                       return;
                     }

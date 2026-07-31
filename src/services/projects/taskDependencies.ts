@@ -13,8 +13,9 @@ export type TaskFlowNodeLayout = {
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 96;
-const LAYER_GAP_X = 280;
-const LAYER_GAP_Y = 130;
+const LAYER_GAP_X = 300;
+/** Must stay > NODE_HEIGHT so siblings in one layer never overlap. */
+const LAYER_GAP_Y = NODE_HEIGHT + 56;
 
 const taskStatus = (task: ProjectTask): TaskStatus =>
   task.status === "completed" || task.status === "in_progress" || task.status === "todo"
@@ -199,17 +200,115 @@ export const buildDependencyLayers = (tasks: ProjectTask[]): string[][] => {
   return layers;
 };
 
+const spreadLayerYs = (count: number, gap: number) => {
+  if (count <= 0) return [];
+  if (count === 1) return [0];
+  const totalHeight = (count - 1) * gap;
+  const startY = -totalHeight / 2;
+  return Array.from({ length: count }, (_, index) => startY + index * gap);
+};
+
+/**
+ * Layered layout that keeps multi-parent fan-in readable:
+ * e.g. t3 depends on t1+t2, t2 depends on t1 → t2 is offset vertically
+ * so arrows t1→t3 and t2→t3 do not collapse into one straight line.
+ */
 export const layoutTaskDependencyGraph = (
   tasks: ProjectTask[],
 ): TaskFlowNodeLayout[] => {
   const byId = new Map(tasks.map((task) => [task.id, task]));
   const layers = buildDependencyLayers(tasks);
-  const layouts: TaskFlowNodeLayout[] = [];
-
+  const layerOf = new Map<string, number>();
   layers.forEach((layer, layerIndex) => {
-    const totalHeight = layer.length * LAYER_GAP_Y;
-    const startY = -totalHeight / 2 + LAYER_GAP_Y / 2;
+    layer.forEach((id) => layerOf.set(id, layerIndex));
+  });
 
+  const yOf = new Map<string, number>();
+
+  // Seed Y from layer order.
+  layers.forEach((layer) => {
+    const ys = spreadLayerYs(layer.length, LAYER_GAP_Y);
+    layer.forEach((id, index) => yOf.set(id, ys[index] ?? 0));
+  });
+
+  // Barycenter passes: order siblings by parent average, then park on fixed slots
+  // (never blend toward parent Y — that collapses cards on top of each other).
+  for (let pass = 0; pass < 3; pass++) {
+    layers.forEach((layer) => {
+      const scored = layer.map((id) => {
+        const task = byId.get(id);
+        const parents = (task?.dependsOnTaskIds ?? []).filter((depId) =>
+          yOf.has(depId),
+        );
+        const desired = parents.length
+          ? parents.reduce((sum, depId) => sum + (yOf.get(depId) ?? 0), 0) /
+            parents.length
+          : (yOf.get(id) ?? 0);
+        return { id, desired };
+      });
+      scored.sort(
+        (a, b) => a.desired - b.desired || a.id.localeCompare(b.id),
+      );
+      const ys = spreadLayerYs(scored.length, LAYER_GAP_Y);
+      scored.forEach((item, index) => {
+        yOf.set(item.id, scored.length === 1 ? item.desired : (ys[index] ?? 0));
+      });
+    });
+  }
+
+  // Fan-in fix: if a node has 2+ parents sitting on the same Y, spread parents.
+  tasks.forEach((task) => {
+    const parents = (task.dependsOnTaskIds ?? []).filter((id) => yOf.has(id));
+    if (parents.length < 2) return;
+
+    const rounded = parents.map((id) => Math.round((yOf.get(id) ?? 0) / 10));
+    const unique = new Set(rounded);
+    if (unique.size === parents.length) {
+      const avg =
+        parents.reduce((sum, id) => sum + (yOf.get(id) ?? 0), 0) / parents.length;
+      yOf.set(task.id, avg);
+      return;
+    }
+
+    const ordered = [...parents].sort((a, b) => a.localeCompare(b));
+    const ys = spreadLayerYs(ordered.length, LAYER_GAP_Y);
+    ordered.forEach((id, index) => yOf.set(id, ys[index] ?? 0));
+    const avg =
+      ordered.reduce((sum, id) => sum + (yOf.get(id) ?? 0), 0) / ordered.length;
+    yOf.set(task.id, avg);
+  });
+
+  // Hard separation: re-slot every layer so cards never overlap.
+  layers.forEach((layer) => {
+    if (layer.length <= 1) return;
+    const ordered = [...layer].sort(
+      (a, b) =>
+        (yOf.get(a) ?? 0) - (yOf.get(b) ?? 0) || a.localeCompare(b),
+    );
+    const ys = spreadLayerYs(ordered.length, LAYER_GAP_Y);
+    ordered.forEach((id, index) => yOf.set(id, ys[index] ?? 0));
+  });
+
+  // Single-node layers with a skip-incoming edge: nudge off the main axis
+  // so the long arrow bows clear of the middle chain.
+  layers.forEach((layer, layerIndex) => {
+    if (layer.length !== 1 || layerIndex === 0) return;
+    const id = layer[0];
+    const task = byId.get(id);
+    if (!task) return;
+    const parents = (task.dependsOnTaskIds ?? []).filter((depId) =>
+      layerOf.has(depId),
+    );
+    const hasSkip = parents.some(
+      (depId) => (layerOf.get(id) ?? 0) - (layerOf.get(depId) ?? 0) > 1,
+    );
+    if (!hasSkip) return;
+    if (Math.abs(yOf.get(id) ?? 0) > 8) return;
+    yOf.set(id, LAYER_GAP_Y * 0.35);
+  });
+
+  const layouts: TaskFlowNodeLayout[] = [];
+  layers.forEach((layer, layerIndex) => {
     layer.forEach((taskId, indexInLayer) => {
       const task = byId.get(taskId);
       if (!task) return;
@@ -217,9 +316,8 @@ export const layoutTaskDependencyGraph = (
         taskId,
         layer: layerIndex,
         indexInLayer,
-        // Offset by 1 so Start can sit at layer 0.
         x: (layerIndex + 1) * LAYER_GAP_X,
-        y: startY + indexInLayer * LAYER_GAP_Y,
+        y: yOf.get(taskId) ?? 0,
         gate: getTaskGate(task, byId),
       });
     });
@@ -240,24 +338,61 @@ export const getTerminalLayout = (
   };
 };
 
+export type DependencyEdgeSpec = {
+  id: string;
+  source: string;
+  target: string;
+  /** How many layers this edge spans (1 = adjacent). */
+  span: number;
+  /** Index among edges entering the same target (for bow offset). */
+  fanIndex: number;
+  fanCount: number;
+};
+
 export const dependencyEdges = (
   tasks: ProjectTask[],
-): Array<{ id: string; source: string; target: string }> => {
+): DependencyEdgeSpec[] => {
   const ids = knownIds(tasks);
-  const edges: Array<{ id: string; source: string; target: string }> = [];
+  const layers = buildDependencyLayers(tasks);
+  const layerOf = new Map<string, number>();
+  layers.forEach((layer, layerIndex) => {
+    layer.forEach((id) => layerOf.set(id, layerIndex));
+  });
+
+  const raw: Array<{ id: string; source: string; target: string; span: number }> =
+    [];
 
   tasks.forEach((task) => {
     for (const depId of task.dependsOnTaskIds ?? []) {
       if (!ids.has(depId)) continue;
-      edges.push({
+      const span = Math.max(
+        1,
+        (layerOf.get(task.id) ?? 0) - (layerOf.get(depId) ?? 0),
+      );
+      raw.push({
         id: `${depId}->${task.id}`,
         source: depId,
         target: task.id,
+        span,
       });
     }
   });
 
-  return edges;
+  const fanCountByTarget = new Map<string, number>();
+  raw.forEach((edge) => {
+    fanCountByTarget.set(
+      edge.target,
+      (fanCountByTarget.get(edge.target) ?? 0) + 1,
+    );
+  });
+  const fanIndexByTarget = new Map<string, number>();
+
+  return raw.map((edge) => {
+    const fanCount = fanCountByTarget.get(edge.target) ?? 1;
+    const fanIndex = fanIndexByTarget.get(edge.target) ?? 0;
+    fanIndexByTarget.set(edge.target, fanIndex + 1);
+    return { ...edge, fanIndex, fanCount };
+  });
 };
 
 /**

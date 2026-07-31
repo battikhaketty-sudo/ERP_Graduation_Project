@@ -8,6 +8,7 @@ import { CopyableIdCell } from "../ui/CopyableIdCell";
 import { TableRowIndex } from "../ui/TableRowIndex";
 import { EmptyState } from "../EmptyState";
 import { TablePanelHeader } from "../ui/TablePanelHeader";
+import { EmployeeAvatar } from "./EmployeeAvatar";
 
 type EmployeeTableProps = {
   employees: Employee[];
@@ -132,9 +133,9 @@ export function EmployeeTable({
                   </td>
                   <td className={`px-3 py-3 align-middle ${nameAlignClass}`}>
                     <div className="inline-flex max-w-full items-center gap-2">
-                      <img
+                      <EmployeeAvatar
                         src={employee.avatar}
-                        alt=""
+                        name={employee.name}
                         className="size-9 shrink-0 rounded-full object-cover ring-1 ring-hr-border"
                       />
                       <span

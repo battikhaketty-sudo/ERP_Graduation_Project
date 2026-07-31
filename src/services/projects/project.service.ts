@@ -10,6 +10,7 @@ import type {
   SectionFormPayload,
   TaskFormPayload,
   TaskStats,
+  TaskStatus,
 } from "../../types/project";
 import {
   assertMutationSuccess,
@@ -46,6 +47,12 @@ import {
   removeSectionFromDeps,
   setSectionDependsOn,
 } from "./sectionDepsStorage";
+import {
+  clearProjectSectionEdgeLabels,
+  pruneProjectSectionEdgeLabels,
+  removeSectionFromEdgeLabels,
+  setIncomingSectionEdgeLabels,
+} from "./sectionEdgeLabelsStorage";
 import { sanitizeSectionDependsOn } from "./sectionDependencies";
 import {
   addProjectTask,
@@ -131,6 +138,7 @@ const persistSectionDependencies = (
   sectionId: string,
   dependsOnSectionIds: string[] | undefined,
   sections: ProjectSection[],
+  dependencyEdgeLabels?: Record<string, string>,
 ) => {
   if (dependsOnSectionIds === undefined) return;
 
@@ -153,6 +161,12 @@ const persistSectionDependencies = (
     sections: base,
   });
   setSectionDependsOn(projectId, sectionId, cleaned);
+  setIncomingSectionEdgeLabels(
+    projectId,
+    sectionId,
+    dependencyEdgeLabels ?? {},
+    cleaned,
+  );
 };
 
 const toIsoDate = (value: string) => {
@@ -316,6 +330,7 @@ export const deleteProject = async (id: string) => {
   clearProjectPoints(id);
   clearProjectFlowAnchors(id);
   clearProjectSectionDeps(id);
+  clearProjectSectionEdgeLabels(id);
   return { success: true as const };
 };
 
@@ -403,6 +418,10 @@ export const getProjectSections = async (projectId: string) => {
     projectId,
     scoped.map((section) => section.id),
   );
+  pruneProjectSectionEdgeLabels(
+    projectId,
+    scoped.map((section) => section.id),
+  );
   return attachSectionDependencies(projectId, scoped);
 };
 
@@ -451,6 +470,7 @@ export const addSection = async (projectId: string, payload: SectionFormPayload)
       createdSectionId,
       payload.dependsOnSectionIds ?? [],
       sections,
+      payload.dependencyEdgeLabels,
     );
   }
 
@@ -482,6 +502,7 @@ export const updateSection = async (
     sectionId,
     payload.dependsOnSectionIds,
     sections,
+    payload.dependencyEdgeLabels,
   );
 
   return getProjectById(projectId);
@@ -499,6 +520,7 @@ export const deleteSection = async (projectId: string, sectionId: string) => {
   assertMutationSuccess(response.data, "فشل حذف القسم.");
   unregisterSectionOwnership(projectId, sectionId);
   removeSectionFromDeps(projectId, sectionId);
+  removeSectionFromEdgeLabels(projectId, sectionId);
 
   const removedTasks = deleteTasksForSection(projectId, sectionId);
   removedTasks.forEach((task) => removeTaskPoints(task.id));
@@ -689,6 +711,40 @@ export const updateTask = async (
     next: updated,
   });
   return project;
+};
+
+/** Update only completion/progress status (awards or removes points). */
+export const updateTaskStatus = async (
+  projectId: string,
+  taskId: string,
+  status: TaskStatus,
+) => {
+  const previous = getProjectTasks(projectId).find((task) => task.id === taskId);
+  if (!previous) throw new Error("Task not found");
+
+  const updated = updateProjectTask(projectId, taskId, {
+    title: previous.title,
+    description: previous.description,
+    sectionId: previous.sectionId,
+    expectedHours: previous.expectedHours,
+    startDate: previous.startDate,
+    dueDate: previous.dueDate,
+    priority: previous.priority,
+    status,
+    assigneeIds: previous.assigneeIds,
+    assigneeNames: previous.assigneeNames,
+    dependsOnTaskIds: previous.dependsOnTaskIds,
+  });
+
+  const project = await getProjectById(projectId);
+  const awarded = syncTaskCompletionPoints({
+    projectId,
+    projectName: project.name,
+    previous,
+    next: updated,
+  });
+
+  return { project, task: updated, awarded };
 };
 
 export const deleteTask = async (projectId: string, taskId: string) => {

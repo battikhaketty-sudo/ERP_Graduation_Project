@@ -13,6 +13,7 @@ import type {
   ProjectSection,
   ProjectTask,
   TaskStats,
+  TaskStatus,
 } from "../../types/project";
 import { EditMemberModal } from "./EditMemberModal";
 import { ProjectKanbanBoard } from "./ProjectKanbanBoard";
@@ -41,6 +42,7 @@ type ProjectDetailViewProps = {
   onMoveSection: (sectionId: string, direction: "earlier" | "later") => void;
   onEditTask: (task: ProjectTask) => void;
   onDeleteTask: (task: ProjectTask) => void;
+  onSetTaskStatus: (task: ProjectTask, status: TaskStatus) => void;
   onInviteMember: () => void;
   onEditMember: (member: ProjectMember, role: string) => Promise<void>;
   onDeleteMember: (member: ProjectMember) => void;
@@ -64,9 +66,9 @@ export function ProjectDetailView({
   onAddSection,
   onEditSection,
   onDeleteSection,
-  onMoveSection,
   onEditTask,
   onDeleteTask,
+  onSetTaskStatus,
   onInviteMember,
   onEditMember,
   onDeleteMember,
@@ -78,7 +80,7 @@ export function ProjectDetailView({
     removeValue: clearSectionFromUrl,
     goBack: goBackFromSection,
   } = useUrlQueryNavigation({ param: "section" });
-  const [activeTab, setActiveTab] = useState<DetailTab>("general");
+  const [activeTab, setActiveTab] = useState<DetailTab>("kanban");
   const [selectedSection, setSelectedSection] = useState<ProjectSection | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [membersPage, setMembersPage] = useState(1);
@@ -142,12 +144,12 @@ export function ProjectDetailView({
   }, [clearSectionFromUrl, project.sections, sectionId]);
 
   const tabs: Array<{ key: DetailTab; label: string }> = [
+    { key: "kanban", label: t("projects.detail.tabs.kanban") },
     { key: "general", label: t("projects.detail.tabs.general") },
     { key: "members", label: t("projects.detail.tabs.members") },
     { key: "flow", label: t("projects.detail.tabs.flow") },
     { key: "sectionFlow", label: t("projects.detail.tabs.sectionFlow") },
     { key: "performance", label: t("projects.detail.tabs.performance") },
-    { key: "kanban", label: t("projects.detail.tabs.kanban") },
   ];
 
   const performanceRevision = useMemo(
@@ -172,15 +174,16 @@ export function ProjectDetailView({
         onAddTask={() => onAddTask(selectedSection.id)}
         onEditTask={onEditTask}
         onDeleteTask={onDeleteTask}
+        onSetTaskStatus={onSetTaskStatus}
       />
     );
   }
 
-  const showMembersTable = activeTab === "general" || activeTab === "members";
-  const showKanban = activeTab === "general" || activeTab === "members" || activeTab === "kanban";
+  const showMembersTable = activeTab === "members";
+  const showKanban = activeTab === "kanban";
 
   return (
-    <main className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6">
+    <main className="min-w-0 flex-1 bg-hr-bg px-4 py-4 sm:px-6 sm:py-6">
       <DetailBackButton
         label={t("projects.detail.backLabel")}
         onClick={onBack}
@@ -275,37 +278,43 @@ export function ProjectDetailView({
       {activeTab === "general" && (
         <section className={`mb-5 ${cardSurfaceClass} p-5`}>
           <div className="grid gap-4 sm:grid-cols-2">
-            <InfoItem
-              label={t("projects.detail.fields.number")}
-              value={project.id}
-              dir="ltr"
-            />
             <InfoItem label={t("projects.detail.fields.name")} value={project.name} />
-            <InfoItem
-              label={t("projects.detail.fields.description")}
-              value={project.description || t("common.dash")}
-            />
-            <InfoItem
-              label={t("projects.detail.fields.managerId")}
-              value={project.managerId || t("common.dash")}
-            />
-            <InfoItem label={t("projects.detail.fields.managerName")} value={project.managerName} />
-            <div>
+            <div className={subtlePanelClass}>
               <p className="mb-1 text-xs text-hr-muted">{t("projects.table.columns.status")}</p>
               <ProjectStatusBadge status={project.status} />
             </div>
             <InfoItem
-              label={t("projects.detail.fields.startDate")}
-              value={project.startDate || t("common.dash")}
+              label={t("projects.detail.fields.managerName")}
+              value={project.managerName || t("common.dash")}
             />
             <InfoItem
               label={t("projects.detail.fields.endDate")}
               value={project.endDate || t("common.dash")}
             />
             <InfoItem
-              label={t("projects.detail.fields.createdAt")}
-              value={project.createdAt || t("common.dash")}
+              label={t("projects.detail.fields.startDate")}
+              value={project.startDate || t("common.dash")}
             />
+            <InfoItem
+              label={t("projects.detail.fields.description")}
+              value={project.description || t("common.dash")}
+            />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onAddTask()}
+              className="h-10 rounded-xl bg-hr-primary px-5 text-sm font-bold text-white transition hover:bg-hr-primary-hover"
+            >
+              {t("projects.detail.flow.addTask")}
+            </button>
+            <button
+              type="button"
+              onClick={onEdit}
+              className="h-10 rounded-xl border border-hr-primary bg-hr-surface px-5 text-sm font-bold text-hr-primary transition hover:bg-hr-hover"
+            >
+              {t("projects.table.actions.changeStatus")}
+            </button>
           </div>
         </section>
       )}
@@ -335,6 +344,7 @@ export function ProjectDetailView({
           onAddSection={onAddSection}
           onAddTask={() => onAddTask()}
           onSectionClick={(section) => openSectionInUrl(section.id)}
+          onSetTaskStatus={onSetTaskStatus}
         />
       )}
 

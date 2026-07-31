@@ -8,6 +8,7 @@ import type { InvitationFormPayload, Project } from "../../types/project";
 import { mapNamedOptions } from "../../utils/selectOptions";
 import { FormField } from "../ui/FormField";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { ManualDateInput } from "../ui/ManualDateInput";
 import { alertErrorClass, cancelBtnClass, ModalCloseButton, ModalTitleBar } from "../ui/modalStyles";
 import {
   inputClass,
@@ -198,13 +199,11 @@ export function InviteMemberModal({
             <label className="mb-2 block text-sm text-hr-text">
               {t("projects.detail.fields.endDate")}
             </label>
-            <input
-              type="date"
+            <ManualDateInput
               value={form.expiresAt}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, expiresAt: event.target.value }))
+              onChange={(expiresAt) =>
+                setForm((prev) => ({ ...prev, expiresAt }))
               }
-              className={inputClass}
             />
           </div>
 

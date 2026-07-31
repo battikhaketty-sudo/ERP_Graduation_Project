@@ -12,6 +12,13 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        // Employee/profile media lives outside `/api` on the backend host.
+        "/media": {
+          target: proxyTarget,
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path: string) => path.replace(/^\/media/, ""),
+        },
       }
     : undefined;
 

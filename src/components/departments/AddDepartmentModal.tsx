@@ -3,9 +3,14 @@ import { AlertCircle, CheckCircle, Loader, Upload } from "lucide-react";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
 import { useModalAutoFocus } from "../../hooks/useModalAutoFocus";
+import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { useTranslation } from "../../i18n";
 import type { DepartmentFormPayload } from "../../types/department";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
+import {
+  afterValidationPaint,
+  focusAndScrollToFirstError,
+} from "../../utils/formUx";
 import { mapNamedOptions } from "../../utils/selectOptions";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import {
@@ -35,6 +40,7 @@ export function AddDepartmentModal({
   const { t } = useTranslation();
   const { dir } = usePreferences();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  useModalDismiss(onClose, isOpen && !isSubmitting);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -114,7 +120,11 @@ export function AddDepartmentModal({
       nextErrors.managerId = t("departments.modal.errors.managerRequired");
     }
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    if (Object.keys(nextErrors).length > 0) {
+      afterValidationPaint(() => focusAndScrollToFirstError());
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -4,15 +4,15 @@ import { usePreferences } from "../../context/PreferencesContext";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
 import { useProjectLabels } from "../../hooks/useProjectLabels";
 import { useTranslation } from "../../i18n";
-import { wouldCreateCycle, canSetTaskStatus, getBlockingDependencyTitles } from "../../services/projects/taskDependencies";
+import { wouldCreateCycle } from "../../services/projects/taskDependencies";
 import type {
   Project,
-  ProjectSection,
   ProjectTask,
   TaskFormPayload,
   TaskPriority,
   TaskStatus,
 } from "../../types/project";
+import { pointsForPriority } from "../../services/projects/performancePoints";
 import { sanitizeDecimalInput } from "../../utils/inputConstraints";
 import { mapNamedOptions } from "../../utils/selectOptions";
 import {
@@ -23,6 +23,7 @@ import {
 } from "../ui/modalStyles";
 import { readOnlyClass } from "../ui/formStyles";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { ManualDateInput } from "../ui/ManualDateInput";
 import {
   inputClass,
   modalCardClass,
@@ -40,7 +41,7 @@ type AddTaskModalProps = {
 };
 
 const priorities: TaskPriority[] = ["low", "medium", "high", "urgent"];
-const statuses: TaskStatus[] = ["todo", "in_progress", "completed"];
+const completionStatuses: TaskStatus[] = ["todo", "in_progress", "completed"];
 
 const priorityButtonClass: Record<TaskPriority, string> = {
   low: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950/50 dark:text-orange-300 dark:border-orange-900/50",
@@ -49,14 +50,6 @@ const priorityButtonClass: Record<TaskPriority, string> = {
   high: "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-900/50",
   urgent:
     "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-900/50",
-};
-
-const statusButtonClass: Record<TaskStatus, string> = {
-  todo: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/60 dark:text-slate-200 dark:border-slate-700",
-  in_progress:
-    "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-900/50",
-  completed:
-    "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-900/50",
 };
 
 const toDateInputValue = (value?: string) => {
@@ -129,26 +122,6 @@ export function AddTaskModal({
     });
   }, [project.tasks, task?.id]);
 
-  const blockingTitles = useMemo(() => {
-    const draft = {
-      id: task?.id ?? "__new__",
-      dependsOnTaskIds,
-    };
-    return getBlockingDependencyTitles(draft, project.tasks);
-  }, [dependsOnTaskIds, project.tasks, task?.id]);
-
-  const statusAllowed = useMemo(() => {
-    const draft = {
-      id: task?.id ?? "__new__",
-      dependsOnTaskIds,
-    };
-    return {
-      todo: true,
-      in_progress: canSetTaskStatus(draft, "in_progress", project.tasks),
-      completed: canSetTaskStatus(draft, "completed", project.tasks),
-    } as Record<TaskStatus, boolean>;
-  }, [dependsOnTaskIds, project.tasks, task?.id]);
-
   useEffect(() => {
     if (!isOpen) return;
 
@@ -196,13 +169,6 @@ export function AddTaskModal({
     setError(null);
     setSaving(false);
   }, [defaultSectionId, isOpen, project.endDate, project.id, project.sections, project.tasks, task]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    if (!statusAllowed[form.status]) {
-      setForm((prev) => ({ ...prev, status: "todo" }));
-    }
-  }, [form.status, isOpen, statusAllowed]);
 
   const handleClose = () => {
     if (saving) return;
@@ -280,14 +246,6 @@ export function AddTaskModal({
     }
     if (!assignees.length) {
       setError(t("projects.modals.addTask.errors.assigneeRequired"));
-      return;
-    }
-    if (!statusAllowed[form.status]) {
-      setError(
-        t("projects.modals.addTask.errors.depsNotReady", {
-          tasks: blockingTitles.join("، ") || "—",
-        }),
-      );
       return;
     }
 
@@ -450,12 +408,10 @@ export function AddTaskModal({
               <label className="mb-2 block text-sm text-hr-text">
                 {t("projects.modals.addTask.fields.startDate")}
               </label>
-              <input
-                type="date"
+              <ManualDateInput
                 value={form.startDate}
                 max={form.dueDate || undefined}
-                onChange={(event) => handleStartDateChange(event.target.value)}
-                className={inputClass}
+                onChange={handleStartDateChange}
                 required
               />
             </div>
@@ -463,60 +419,13 @@ export function AddTaskModal({
               <label className="mb-2 block text-sm text-hr-text">
                 {t("projects.modals.addTask.fields.dueDate")}
               </label>
-              <input
-                type="date"
+              <ManualDateInput
                 value={form.dueDate}
                 min={form.startDate || undefined}
-                onChange={(event) => handleDueDateChange(event.target.value)}
-                className={inputClass}
+                onChange={handleDueDateChange}
                 required
               />
             </div>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm text-hr-text">
-              {t("projects.modals.addTask.fields.status")}
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {statuses.map((status) => {
-                const allowed = statusAllowed[status];
-                return (
-                  <button
-                    key={status}
-                    type="button"
-                    disabled={!allowed}
-                    onClick={() => {
-                      if (!allowed) return;
-                      setForm((prev) => ({ ...prev, status }));
-                    }}
-                    className={[
-                      "rounded-xl border px-3 py-2 text-sm font-medium transition",
-                      form.status === status
-                        ? statusButtonClass[status]
-                        : "border-hr-border bg-hr-surface text-hr-muted",
-                      !allowed ? "cursor-not-allowed opacity-40" : "",
-                    ].join(" ")}
-                    title={
-                      !allowed
-                        ? t("projects.modals.addTask.errors.depsNotReady", {
-                            tasks: blockingTitles.join("، ") || "—",
-                          })
-                        : undefined
-                    }
-                  >
-                    {taskStatusLabel(status)}
-                  </button>
-                );
-              })}
-            </div>
-            {blockingTitles.length ? (
-              <p className="mt-2 text-xs text-amber-500">
-                {t("projects.modals.addTask.depsBlockedHint", {
-                  tasks: blockingTitles.join("، "),
-                })}
-              </p>
-            ) : null}
           </div>
 
           <div>
@@ -540,6 +449,38 @@ export function AddTaskModal({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm text-hr-text">
+              {t("projects.modals.addTask.fields.status")}
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {completionStatuses.map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, status }))}
+                  className={[
+                    "rounded-xl border px-3 py-2 text-sm font-medium transition",
+                    form.status === status
+                      ? status === "completed"
+                        ? "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                        : status === "in_progress"
+                          ? "border-sky-300 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
+                          : "border-hr-primary bg-hr-primary/10 text-hr-primary"
+                      : "border-hr-border bg-hr-surface text-hr-muted",
+                  ].join(" ")}
+                >
+                  {taskStatusLabel(status)}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-hr-muted">
+              {t("projects.modals.addTask.fields.completionHint", {
+                points: pointsForPriority(form.priority),
+              })}
+            </p>
           </div>
 
           <div>

@@ -122,6 +122,8 @@ export type SectionFormPayload = {
   name: string;
   displayOrder: number;
   dependsOnSectionIds?: string[];
+  /** Labels on arrows from prerequisite section → this section (keyed by prerequisite id). */
+  dependencyEdgeLabels?: Record<string, string>;
 };
 
 export type TaskFormPayload = {

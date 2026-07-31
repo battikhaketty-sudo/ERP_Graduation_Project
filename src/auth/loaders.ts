@@ -21,7 +21,7 @@ export function requireAuthLoader() {
 
 export function guestLoader() {
   if (getSession()) {
-    throw redirect(ROUTES.projects);
+    throw redirect(ROUTES.dashboard);
   }
   return null;
 }

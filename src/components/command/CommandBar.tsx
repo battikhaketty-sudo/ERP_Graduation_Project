@@ -2,6 +2,7 @@ import {
   Building2,
   CalendarClock,
   FolderKanban,
+  LayoutGrid,
   Plus,
   Search,
   ShieldCheck,
@@ -23,6 +24,13 @@ export function CommandBar() {
 
   const navItems = useMemo(
     () => [
+      {
+        id: "nav-home",
+        label: t("command.navHome"),
+        route: ROUTES.dashboard,
+        keywords: ["رئيسية", "لوحة", "home", "dashboard"],
+        icon: LayoutGrid,
+      },
       {
         id: "nav-employees",
         label: t("command.navEmployees"),

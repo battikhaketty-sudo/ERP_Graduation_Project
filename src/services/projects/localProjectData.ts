@@ -4,6 +4,7 @@ export const PROJECT_SECTION_IDS_KEY = "hr_project_section_ids";
 export const PROJECT_POINTS_KEY = "hr_performance_points";
 export const PROJECT_FLOW_ANCHORS_KEY = "hr_project_flow_anchors";
 export const PROJECT_SECTION_DEPS_KEY = "hr_project_section_deps";
+export const PROJECT_SECTION_EDGE_LABELS_KEY = "hr_project_section_edge_labels";
 
 /** Clear all project client caches (call on logout). */
 export const clearAllLocalProjectData = () => {
@@ -13,6 +14,7 @@ export const clearAllLocalProjectData = () => {
     localStorage.removeItem(PROJECT_POINTS_KEY);
     localStorage.removeItem(PROJECT_FLOW_ANCHORS_KEY);
     localStorage.removeItem(PROJECT_SECTION_DEPS_KEY);
+    localStorage.removeItem(PROJECT_SECTION_EDGE_LABELS_KEY);
   } catch {
     // ignore storage failures
   }

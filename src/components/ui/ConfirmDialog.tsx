@@ -1,6 +1,7 @@
 import { Loader2, Trash2 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { usePreferences } from "../../context/PreferencesContext";
+import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { useTranslation } from "../../i18n";
 import { modalCardClass, modalOverlayClass } from "./modalStyles";
 
@@ -27,6 +28,8 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const { t } = useTranslation();
   const { dir } = usePreferences();
+
+  useModalDismiss(onCancel, open && !loading);
 
   if (!open) return null;
 
@@ -77,6 +80,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={loading}
+            autoFocus
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500 px-6 text-sm font-bold text-white transition hover:bg-red-600 disabled:opacity-60"
           >
             {loading && <Loader2 className="size-4 animate-spin" />}

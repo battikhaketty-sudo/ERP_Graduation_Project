@@ -1,6 +1,9 @@
 import type { Employee, EmployeeResumeLine } from "../../types/employee";
 import { env } from "../../config/env";
 import { DEFAULT_AVATAR_URL } from "../../constants/defaults";
+import { normalizeBirthDateValue } from "../../utils/employeeDates";
+
+const MEDIA_PROXY_PREFIX = "/media";
 
 export const toApiGender = (gender?: Employee["gender"]) =>
   gender === "female" ? "2" : "1";
@@ -11,16 +14,64 @@ export const toIsoDate = (value?: string) => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
-export const resolveAvatarUrl = (path?: string | null) => {
-  if (!path) return DEFAULT_AVATAR_URL;
-  if (path.startsWith("http") || path.startsWith("data:")) return path;
-  return `${env.apiHost}${path}`;
+const stripTrailingSlash = (value: string) => value.replace(/\/+$/, "");
+
+/** Relative API base (e.g. `/api/v1`) means Vite/Netlify proxy is in use. */
+const usesProxiedApi = () => !/^https?:\/\//i.test(env.apiBaseUrl);
+
+const getDirectMediaHost = () =>
+  stripTrailingSlash(env.apiHost || env.apiProxyTarget);
+
+const toProxiedMediaUrl = (pathnameAndSearch: string) => {
+  const normalized = pathnameAndSearch.startsWith("/")
+    ? pathnameAndSearch
+    : `/${pathnameAndSearch}`;
+  if (normalized === MEDIA_PROXY_PREFIX || normalized.startsWith(`${MEDIA_PROXY_PREFIX}/`)) {
+    return normalized;
+  }
+  return `${MEDIA_PROXY_PREFIX}${normalized}`;
 };
 
+export const buildNamedAvatarUrl = (name?: string) => {
+  const label = (name || "Employee").trim() || "Employee";
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(label)}&background=2F80ED&color=fff`;
+};
+
+/**
+ * Resolve employee/media file paths to a browser-loadable URL.
+ * Uses same-origin `/media` when the API is proxied so images work despite
+ * broken backend TLS and avoid mixed-content blocks on HTTPS hosts.
+ */
 export const resolveMediaUrl = (path?: string | null) => {
-  if (!path) return "";
-  if (path.startsWith("http") || path.startsWith("data:")) return path;
-  return `${env.apiHost}${path}`;
+  if (!path?.trim()) return "";
+
+  const raw = path.trim().replace(/\\/g, "/");
+  if (raw.startsWith("data:")) return raw;
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      if (usesProxiedApi()) {
+        return toProxiedMediaUrl(`${url.pathname}${url.search}`);
+      }
+      // Keep the original scheme — do not force https (backend TLS is unreliable).
+      return `${url.protocol}//${url.host}${url.pathname}${url.search}`;
+    } catch {
+      return raw;
+    }
+  }
+
+  const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
+  if (usesProxiedApi()) {
+    return toProxiedMediaUrl(normalizedPath);
+  }
+  return `${getDirectMediaHost()}${normalizedPath}`;
+};
+
+export const resolveAvatarUrl = (path?: string | null, name?: string) => {
+  const fallback = name ? buildNamedAvatarUrl(name) : DEFAULT_AVATAR_URL;
+  if (!path?.trim()) return fallback;
+  return resolveMediaUrl(path) || fallback;
 };
 
 export const isArchivedEmployeeRecord = (item: Record<string, unknown>) => {
@@ -75,7 +126,10 @@ export const normalizeEmployee = (
       departmentId: String(item.departmentId || ""),
       managerId: String(item.managerId || ""),
       managerName: String(item.managerName || ""),
-      avatar: resolveAvatarUrl(String(item.profileImagePath || "")),
+      avatar: resolveAvatarUrl(
+        String(item.profileImagePath || ""),
+        String(item.legalName || item.name || ""),
+      ),
       isArchived: isArchivedEmployeeRecord(item),
       role: "Front_end",
       address:
@@ -106,9 +160,12 @@ export const normalizeEmployee = (
     role: "Front_end",
     address:
       `${citizenship.nationality || ""} - ${work.departmentName || ""}`.trim() || "-",
-    avatar: resolveAvatarUrl(String(personal.profileImagePath || "")),
+    avatar: resolveAvatarUrl(
+      String(personal.profileImagePath || ""),
+      String(personal.legalName || item.name || ""),
+    ),
     isArchived: isArchivedEmployeeRecord(item),
-    birthDate: toIsoDate(String(personal.birthDay || ""))?.split("T")[0],
+    birthDate: normalizeBirthDateValue(String(personal.birthDay || "")) || undefined,
     gender: personal.gender === 2 || personal.gender === "2" ? "female" : "male",
     genderName: personal.genderName ? String(personal.genderName) : undefined,
     nationality: String(citizenship.nationality || "غير محدد"),

@@ -1,16 +1,23 @@
-import { Plus } from "lucide-react";
+import { CheckCircle2, Plus, RotateCcw } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "../../i18n";
+import { pointsForPriority } from "../../services/projects/performancePoints";
 import { getSectionFlowGate } from "../../services/projects/sectionDependencies";
-import type { Project, ProjectSection, ProjectTask } from "../../types/project";
+import type {
+  Project,
+  ProjectSection,
+  ProjectTask,
+  TaskStatus,
+} from "../../types/project";
 import { accentBtnClass } from "../ui/formStyles";
-import { PriorityBadge } from "./ProjectBadges";
+import { PriorityBadge, TaskStatusBadge } from "./ProjectBadges";
 
 type ProjectKanbanBoardProps = {
   project: Project;
   onAddSection: () => void;
   onAddTask: () => void;
   onSectionClick?: (section: ProjectSection) => void;
+  onSetTaskStatus?: (task: ProjectTask, status: TaskStatus) => void;
 };
 
 const gateBadgeClass: Record<string, string> = {
@@ -19,10 +26,18 @@ const gateBadgeClass: Record<string, string> = {
   blocked: "bg-amber-500/15 text-amber-500",
 };
 
-function TaskCard({ task }: { task: ProjectTask }) {
+function TaskCard({
+  task,
+  onSetTaskStatus,
+}: {
+  task: ProjectTask;
+  onSetTaskStatus?: (task: ProjectTask, status: TaskStatus) => void;
+}) {
   const { t } = useTranslation();
   const visibleAssignees = task.assigneeNames.slice(0, 2);
   const extraCount = task.assigneeNames.length - visibleAssignees.length;
+  const isCompleted = task.status === "completed";
+  const points = pointsForPriority(task.priority);
 
   return (
     <article className="rounded-xl border border-hr-border bg-hr-surface p-3 shadow-sm">
@@ -31,9 +46,14 @@ function TaskCard({ task }: { task: ProjectTask }) {
         <PriorityBadge priority={task.priority} />
       </div>
       {task.description && (
-        <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-hr-muted">{task.description}</p>
+        <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-hr-muted">
+          {task.description}
+        </p>
       )}
-      <div className="flex items-center justify-between">
+      <div className="mb-2">
+        <TaskStatusBadge status={task.status} />
+      </div>
+      <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] text-hr-muted">
           {task.dueDate || task.startDate || t("common.dash")}
         </span>
@@ -54,6 +74,32 @@ function TaskCard({ task }: { task: ProjectTask }) {
           )}
         </div>
       </div>
+      {onSetTaskStatus && (
+        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-hr-border pt-2">
+          {!isCompleted ? (
+            <button
+              type="button"
+              onClick={() => onSetTaskStatus(task, "completed")}
+              className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-emerald-500/15 px-2 py-1.5 text-[11px] font-bold text-emerald-600 transition hover:bg-emerald-500/25 dark:text-emerald-400"
+            >
+              <CheckCircle2 className="size-3.5" />
+              {t("projects.sectionDetail.markComplete")}
+              <span className="font-medium opacity-80">
+                ({t("projects.sectionDetail.pointsOnComplete", { points })})
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onSetTaskStatus(task, "todo")}
+              className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-amber-500/15 px-2 py-1.5 text-[11px] font-bold text-amber-600 transition hover:bg-amber-500/25 dark:text-amber-400"
+            >
+              <RotateCcw className="size-3.5" />
+              {t("projects.sectionDetail.reopen")}
+            </button>
+          )}
+        </div>
+      )}
     </article>
   );
 }
@@ -63,6 +109,7 @@ export function ProjectKanbanBoard({
   onAddSection,
   onAddTask,
   onSectionClick,
+  onSetTaskStatus,
 }: ProjectKanbanBoardProps) {
   const { t } = useTranslation();
   const columns = [...project.sections].sort((a, b) => a.displayOrder - b.displayOrder);
@@ -125,7 +172,13 @@ export function ProjectKanbanBoard({
                 </button>
                 <div className="space-y-2">
                   {tasks.length ? (
-                    tasks.map((task) => <TaskCard key={task.id} task={task} />)
+                    tasks.map((task) => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onSetTaskStatus={onSetTaskStatus}
+                      />
+                    ))
                   ) : (
                     <p className="rounded-lg bg-hr-surface px-3 py-6 text-center text-xs text-hr-muted">
                       {t("common.noData")}
@@ -146,7 +199,11 @@ export function ProjectKanbanBoard({
               </p>
               <div className="space-y-2">
                 {orphanTasks.map((task) => (
-                  <TaskCard key={task.id} task={task} />
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onSetTaskStatus={onSetTaskStatus}
+                  />
                 ))}
               </div>
             </div>
