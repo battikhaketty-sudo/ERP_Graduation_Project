@@ -1,43 +1,26 @@
-import { CheckCircle2, Plus, RotateCcw } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "../../i18n";
-import { pointsForPriority } from "../../services/projects/performancePoints";
 import { getSectionFlowGate } from "../../services/projects/sectionDependencies";
-import type {
-  Project,
-  ProjectSection,
-  ProjectTask,
-  TaskStatus,
-} from "../../types/project";
+import type { Project, ProjectSection, ProjectTask } from "../../types/project";
 import { accentBtnClass } from "../ui/formStyles";
-import { PriorityBadge, TaskStatusBadge } from "./ProjectBadges";
+import { PriorityBadge } from "./ProjectBadges";
 
 type ProjectKanbanBoardProps = {
   project: Project;
   onAddSection: () => void;
   onAddTask: () => void;
   onSectionClick?: (section: ProjectSection) => void;
-  onSetTaskStatus?: (task: ProjectTask, status: TaskStatus) => void;
 };
 
 const gateBadgeClass: Record<string, string> = {
-  completed: "bg-emerald-500/15 text-emerald-500",
   ready: "bg-sky-500/15 text-sky-500",
-  blocked: "bg-amber-500/15 text-amber-500",
 };
 
-function TaskCard({
-  task,
-  onSetTaskStatus,
-}: {
-  task: ProjectTask;
-  onSetTaskStatus?: (task: ProjectTask, status: TaskStatus) => void;
-}) {
+function TaskCard({ task }: { task: ProjectTask }) {
   const { t } = useTranslation();
   const visibleAssignees = task.assigneeNames.slice(0, 2);
   const extraCount = task.assigneeNames.length - visibleAssignees.length;
-  const isCompleted = task.status === "completed";
-  const points = pointsForPriority(task.priority);
 
   return (
     <article className="rounded-xl border border-hr-border bg-hr-surface p-3 shadow-sm">
@@ -46,14 +29,9 @@ function TaskCard({
         <PriorityBadge priority={task.priority} />
       </div>
       {task.description && (
-        <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-hr-muted">
-          {task.description}
-        </p>
+        <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-hr-muted">{task.description}</p>
       )}
-      <div className="mb-2">
-        <TaskStatusBadge status={task.status} />
-      </div>
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between">
         <span className="text-[11px] text-hr-muted">
           {task.dueDate || task.startDate || t("common.dash")}
         </span>
@@ -74,32 +52,6 @@ function TaskCard({
           )}
         </div>
       </div>
-      {onSetTaskStatus && (
-        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-hr-border pt-2">
-          {!isCompleted ? (
-            <button
-              type="button"
-              onClick={() => onSetTaskStatus(task, "completed")}
-              className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-emerald-500/15 px-2 py-1.5 text-[11px] font-bold text-emerald-600 transition hover:bg-emerald-500/25 dark:text-emerald-400"
-            >
-              <CheckCircle2 className="size-3.5" />
-              {t("projects.sectionDetail.markComplete")}
-              <span className="font-medium opacity-80">
-                ({t("projects.sectionDetail.pointsOnComplete", { points })})
-              </span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => onSetTaskStatus(task, "todo")}
-              className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-amber-500/15 px-2 py-1.5 text-[11px] font-bold text-amber-600 transition hover:bg-amber-500/25 dark:text-amber-400"
-            >
-              <RotateCcw className="size-3.5" />
-              {t("projects.sectionDetail.reopen")}
-            </button>
-          )}
-        </div>
-      )}
     </article>
   );
 }
@@ -109,7 +61,6 @@ export function ProjectKanbanBoard({
   onAddSection,
   onAddTask,
   onSectionClick,
-  onSetTaskStatus,
 }: ProjectKanbanBoardProps) {
   const { t } = useTranslation();
   const columns = [...project.sections].sort((a, b) => a.displayOrder - b.displayOrder);
@@ -133,14 +84,16 @@ export function ProjectKanbanBoard({
           <Plus className="size-4" />
           {t("projects.kanban.addSection")}
         </button>
-        <button
-          type="button"
-          onClick={onAddTask}
-          className={`${accentBtnClass} shrink-0 font-bold`}
-        >
-          <Plus className="size-4" />
-          {t("projects.kanban.addTask")}
-        </button>
+        {columns.length > 0 ? (
+          <button
+            type="button"
+            onClick={onAddTask}
+            className={`${accentBtnClass} shrink-0 font-bold`}
+          >
+            <Plus className="size-4" />
+            {t("projects.kanban.addTask")}
+          </button>
+        ) : null}
       </div>
 
       {columns.length || orphanTasks.length ? (
@@ -172,13 +125,7 @@ export function ProjectKanbanBoard({
                 </button>
                 <div className="space-y-2">
                   {tasks.length ? (
-                    tasks.map((task) => (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        onSetTaskStatus={onSetTaskStatus}
-                      />
-                    ))
+                    tasks.map((task) => <TaskCard key={task.id} task={task} />)
                   ) : (
                     <p className="rounded-lg bg-hr-surface px-3 py-6 text-center text-xs text-hr-muted">
                       {t("common.noData")}
@@ -199,20 +146,26 @@ export function ProjectKanbanBoard({
               </p>
               <div className="space-y-2">
                 {orphanTasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onSetTaskStatus={onSetTaskStatus}
-                  />
+                  <TaskCard key={task.id} task={task} />
                 ))}
               </div>
             </div>
           ) : null}
         </div>
       ) : (
-        <p className="rounded-xl border border-dashed border-hr-border px-4 py-10 text-center text-sm text-hr-muted">
-          {t("common.noDataMessage")}
-        </p>
+        <div className="rounded-xl border border-dashed border-hr-border px-4 py-10 text-center">
+          <p className="text-sm text-hr-muted">
+            {t("projects.detail.flow.noSections")}
+          </p>
+          <button
+            type="button"
+            onClick={onAddSection}
+            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-600"
+          >
+            <Plus className="size-4" />
+            {t("projects.detail.flow.addFirstSection")}
+          </button>
+        </div>
       )}
     </section>
   );

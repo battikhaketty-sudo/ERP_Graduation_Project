@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useUrlQueryNavigation } from "../hooks/useUrlQueryNavigation";
 
@@ -13,7 +13,6 @@ import { AddTaskModal } from "../components/projects/AddTaskModal";
 import { InviteMemberModal } from "../components/projects/InviteMemberModal";
 import {
   InvitationsTable,
-  INVITATIONS_PAGE_SIZE,
 } from "../components/projects/InvitationsTable";
 import { ProjectDetailView } from "../components/projects/ProjectDetailView";
 import { ProjectStatsCards } from "../components/projects/ProjectStatsCards";
@@ -35,32 +34,26 @@ import {
   deleteProject,
   deleteSection,
   deleteTask,
-  getAllInvitations,
   getProjectById,
   getProjectStats,
   getProjects,
   getTaskStats,
-  updateInvitationStatus,
   updateMember,
   updateProject,
   updateSection,
   updateTask,
-  updateTaskStatus,
 } from "../services/projects";
 
 import type {
   Project,
-  ProjectInvitation,
   ProjectMember,
   ProjectSection,
   ProjectStats,
   ProjectTask,
   TaskStats,
-  TaskStatus,
 } from "../types/project";
 
 import { getThrownErrorMessage } from "../utils/apiResponse";
-import { pointsForPriority } from "../services/projects/performancePoints";
 
 type ActiveTab = "projects" | "invitations";
 
@@ -86,7 +79,6 @@ export function ProjectsPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("projects");
   const [search, setSearch] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
-  const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [taskStats, setTaskStats] = useState<TaskStats>({
     total: 0,
@@ -97,7 +89,6 @@ export function ProjectsPage() {
   const [stats, setStats] = useState<ProjectStats>(emptyStats);
   const [projectsPage, setProjectsPage] = useState(1);
   const [projectsTotalPages, setProjectsTotalPages] = useState(1);
-  const [invitationsPage, setInvitationsPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +106,7 @@ export function ProjectsPage() {
     string | undefined
   >();
   const [pendingOpenTaskModal, setPendingOpenTaskModal] = useState(false);
+  const [invitationsReloadKey, setInvitationsReloadKey] = useState(0);
 
   useEffect(() => {
     if (searchParams.get("add") !== "1") return;
@@ -144,15 +136,12 @@ export function ProjectsPage() {
       setLoading(true);
       setError(null);
 
-      // Fetch a wider set when searching so we can filter locally
-      // (API Name filter is often exact / unreliable for partial match).
-      const [projectsResult, invitationsResult, statsResult] =
-        await Promise.all([
+      // Personal "My invitations" awaits a dedicated API — do not reuse project invitation lists here.
+      const [projectsResult, statsResult] = await Promise.all([
           getProjects({
             page: query ? 1 : projectsPage,
             limit: query ? 100 : PROJECTS_PAGE_SIZE,
           }),
-          getAllInvitations(),
           getProjectStats(),
         ]);
 
@@ -180,17 +169,6 @@ export function ProjectsPage() {
         setProjectsTotalPages(projectsResult.meta.totalPages || 1);
       }
 
-      const invitationRecords = query
-        ? invitationsResult.filter((invitation) =>
-            [
-              invitation.projectName,
-              invitation.projectNumber,
-              invitation.employeeName,
-            ].some((field) => field.toLowerCase().includes(query)),
-          )
-        : invitationsResult;
-
-      setInvitations(invitationRecords);
       setStats(statsResult);
     } catch (err) {
       setError(getThrownErrorMessage(err, t("projects.page.loadError")));
@@ -259,16 +237,6 @@ export function ProjectsPage() {
       cancelled = true;
     };
   }, [projectId, t]);
-
-  const paginatedInvitations = useMemo(() => {
-    const start = (invitationsPage - 1) * INVITATIONS_PAGE_SIZE;
-    return invitations.slice(start, start + INVITATIONS_PAGE_SIZE);
-  }, [invitations, invitationsPage]);
-
-  const invitationsTotalPages = Math.max(
-    1,
-    Math.ceil(invitations.length / INVITATIONS_PAGE_SIZE),
-  );
 
   const openProjectDetail = (project: Project) => {
     openProjectInUrl(project.id);
@@ -412,42 +380,7 @@ export function ProjectsPage() {
     }
   };
 
-  const handleSetTaskStatus = async (task: ProjectTask, status: TaskStatus) => {
-    if (!selectedProject) return;
-
-    try {
-      await updateTaskStatus(selectedProject.id, task.id, status);
-      await refreshSelectedProject(selectedProject.id);
-      setError(null);
-
-      if (status === "completed") {
-        showToast(
-          t("projects.toasts.taskCompleted", {
-            points: pointsForPriority(task.priority),
-            count: Math.max(1, task.assigneeIds.length),
-          }),
-          "success",
-        );
-      } else if (task.status === "completed") {
-        showToast(t("projects.toasts.taskReopened"), "success");
-      } else if (status === "in_progress") {
-        showToast(t("projects.toasts.taskInProgress"), "success");
-      }
-    } catch (err) {
-      const message = getThrownErrorMessage(
-        err,
-        t("projects.modals.addTask.errors.saveFailed"),
-      );
-      setError(message);
-      showToast(message, "error");
-    }
-  };
-
-  const addLabel =
-    activeTab === "projects"
-      ? t("pages.projects.addProject")
-      : t("pages.projects.inviteMember");
-
+  const addLabel = t("pages.projects.addProject");
   const searchPlaceholder =
     activeTab === "projects"
       ? t("pages.projects.searchPlaceholder")
@@ -524,9 +457,6 @@ export function ProjectsPage() {
             setIsTaskModalOpen(true);
           }}
           onDeleteTask={(task) => void handleDeleteTask(task)}
-          onSetTaskStatus={(task, status) =>
-            void handleSetTaskStatus(task, status)
-          }
           onInviteMember={() => setIsInviteModalOpen(true)}
           onEditMember={async (member, role) => {
             try {
@@ -543,6 +473,7 @@ export function ProjectsPage() {
             }
           }}
           onDeleteMember={(member) => void handleDeleteMember(member)}
+          invitationsReloadKey={invitationsReloadKey}
         />
 
         <AddProjectModal
@@ -603,35 +534,12 @@ export function ProjectsPage() {
               setEditingTask(null);
             }}
             onSubmit={async (payload) => {
-              const wasCompleted = editingTask?.status === "completed";
               if (editingTask) {
                 await updateTask(selectedProject.id, editingTask.id, payload);
-                if (payload.status === "completed" && !wasCompleted) {
-                  showToast(
-                    t("projects.toasts.taskCompleted", {
-                      points: pointsForPriority(payload.priority),
-                      count: Math.max(1, payload.assigneeIds.length),
-                    }),
-                    "success",
-                  );
-                } else if (wasCompleted && payload.status !== "completed") {
-                  showToast(t("projects.toasts.taskReopened"), "success");
-                } else {
-                  showToast(t("projects.toasts.taskUpdated"), "success");
-                }
+                showToast(t("projects.toasts.taskUpdated"), "success");
               } else {
                 await addTask(selectedProject.id, payload);
-                if (payload.status === "completed") {
-                  showToast(
-                    t("projects.toasts.taskCompleted", {
-                      points: pointsForPriority(payload.priority),
-                      count: Math.max(1, payload.assigneeIds.length),
-                    }),
-                    "success",
-                  );
-                } else {
-                  showToast(t("projects.toasts.taskAdded"), "success");
-                }
+                showToast(t("projects.toasts.taskAdded"), "success");
               }
               await refreshSelectedProject(selectedProject.id);
             }}
@@ -647,6 +555,7 @@ export function ProjectsPage() {
             await addInvitation(payload);
             await refreshSelectedProject(selectedProject.id);
             await loadListData();
+            setInvitationsReloadKey((key) => key + 1);
             showToast(t("projects.toasts.inviteSent"), "success");
           }}
         />
@@ -667,18 +576,14 @@ export function ProjectsPage() {
           onSearchChange={(value) => {
             setSearch(value);
             setProjectsPage(1);
-            setInvitationsPage(1);
           }}
           onAddClick={() => {
-            if (activeTab === "projects") {
-              setEditingProject(null);
-              setIsProjectModalOpen(true);
-            } else {
-              setIsInviteModalOpen(true);
-            }
+            setEditingProject(null);
+            setIsProjectModalOpen(true);
           }}
           addLabel={addLabel}
           searchPlaceholder={searchPlaceholder}
+          showAddButton={activeTab === "projects"}
         />
 
         <ProjectStatsCards stats={stats} />
@@ -711,52 +616,16 @@ export function ProjectsPage() {
           />
         ) : (
           <InvitationsTable
-            invitations={paginatedInvitations}
-            currentPage={invitationsPage}
-            totalPages={invitationsTotalPages}
-            onPageChange={setInvitationsPage}
-            onAccept={async (invitation) => {
-              try {
-                await updateInvitationStatus(invitation, "accepted");
-                await loadListData();
-                showToast(t("projects.toasts.inviteAccepted"), "success");
-              } catch (err) {
-                const message = getThrownErrorMessage(
-                  err,
-                  t("projects.page.loadError"),
-                );
-                setError(message);
-                showToast(message, "error");
-              }
-            }}
-            onReject={async (invitation) => {
-              try {
-                await updateInvitationStatus(invitation, "rejected");
-                await loadListData();
-                showToast(t("projects.toasts.inviteRejected"), "success");
-              } catch (err) {
-                const message = getThrownErrorMessage(
-                  err,
-                  t("projects.page.loadError"),
-                );
-                setError(message);
-                showToast(message, "error");
-              }
-            }}
-            onCancel={async (invitation) => {
-              try {
-                await updateInvitationStatus(invitation, "cancelled");
-                await loadListData();
-                showToast(t("projects.toasts.inviteCancelled"), "success");
-              } catch (err) {
-                const message = getThrownErrorMessage(
-                  err,
-                  t("projects.page.loadError"),
-                );
-                setError(message);
-                showToast(message, "error");
-              }
-            }}
+            invitations={[]}
+            currentPage={1}
+            totalPages={1}
+            onPageChange={() => undefined}
+            actionsMode="personal"
+            title={t("projects.invitations.myTitle")}
+            emptyMessage={t("projects.invitations.myEmpty")}
+            onAccept={() => undefined}
+            onReject={() => undefined}
+            onCancel={() => undefined}
           />
         )}
       </main>
@@ -778,17 +647,6 @@ export function ProjectsPage() {
             showToast(t("projects.toasts.addSuccess"), "success");
           }
           await loadListData();
-        }}
-      />
-
-      <InviteMemberModal
-        isOpen={isInviteModalOpen}
-        projects={projects}
-        onClose={() => setIsInviteModalOpen(false)}
-        onSubmit={async (payload) => {
-          await addInvitation(payload);
-          await loadListData();
-          showToast(t("projects.toasts.inviteSent"), "success");
         }}
       />
     </>

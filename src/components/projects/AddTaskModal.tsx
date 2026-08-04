@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { usePreferences } from "../../context/PreferencesContext";
-import { useReferenceOptions } from "../../hooks/useReferenceOptions";
 import { useProjectLabels } from "../../hooks/useProjectLabels";
 import { useTranslation } from "../../i18n";
+import { getProjectMembers } from "../../services/projects";
 import { wouldCreateCycle } from "../../services/projects/taskDependencies";
+import { getTaskTransitions } from "../../services/projects/taskTransitionsStorage";
 import type {
   Project,
   ProjectTask,
   TaskFormPayload,
   TaskPriority,
-  TaskStatus,
+  TaskTransition,
 } from "../../types/project";
-import { pointsForPriority } from "../../services/projects/performancePoints";
 import { sanitizeDecimalInput } from "../../utils/inputConstraints";
 import { mapNamedOptions } from "../../utils/selectOptions";
 import {
@@ -30,6 +30,9 @@ import {
   modalOverlayClass,
   textareaClass,
 } from "./project-ui";
+import { TaskTransitionsPanel } from "./TaskTransitionsPanel";
+
+type AssigneeOption = { id: string; name: string };
 
 type AddTaskModalProps = {
   isOpen: boolean;
@@ -41,7 +44,6 @@ type AddTaskModalProps = {
 };
 
 const priorities: TaskPriority[] = ["low", "medium", "high", "urgent"];
-const completionStatuses: TaskStatus[] = ["todo", "in_progress", "completed"];
 
 const priorityButtonClass: Record<TaskPriority, string> = {
   low: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950/50 dark:text-orange-300 dark:border-orange-900/50",
@@ -77,14 +79,11 @@ export function AddTaskModal({
 }: AddTaskModalProps) {
   const { t } = useTranslation();
   const { dir } = usePreferences();
-  const { priorityLabel, taskStatusLabel } = useProjectLabels();
+  const { priorityLabel } = useProjectLabels();
   const isEditing = Boolean(task);
-  const { employees, loading } = useReferenceOptions(isOpen, {
-    departments: true,
-    contractTypes: false,
-    employees: true,
-  });
 
+  const [memberOptions, setMemberOptions] = useState<AssigneeOption[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -93,24 +92,59 @@ export function AddTaskModal({
     startDate: "",
     dueDate: "",
     priority: "medium" as TaskPriority,
-    status: "todo" as TaskStatus,
   });
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>([]);
-  const [assignees, setAssignees] = useState<
-    Array<{ id: string; name: string }>
-  >([]);
+  const [assignees, setAssignees] = useState<AssigneeOption[]>([]);
   const [assigneePickId, setAssigneePickId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [transitions, setTransitions] = useState<TaskTransition[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+
+    const run = async () => {
+      setMembersLoading(true);
+      try {
+        const result = await getProjectMembers(project.id, {
+          page: 1,
+          limit: 100,
+        });
+        if (cancelled) return;
+        const options: AssigneeOption[] = [];
+        const seen = new Set<string>();
+        for (const member of result.records) {
+          const id = member.employeeId || member.id;
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          options.push({
+            id,
+            name: member.employeeName || id,
+          });
+        }
+        setMemberOptions(options);
+      } catch {
+        if (!cancelled) setMemberOptions([]);
+      } finally {
+        if (!cancelled) setMembersLoading(false);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, project.id]);
 
   const availableAssigneeOptions = useMemo(
     () =>
       mapNamedOptions(
-        employees.filter(
-          (employee) => !assignees.some((assignee) => assignee.id === employee.id),
+        memberOptions.filter(
+          (member) => !assignees.some((assignee) => assignee.id === member.id),
         ),
       ),
-    [assignees, employees],
+    [assignees, memberOptions],
   );
 
   const dependencyOptions = useMemo(() => {
@@ -139,7 +173,6 @@ export function AddTaskModal({
             project.endDate,
           ),
         priority: task.priority || "medium",
-        status: task.status || "todo",
       });
       setDependsOnTaskIds([...(task.dependsOnTaskIds ?? [])]);
       setAssignees(
@@ -148,6 +181,7 @@ export function AddTaskModal({
           name: task.assigneeNames[index] || id,
         })),
       );
+      setTransitions(getTaskTransitions(project.id, task.id));
     } else {
       const sectionId = defaultSectionId || project.sections[0]?.id || "";
       const startDate = todayInputValue();
@@ -159,10 +193,10 @@ export function AddTaskModal({
         startDate,
         dueDate: defaultDueDate(startDate, project.endDate),
         priority: "medium",
-        status: "todo",
       });
       setDependsOnTaskIds([]);
       setAssignees([]);
+      setTransitions([]);
     }
 
     setAssigneePickId("");
@@ -183,14 +217,14 @@ export function AddTaskModal({
     project.sections.find((section) => section.id === form.sectionId) ??
     project.sections[0];
 
-  const addAssignee = (employeeId: string) => {
-    if (!employeeId) return;
-    const employee = employees.find((item) => item.id === employeeId);
-    if (!employee || assignees.some((item) => item.id === employee.id)) {
+  const addAssignee = (memberId: string) => {
+    if (!memberId) return;
+    const member = memberOptions.find((item) => item.id === memberId);
+    if (!member || assignees.some((item) => item.id === member.id)) {
       setAssigneePickId("");
       return;
     }
-    setAssignees((prev) => [...prev, employee]);
+    setAssignees((prev) => [...prev, member]);
     setAssigneePickId("");
   };
 
@@ -244,11 +278,6 @@ export function AddTaskModal({
       setError(t("projects.modals.addTask.errors.invalidDateRange"));
       return;
     }
-    if (!assignees.length) {
-      setError(t("projects.modals.addTask.errors.assigneeRequired"));
-      return;
-    }
-
     setSaving(true);
     try {
       await onSubmit({
@@ -259,7 +288,6 @@ export function AddTaskModal({
         startDate: form.startDate,
         dueDate: form.dueDate,
         priority: form.priority,
-        status: form.status,
         assigneeIds: assignees.map((item) => item.id),
         assigneeNames: assignees.map((item) => item.name),
         dependsOnTaskIds,
@@ -453,38 +481,6 @@ export function AddTaskModal({
 
           <div>
             <label className="mb-2 block text-sm text-hr-text">
-              {t("projects.modals.addTask.fields.status")}
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {completionStatuses.map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => setForm((prev) => ({ ...prev, status }))}
-                  className={[
-                    "rounded-xl border px-3 py-2 text-sm font-medium transition",
-                    form.status === status
-                      ? status === "completed"
-                        ? "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
-                        : status === "in_progress"
-                          ? "border-sky-300 bg-sky-100 text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
-                          : "border-hr-primary bg-hr-primary/10 text-hr-primary"
-                      : "border-hr-border bg-hr-surface text-hr-muted",
-                  ].join(" ")}
-                >
-                  {taskStatusLabel(status)}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-hr-muted">
-              {t("projects.modals.addTask.fields.completionHint", {
-                points: pointsForPriority(form.priority),
-              })}
-            </p>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm text-hr-text">
               {t("projects.modals.addTask.fields.dependsOn")}
             </label>
             <p className="mb-2 text-xs text-hr-muted">
@@ -528,7 +524,7 @@ export function AddTaskModal({
               onChange={addAssignee}
               options={availableAssigneeOptions}
               placeholder={t("projects.modals.addTask.placeholders.assignee")}
-              loading={loading}
+              loading={membersLoading}
             />
             <div className="mt-3 rounded-xl border border-hr-border">
               {assignees.length ? (
@@ -550,11 +546,15 @@ export function AddTaskModal({
                 ))
               ) : (
                 <p className="px-4 py-6 text-center text-sm text-hr-muted">
-                  {t("projects.modals.addTask.assigneesEmpty")}
+                  {memberOptions.length
+                    ? t("projects.modals.addTask.assigneesEmpty")
+                    : t("projects.modals.addTask.assigneesNoMembers")}
                 </p>
               )}
             </div>
           </div>
+
+          {isEditing ? <TaskTransitionsPanel transitions={transitions} /> : null}
 
           {error && <p className={alertErrorClass}>{error}</p>}
 

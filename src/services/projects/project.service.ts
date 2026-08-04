@@ -10,7 +10,6 @@ import type {
   SectionFormPayload,
   TaskFormPayload,
   TaskStats,
-  TaskStatus,
 } from "../../types/project";
 import {
   assertMutationSuccess,
@@ -75,11 +74,11 @@ import {
   unlinkFlowAnchor,
 } from "./flowAnchors";
 import {
-  clearProjectPoints,
-  removeTaskPoints,
-  syncTaskCompletionPoints,
-} from "./performancePoints";
-
+  clearProjectTaskTransitions,
+  recordTaskSectionTransition,
+  removeTaskTransitions,
+  removeTransitionsForTasks,
+} from "./taskTransitionsStorage";
 type ProjectsQuery = {
   page?: number;
   limit?: number;
@@ -327,10 +326,10 @@ export const deleteProject = async (id: string) => {
   assertMutationSuccess(response.data, "فشل حذف المشروع.");
   clearSectionOwnership(id);
   clearProjectTasks(id);
-  clearProjectPoints(id);
   clearProjectFlowAnchors(id);
   clearProjectSectionDeps(id);
   clearProjectSectionEdgeLabels(id);
+  clearProjectTaskTransitions(id);
   return { success: true as const };
 };
 
@@ -523,7 +522,10 @@ export const deleteSection = async (projectId: string, sectionId: string) => {
   removeSectionFromEdgeLabels(projectId, sectionId);
 
   const removedTasks = deleteTasksForSection(projectId, sectionId);
-  removedTasks.forEach((task) => removeTaskPoints(task.id));
+  removeTransitionsForTasks(
+    projectId,
+    removedTasks.map((task) => task.id),
+  );
   pruneProjectFlowAnchors(
     projectId,
     getProjectTasks(projectId).map((task) => task.id),
@@ -590,12 +592,7 @@ export const getProjectInvitations = async (
   const response = await api.get(`/projects/${projectId}/invitations`, { params });
   return sortNewestFirst(
     unwrapPage<Record<string, unknown>>(response.data)
-      .map((item) =>
-        normalizeInvitation({
-          ...item,
-          projectId: String(item.projectId ?? projectId),
-        }),
-      )
+      .map((item) => normalizeInvitation(item, projectId))
       .filter((item): item is ProjectInvitation => Boolean(item)),
   );
 };
@@ -684,15 +681,8 @@ export const updateInvitationStatus = async (
 };
 
 export const addTask = async (projectId: string, payload: TaskFormPayload) => {
-  const task = addProjectTask(projectId, payload);
-  const project = await getProjectById(projectId);
-  syncTaskCompletionPoints({
-    projectId,
-    projectName: project.name,
-    previous: null,
-    next: task,
-  });
-  return project;
+  addProjectTask(projectId, payload);
+  return getProjectById(projectId);
 };
 
 export const updateTask = async (
@@ -702,54 +692,32 @@ export const updateTask = async (
 ) => {
   const previous =
     getProjectTasks(projectId).find((task) => task.id === taskId) ?? null;
-  const updated = updateProjectTask(projectId, taskId, payload);
+  updateProjectTask(projectId, taskId, payload);
   const project = await getProjectById(projectId);
-  syncTaskCompletionPoints({
-    projectId,
-    projectName: project.name,
-    previous,
-    next: updated,
-  });
+
+  if (previous && previous.sectionId !== payload.sectionId) {
+    const fromSection = project.sections.find(
+      (section) => section.id === previous.sectionId,
+    );
+    const toSection = project.sections.find(
+      (section) => section.id === payload.sectionId,
+    );
+    recordTaskSectionTransition({
+      projectId,
+      taskId,
+      fromSectionId: previous.sectionId,
+      fromSectionName: fromSection?.name || previous.sectionId,
+      toSectionId: payload.sectionId,
+      toSectionName: toSection?.name || payload.sectionId,
+    });
+  }
+
   return project;
-};
-
-/** Update only completion/progress status (awards or removes points). */
-export const updateTaskStatus = async (
-  projectId: string,
-  taskId: string,
-  status: TaskStatus,
-) => {
-  const previous = getProjectTasks(projectId).find((task) => task.id === taskId);
-  if (!previous) throw new Error("Task not found");
-
-  const updated = updateProjectTask(projectId, taskId, {
-    title: previous.title,
-    description: previous.description,
-    sectionId: previous.sectionId,
-    expectedHours: previous.expectedHours,
-    startDate: previous.startDate,
-    dueDate: previous.dueDate,
-    priority: previous.priority,
-    status,
-    assigneeIds: previous.assigneeIds,
-    assigneeNames: previous.assigneeNames,
-    dependsOnTaskIds: previous.dependsOnTaskIds,
-  });
-
-  const project = await getProjectById(projectId);
-  const awarded = syncTaskCompletionPoints({
-    projectId,
-    projectName: project.name,
-    previous,
-    next: updated,
-  });
-
-  return { project, task: updated, awarded };
 };
 
 export const deleteTask = async (projectId: string, taskId: string) => {
   deleteProjectTask(projectId, taskId);
-  removeTaskPoints(taskId);
+  removeTaskTransitions(projectId, taskId);
   pruneProjectFlowAnchors(
     projectId,
     getProjectTasks(projectId).map((task) => task.id),

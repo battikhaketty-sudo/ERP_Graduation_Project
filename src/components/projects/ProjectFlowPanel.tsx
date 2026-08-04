@@ -18,10 +18,8 @@ type ProjectFlowPanelProps = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  completed: "#7ED321",
-  inProgress: "#5BB8E8",
+  onTrack: "#5BB8E8",
   late: "#FF6B6B",
-  other: "#94A3B8",
 };
 
 function CompletionRing({ percent }: { percent: number }) {
@@ -63,7 +61,7 @@ function CompletionRing({ percent }: { percent: number }) {
   );
 }
 
-const FILTERS: TaskFlowFilter[] = ["all", "ready", "blocked", "completed"];
+const FILTERS: TaskFlowFilter[] = ["all"];
 
 export function ProjectFlowPanel({
   project,
@@ -74,7 +72,7 @@ export function ProjectFlowPanel({
 }: ProjectFlowPanelProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<TaskFlowFilter>("all");
+  const [filter] = useState<TaskFlowFilter>("all");
 
   const snapshot = useMemo(
     () => buildProjectProgressSnapshot(project, taskStats),
@@ -131,33 +129,12 @@ export function ProjectFlowPanel({
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setFilter(key)}
-                  className={[
-                    "rounded-lg px-3 py-2 text-xs font-semibold transition",
-                    filter === key
-                      ? "bg-hr-primary text-white"
-                      : "bg-hr-table-alt text-hr-muted hover:text-hr-text",
-                  ].join(" ")}
+                  className="rounded-lg bg-hr-primary px-3 py-2 text-xs font-semibold text-white"
                 >
                   {t(`projects.detail.flow.filters.${key}`)}
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="mb-3 flex flex-wrap gap-3 text-xs text-hr-muted">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-sky-500" />
-              {t("projects.detail.flow.gate.ready")}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-amber-500" />
-              {t("projects.detail.flow.gate.blocked")}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full bg-emerald-500" />
-              {t("projects.detail.flow.gate.completed")}
-            </span>
           </div>
 
           <TaskDependencyFlow
@@ -177,9 +154,9 @@ export function ProjectFlowPanel({
             <CompletionRing percent={snapshot.completionPercent} />
             <p className="mt-3 text-xs text-hr-muted">
               {snapshot.taskStats.total
-                ? t("projects.detail.flow.completedOf", {
-                    completed: snapshot.taskStats.completed,
+                ? t("projects.detail.flow.tasksSummary", {
                     total: snapshot.taskStats.total,
+                    late: snapshot.taskStats.late,
                   })
                 : t("projects.detail.flow.noTasks")}
             </p>

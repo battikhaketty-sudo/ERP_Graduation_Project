@@ -1,6 +1,7 @@
-import type { ProjectTask, TaskStatus } from "../../types/project";
+import type { ProjectTask } from "../../types/project";
 
-export type TaskFlowGate = "completed" | "ready" | "blocked";
+/** Display-only gate — tasks no longer have a completion status. */
+export type TaskFlowGate = "ready";
 
 export type TaskFlowNodeLayout = {
   taskId: string;
@@ -16,11 +17,6 @@ const NODE_HEIGHT = 96;
 const LAYER_GAP_X = 300;
 /** Must stay > NODE_HEIGHT so siblings in one layer never overlap. */
 const LAYER_GAP_Y = NODE_HEIGHT + 56;
-
-const taskStatus = (task: ProjectTask): TaskStatus =>
-  task.status === "completed" || task.status === "in_progress" || task.status === "todo"
-    ? task.status
-    : "todo";
 
 const knownIds = (tasks: ProjectTask[]) => new Set(tasks.map((task) => task.id));
 
@@ -39,21 +35,12 @@ export const sanitizeDependsOn = (input: {
     ),
   ];
 
-  return unique.filter((depId) => {
-    // Would depId → … → taskId already exist if we add taskId depends on depId?
-    // Cycle if depId can reach taskId through existing edges, OR if taskId can reach depId.
-    return !wouldCreateCycle(input.tasks, input.taskId, depId);
-  });
+  return unique.filter((depId) => !wouldCreateCycle(input.tasks, input.taskId, depId));
 };
 
 /**
  * Adding edge `fromId → toId` means toId depends on fromId.
- * Cycle if toId can already reach fromId in the dependency graph
- * (following dependsOn edges as reverse? Wait:
- *
- * dependsOn: C.dependsOn = [A,B] means edges A→C and B→C (prerequisite → dependent).
- * Cycle if fromId is reachable from toId by walking dependsOn forward
- * (toId → … → fromId), i.e. fromId already depends (transitively) on toId.
+ * Cycle if fromId already depends (transitively) on toId.
  */
 export const wouldCreateCycle = (
   tasks: ProjectTask[],
@@ -82,68 +69,14 @@ export const wouldCreateCycle = (
 };
 
 export const getTaskGate = (
-  task: ProjectTask,
-  tasksById: Map<string, ProjectTask>,
-): TaskFlowGate => {
-  if (taskStatus(task) === "completed") return "completed";
-
-  if (!areDependenciesSatisfied(task, tasksById)) return "blocked";
-  return "ready";
-};
-
-/** All prerequisite tasks exist and are completed. */
-export const areDependenciesSatisfied = (
-  task: Pick<ProjectTask, "dependsOnTaskIds">,
-  tasksById: Map<string, ProjectTask>,
-): boolean => {
-  const deps = (task.dependsOnTaskIds ?? []).filter((id) => tasksById.has(id));
-  if (!deps.length) return true;
-  return deps.every((id) => {
-    const dep = tasksById.get(id);
-    return dep ? taskStatus(dep) === "completed" : true;
-  });
-};
+  _task: ProjectTask,
+  _tasksById: Map<string, ProjectTask>,
+): TaskFlowGate => "ready";
 
 export const getBlockingDependencyTitles = (
-  task: Pick<ProjectTask, "dependsOnTaskIds">,
-  tasks: ProjectTask[],
-): string[] => {
-  const byId = new Map(tasks.map((item) => [item.id, item]));
-  return (task.dependsOnTaskIds ?? [])
-    .map((id) => byId.get(id))
-    .filter((dep): dep is ProjectTask => Boolean(dep))
-    .filter((dep) => taskStatus(dep) !== "completed")
-    .map((dep) => dep.title || dep.name);
-};
-
-/**
- * Starting or completing a task is only allowed when every dependency is completed.
- * `todo` is always allowed (park / reset).
- */
-export const canSetTaskStatus = (
-  task: Pick<ProjectTask, "id" | "dependsOnTaskIds">,
-  nextStatus: TaskStatus,
-  tasks: ProjectTask[],
-): boolean => {
-  if (nextStatus === "todo") return true;
-  const byId = new Map(tasks.map((item) => [item.id, item]));
-  return areDependenciesSatisfied(task, byId);
-};
-
-/** Downgrade illegal in_progress/completed statuses when deps are incomplete. */
-export const enforceDependencyStatuses = (tasks: ProjectTask[]): ProjectTask[] => {
-  const byId = new Map(tasks.map((task) => [task.id, task]));
-  let changed = false;
-
-  const next = tasks.map((task) => {
-    if (taskStatus(task) === "todo") return task;
-    if (areDependenciesSatisfied(task, byId)) return task;
-    changed = true;
-    return { ...task, status: "todo" as TaskStatus };
-  });
-
-  return changed ? next : tasks;
-};
+  _task: Pick<ProjectTask, "dependsOnTaskIds">,
+  _tasks: ProjectTask[],
+): string[] => [];
 
 /** Kahn-style layers: tasks with no deps first, then dependents. */
 export const buildDependencyLayers = (tasks: ProjectTask[]): string[][] => {
@@ -190,7 +123,6 @@ export const buildDependencyLayers = (tasks: ProjectTask[]): string[][] => {
     frontier = [...new Set(next)].sort();
   }
 
-  // Cycles / leftovers: append as final layer so nothing disappears.
   const leftover = tasks
     .map((task) => task.id)
     .filter((id) => !placed.has(id))
@@ -208,11 +140,6 @@ const spreadLayerYs = (count: number, gap: number) => {
   return Array.from({ length: count }, (_, index) => startY + index * gap);
 };
 
-/**
- * Layered layout that keeps multi-parent fan-in readable:
- * e.g. t3 depends on t1+t2, t2 depends on t1 → t2 is offset vertically
- * so arrows t1→t3 and t2→t3 do not collapse into one straight line.
- */
 export const layoutTaskDependencyGraph = (
   tasks: ProjectTask[],
 ): TaskFlowNodeLayout[] => {
@@ -225,14 +152,11 @@ export const layoutTaskDependencyGraph = (
 
   const yOf = new Map<string, number>();
 
-  // Seed Y from layer order.
   layers.forEach((layer) => {
     const ys = spreadLayerYs(layer.length, LAYER_GAP_Y);
     layer.forEach((id, index) => yOf.set(id, ys[index] ?? 0));
   });
 
-  // Barycenter passes: order siblings by parent average, then park on fixed slots
-  // (never blend toward parent Y — that collapses cards on top of each other).
   for (let pass = 0; pass < 3; pass++) {
     layers.forEach((layer) => {
       const scored = layer.map((id) => {
@@ -256,7 +180,6 @@ export const layoutTaskDependencyGraph = (
     });
   }
 
-  // Fan-in fix: if a node has 2+ parents sitting on the same Y, spread parents.
   tasks.forEach((task) => {
     const parents = (task.dependsOnTaskIds ?? []).filter((id) => yOf.has(id));
     if (parents.length < 2) return;
@@ -278,7 +201,6 @@ export const layoutTaskDependencyGraph = (
     yOf.set(task.id, avg);
   });
 
-  // Hard separation: re-slot every layer so cards never overlap.
   layers.forEach((layer) => {
     if (layer.length <= 1) return;
     const ordered = [...layer].sort(
@@ -289,8 +211,6 @@ export const layoutTaskDependencyGraph = (
     ordered.forEach((id, index) => yOf.set(id, ys[index] ?? 0));
   });
 
-  // Single-node layers with a skip-incoming edge: nudge off the main axis
-  // so the long arrow bows clear of the middle chain.
   layers.forEach((layer, layerIndex) => {
     if (layer.length !== 1 || layerIndex === 0) return;
     const id = layer[0];
@@ -342,9 +262,7 @@ export type DependencyEdgeSpec = {
   id: string;
   source: string;
   target: string;
-  /** How many layers this edge spans (1 = adjacent). */
   span: number;
-  /** Index among edges entering the same target (for bow offset). */
   fanIndex: number;
   fanCount: number;
 };
@@ -395,10 +313,6 @@ export const dependencyEdges = (
   });
 };
 
-/**
- * Display-only terminals: Start → entry tasks (no deps), exit tasks (no dependents) → End.
- * Used until the backend graph API supplies nodes/edges.
- */
 export const buildAutoTerminalEdges = (
   tasks: ProjectTask[],
   startId: string,

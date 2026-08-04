@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   Bell,
   Building2,
-  CheckCircle2,
   ClipboardList,
   FolderKanban,
   Plus,
@@ -27,7 +26,7 @@ import { useProjectLabels } from "../hooks/useProjectLabels";
 const emptySummary = (): DashboardSummary => ({
   activeProjects: 0,
   overdueTasks: 0,
-  completedThisWeek: 0,
+  dueThisWeek: 0,
   pendingFollowUps: 0,
   completionRate: 0,
   overdueProjects: 0,
@@ -99,10 +98,10 @@ export function DashboardPage() {
       ring: "border-red-400",
     },
     {
-      key: "completedThisWeek",
-      label: t("dashboard.kpi.completedThisWeek"),
-      value: summary.completedThisWeek,
-      icon: CheckCircle2,
+      key: "dueThisWeek",
+      label: t("dashboard.kpi.dueThisWeek"),
+      value: summary.dueThisWeek,
+      icon: ClipboardList,
       tone: "text-emerald-600",
       ring: "border-emerald-400",
     },
@@ -162,17 +161,23 @@ export function DashboardPage() {
           <h1 className="text-xl font-bold text-hr-primary sm:text-[22px]">
             {t("dashboard.title")}
           </h1>
-          <p className="mt-1 text-sm text-hr-muted">{t("dashboard.subtitle")}</p>
+          <p className="mt-1 text-sm text-hr-muted">
+            {t("dashboard.subtitle")}
+          </p>
         </div>
         <p className="rounded-xl bg-hr-surface px-3 py-2 text-xs font-medium text-hr-muted shadow-sm">
           {t("dashboard.completionRate", { percent: summary.completionRate })}
         </p>
       </div>
 
-      {error ? <StatusBanner variant="error" message={error} className="mb-4" /> : null}
+      {error ? (
+        <StatusBanner variant="error" message={error} className="mb-4" />
+      ) : null}
 
       {loading ? (
-        <div className={`${cardSurfaceClass} p-10 text-center text-sm text-hr-muted`}>
+        <div
+          className={`${cardSurfaceClass} p-10 text-center text-sm text-hr-muted`}
+        >
           {t("common.loading")}
         </div>
       ) : (
@@ -223,7 +228,9 @@ export function DashboardPage() {
                   <div className="mb-2 flex items-center justify-between">
                     <Icon className={`size-5 ${kpi.tone}`} />
                   </div>
-                  <p className={`text-2xl font-bold ${kpi.tone}`}>{kpi.value}</p>
+                  <p className={`text-2xl font-bold ${kpi.tone}`}>
+                    {kpi.value}
+                  </p>
                   <p className="mt-1 text-sm text-hr-muted">{kpi.label}</p>
                 </div>
               );
@@ -293,17 +300,24 @@ export function DashboardPage() {
                             {project.progress}%
                           </span>
                         </div>
-                        <ProgressBar value={project.progress} overdue={project.overdue} />
+                        <ProgressBar
+                          value={project.progress}
+                          overdue={project.overdue}
+                        />
                         <div className="mt-1.5 flex items-center justify-between gap-2">
                           <ProjectStatusBadge status={project.status} />
                           <span
                             className={[
                               "text-[11px]",
-                              project.overdue ? "font-semibold text-red-500" : "text-hr-muted",
+                              project.overdue
+                                ? "font-semibold text-red-500"
+                                : "text-hr-muted",
                             ].join(" ")}
                           >
                             {project.endDate
-                              ? t("dashboard.progress.deadline", { date: project.endDate })
+                              ? t("dashboard.progress.deadline", {
+                                  date: project.endDate,
+                                })
                               : t("common.dash")}
                           </span>
                         </div>
@@ -410,7 +424,9 @@ export function DashboardPage() {
                         </p>
                       </div>
                       <span className="shrink-0 text-[11px] text-hr-muted">
-                        {item.at ? String(item.at).slice(0, 10) : t("common.dash")}
+                        {item.at
+                          ? String(item.at).slice(0, 10)
+                          : t("common.dash")}
                       </span>
                     </button>
                   </li>

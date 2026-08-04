@@ -9,7 +9,19 @@ export type InvitationStatus =
 
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
-export type TaskStatus = "todo" | "in_progress" | "completed";
+/** Recorded when a task moves from one section to another. */
+export type TaskTransition = {
+  id: string;
+  taskId: string;
+  memberId: string;
+  memberName: string;
+  fromSectionId: string;
+  fromSectionName: string;
+  toSectionId: string;
+  toSectionName: string;
+  /** ISO-8601 UTC timestamp */
+  createdAtUtc: string;
+};
 
 export type ProjectSection = {
   id: string;
@@ -40,13 +52,12 @@ export type ProjectTask = {
   title: string;
   description: string;
   priority: TaskPriority;
-  status: TaskStatus;
   expectedHours: number;
   startDate: string;
   dueDate: string;
   assigneeIds: string[];
   assigneeNames: string[];
-  /** Task ids that must be completed before this task is unblocked. */
+  /** Task ids that should be done before this task (display / planning graph). */
   dependsOnTaskIds: string[];
 };
 
@@ -77,7 +88,7 @@ export type ProjectDetailStats = {
   membersCount: number;
   tasksCount: number;
   sectionsCount: number;
-  completedTasksCount: number;
+  lateTasksCount: number;
 };
 
 export type ProjectInvitation = {
@@ -134,7 +145,6 @@ export type TaskFormPayload = {
   startDate: string;
   dueDate: string;
   priority: TaskPriority;
-  status: TaskStatus;
   assigneeIds: string[];
   assigneeNames: string[];
   dependsOnTaskIds?: string[];
@@ -149,8 +159,6 @@ export type ProjectStats = {
 
 export type TaskStats = {
   total: number;
-  inProgress: number;
-  completed: number;
   late: number;
 };
 

@@ -134,11 +134,6 @@ export const en = {
       high: "High",
       urgent: "Urgent",
     },
-    taskStatus: {
-      todo: "To do",
-      in_progress: "In progress",
-      completed: "Completed",
-    },
     memberRoles: {
       manager: "Manager",
       member: "Member",
@@ -472,10 +467,6 @@ export const en = {
       taskAdded: "Task added",
       taskUpdated: "Task updated",
       taskDeleted: "Task deleted",
-      taskCompleted:
-        "Task completed — {{points}} points awarded per assignee ({{count}})",
-      taskReopened: "Task reopened and completion points removed",
-      taskInProgress: "Task marked in progress",
       memberRemoved: "Member removed from project",
       inviteSent: "Invitation sent",
       inviteAccepted: "Invitation accepted",
@@ -485,7 +476,7 @@ export const en = {
     },
     header: {
       projectsTab: "Projects",
-      invitationsTab: "Invitations",
+      invitationsTab: "My invitations",
     },
     table: {
       empty: "No projects",
@@ -508,12 +499,12 @@ export const en = {
       backLabel: "Back to projects list",
       defaultDescription: "Project details",
       tabs: {
-        general: "Project status",
-        members: "Team",
+        general: "General info",
+        members: "Members",
+        invitations: "Manage invitations",
         flow: "Task path",
         sectionFlow: "Work stages",
-        performance: "Performance & points",
-        kanban: "Task board",
+        kanban: "Kanban board",
       },
       fields: {
         number: "Number",
@@ -528,17 +519,17 @@ export const en = {
       flow: {
         title: "Task path",
         subtitle:
-          "See project tasks and what must finish before each one — set this when adding or editing a task",
-        completion: "Completion",
-        completedOf: "{{completed}} of {{total}} tasks",
+          "See project tasks and what comes before each one — set this when adding or editing a task",
+        completion: "Schedule progress",
+        tasksSummary: "{{total}} tasks · {{late}} late",
         noTasks: "No tasks yet",
         tasksPath: "Work path",
         graphHint:
-          "Display only. Add a task and pick what must finish before it; the path draws automatically.",
+          "Display only. Add a task and pick what comes before it; the path draws automatically.",
         graphStart: "Start",
         graphEnd: "End",
         terminalsHint:
-          "Add a task with the button above, and choose which tasks must finish before it",
+          "Add a task with the button above, and choose which tasks come before it",
         legendBusy: "Has tasks",
         legendDone: "Done stage",
         legendIdle: "Empty",
@@ -554,7 +545,7 @@ export const en = {
         noTasksGraph: "No tasks yet — add a task to start the dependency path",
         noFilterMatch: "No tasks match this search or filter",
         searchPlaceholder: "Search tasks…",
-        dragHint: "Link a task to what must finish before it",
+        dragHint: "Link a task to what comes before it",
         linkHint: "Link",
         linkFailed: "Could not link tasks",
         unlinkFailed: "Could not remove link",
@@ -569,12 +560,10 @@ export const en = {
           blocked: "Waiting on other tasks",
           completed: "Completed",
         },
-        statusMix: "Status mix",
+        statusMix: "Due dates",
         status: {
-          completed: "Completed",
-          inProgress: "In progress",
+          onTrack: "On track",
           late: "Late",
-          other: "Other",
         },
         timeline: "Timeline",
         today: "Today",
@@ -600,7 +589,7 @@ export const en = {
         noSections: "No sections yet — add stages to draw the workflow",
         noFilterMatch: "No sections match the search or filter",
         searchPlaceholder: "Search sections…",
-        tasksInSection: "{{completed}} / {{count}} tasks",
+        tasksInSection: "{{count}} tasks",
         filters: {
           all: "All",
           ready: "Ready",
@@ -608,7 +597,7 @@ export const en = {
           completed: "Done",
         },
         gate: {
-          ready: "Ready",
+          ready: "Stage",
           blocked: "Waiting",
           completed: "Done",
         },
@@ -628,31 +617,6 @@ export const en = {
           type: "Type",
         },
       },
-      performance: {
-        title: "Employee performance & points",
-        subtitle: "Points are awarded when assignees complete tasks",
-        leaderboard: "Project points leaderboard",
-        totalPoints: "Total points: {{count}}",
-        empty: "No points yet — complete a task with an assignee to award points",
-        rulesTitle: "Points rules",
-        rules: {
-          low: "Low priority: {{points}} points",
-          medium: "Medium priority: {{points}} points",
-          high: "High priority: {{points}} points",
-          urgent: "Urgent priority: {{points}} points",
-          assignees: "Each assignee earns points when the task is marked completed",
-        },
-        recent: "Recent points earned",
-        recentEmpty: "No points history yet",
-        columns: {
-          employee: "Employee",
-          tasks: "Completed tasks",
-          points: "This project",
-          allProjects: "All projects total",
-        },
-        multiProjectHint:
-          "This project’s column is from its tasks only; All projects total sums the employee’s points across every project",
-      },
     },
     kanban: {
       addSection: "Add new section",
@@ -660,7 +624,7 @@ export const en = {
       unassigned: "Unassigned",
     },
     members: {
-      addMember: "Add new member",
+      addMember: "Invite new member",
       columns: {
         index: "#",
         id: "id",
@@ -670,8 +634,11 @@ export const en = {
       },
     },
     invitations: {
-      title: "Invitations management",
-      empty: "No invitations",
+      title: "My invitations",
+      myTitle: "My invitations",
+      myEmpty: "No incoming invitations yet — a dedicated API will be wired soon",
+      empty: "No invitations for this project",
+      manageTitle: "Manage invitations",
       searchPlaceholder: "Search by project or employee…",
       columns: {
         projectName: "Project name",
@@ -689,10 +656,7 @@ export const en = {
       sectionsCount: "Sections count",
       assignedEmployees: "Assigned employees",
       membersCount: "Members count",
-      completedTasks: "Completed tasks",
       totalTasks: "Total tasks",
-      inProgress: "In progress",
-      completed: "Completed",
       late: "Late",
     },
     modals: {
@@ -752,7 +716,14 @@ export const en = {
         submit: "Add task",
         editSubmit: "Save changes",
         saving: "Saving…",
-        assigneesEmpty: "Add at least one assignee — required",
+        assigneesEmpty: "Optional — pick assignees from project members",
+        assigneesNoMembers: "No project members yet — add members first, then assign",
+        transitions: {
+          title: "Task transition history",
+          empty: "No transitions yet — they appear when the task moves between sections",
+          count: "{{count}} transition(s)",
+          by: "by {{name}}",
+        },
         fields: {
           project: "Project",
           projectHint: "Taken automatically from the current project",
@@ -763,8 +734,7 @@ export const en = {
           startDate: "Start date",
           dueDate: "Due date",
           priority: "Priority",
-          status: "Completion status",
-          completionHint: "On complete, each assignee earns {{points}} points",
+          status: "Task status",
           assignees: "Assignees",
           dependsOn: "Prerequisite tasks (must finish first)",
           dependsOnHint:
@@ -774,7 +744,7 @@ export const en = {
         placeholders: {
           title: "e.g. Design the main interface",
           description: "Short task description (optional)",
-          assignee: "Search and select an employee…",
+          assignee: "Search and select a project member…",
         },
         errors: {
           titleRequired: "Task title is required",
@@ -826,10 +796,6 @@ export const en = {
     sectionDetail: {
       backLabel: "Back to project",
       addTask: "Add new task",
-      markComplete: "Complete",
-      reopen: "Reopen",
-      startProgress: "Start",
-      pointsOnComplete: "+{{points}} pts",
       columns: {
         title: "Task title",
         priority: "Priority",
@@ -1248,7 +1214,7 @@ export const en = {
     kpi: {
       activeProjects: "Active projects",
       overdueTasks: "Overdue tasks",
-      completedThisWeek: "Done this week",
+      dueThisWeek: "Due this week",
       pendingFollowUps: "Need follow-up",
     },
     alerts: {
@@ -1261,7 +1227,7 @@ export const en = {
       title: "Quick actions",
       addProject: "Add project",
       addEmployee: "Add employee",
-      invitations: "Project invites",
+      invitations: "My invitations",
       attendance: "Attendance",
       departments: "Departments",
       notifications: "Notifications",
@@ -1347,7 +1313,7 @@ export const en = {
       searchPlaceholder: "Search projects…",
       addProject: "Add project",
       inviteMember: "Invite member",
-      invitations: "Invitations",
+      invitations: "My invitations",
     },
     hr: {
       title: "HR",

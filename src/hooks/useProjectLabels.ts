@@ -9,7 +9,6 @@ import type {
   InvitationStatus,
   ProjectStatus,
   TaskPriority,
-  TaskStatus,
 } from "../types/project";
 
 const MEMBER_ROLE_KEYS: Record<number, TranslationKey> = {
@@ -43,11 +42,6 @@ export function useProjectLabels() {
 
   const priorityLabel = useCallback(
     (priority: TaskPriority) => t(`badges.priority.${priority}`),
-    [t],
-  );
-
-  const taskStatusLabel = useCallback(
-    (status: TaskStatus) => t(`badges.taskStatus.${status}`),
     [t],
   );
 
@@ -95,7 +89,6 @@ export function useProjectLabels() {
     projectStatusLabel,
     invitationStatusLabel,
     priorityLabel,
-    taskStatusLabel,
     memberRoleLabel,
     memberRoleOptions,
     inviteMemberRoleOptions,

@@ -1,17 +1,10 @@
 import type { ProjectTask, TaskFormPayload, TaskStats } from "../../types/project";
 import { PROJECT_TASKS_KEY } from "./localProjectData";
-import { normalizeStoredTask, resolveTaskStatus } from "./taskStatus";
-import {
-  enforceDependencyStatuses,
-  canSetTaskStatus,
-  getBlockingDependencyTitles,
-  sanitizeDependsOn,
-} from "./taskDependencies";
+import { sanitizeDependsOn } from "./taskDependencies";
 
 type TaskStore = Record<string, ProjectTask[]>;
 
 const VALID_PRIORITIES = new Set(["low", "medium", "high", "urgent"]);
-const VALID_STATUSES = new Set(["todo", "in_progress", "completed"]);
 
 const isTask = (value: unknown): value is ProjectTask => {
   if (!value || typeof value !== "object") return false;
@@ -25,7 +18,6 @@ const isTask = (value: unknown): value is ProjectTask => {
 };
 
 const sanitizeTask = (task: ProjectTask): ProjectTask => ({
-  ...task,
   id: String(task.id),
   projectId: String(task.projectId),
   sectionId: String(task.sectionId),
@@ -34,7 +26,6 @@ const sanitizeTask = (task: ProjectTask): ProjectTask => ({
   title: String(task.title || task.name || "").slice(0, 200),
   description: String(task.description || "").slice(0, 5000),
   priority: VALID_PRIORITIES.has(task.priority) ? task.priority : "medium",
-  status: VALID_STATUSES.has(task.status) ? task.status : "todo",
   expectedHours: Math.max(0, Number(task.expectedHours) || 0),
   startDate: String(task.startDate || ""),
   dueDate: String(task.dueDate || ""),
@@ -79,14 +70,13 @@ export const getProjectTasks = (
 ): ProjectTask[] => {
   const store = readStore();
   const raw = store[projectId] ?? [];
-  const normalized = raw.map((task) => normalizeStoredTask(task, sections));
-  const enforced = enforceDependencyStatuses(normalized);
+  const normalized = raw.map(sanitizeTask);
 
   const sectionIds = new Set(sections.map((section) => section.id).filter(Boolean));
   const fallbackSectionId = sections[0]?.id ?? "";
   let sectionChanged = false;
 
-  const reconciled = enforced.map((task) => {
+  const reconciled = normalized.map((task) => {
     if (!sectionIds.size) return task;
     if (task.sectionId && sectionIds.has(task.sectionId)) return task;
     if (!fallbackSectionId || task.sectionId === fallbackSectionId) return task;
@@ -94,7 +84,7 @@ export const getProjectTasks = (
     return { ...task, sectionId: fallbackSectionId };
   });
 
-  if (enforced !== normalized || sectionChanged) {
+  if (sectionChanged) {
     store[projectId] = reconciled;
     writeStore(store);
   }
@@ -135,20 +125,6 @@ export const addProjectTask = (projectId: string, payload: TaskFormPayload): Pro
     tasks,
   });
 
-  const requestedStatus = payload.status || "todo";
-  const draft = {
-    id: taskId,
-    dependsOnTaskIds,
-  };
-  if (!canSetTaskStatus(draft, requestedStatus, tasks)) {
-    const blockers = getBlockingDependencyTitles(draft, tasks);
-    throw new Error(
-      blockers.length
-        ? `Cannot start until completed: ${blockers.join(", ")}`
-        : "Cannot start until dependencies are completed",
-    );
-  }
-
   const task = sanitizeTask({
     id: taskId,
     projectId,
@@ -158,7 +134,6 @@ export const addProjectTask = (projectId: string, payload: TaskFormPayload): Pro
     title: payload.title.trim(),
     description: payload.description.trim(),
     priority: payload.priority,
-    status: requestedStatus,
     expectedHours: payload.expectedHours,
     startDate: payload.startDate || new Date().toISOString().slice(0, 10),
     dueDate: payload.dueDate,
@@ -203,18 +178,6 @@ export const updateProjectTask = (
     tasks,
   });
 
-  const requestedStatus = payload.status || current.status || "todo";
-  const draft = { id: taskId, dependsOnTaskIds };
-  // Evaluate against siblings with this task's current status (deps are other tasks).
-  if (!canSetTaskStatus(draft, requestedStatus, tasks)) {
-    const blockers = getBlockingDependencyTitles(draft, tasks);
-    throw new Error(
-      blockers.length
-        ? `Cannot start until completed: ${blockers.join(", ")}`
-        : "Cannot start until dependencies are completed",
-    );
-  }
-
   const updated = sanitizeTask({
     ...current,
     sectionId: payload.sectionId,
@@ -222,7 +185,6 @@ export const updateProjectTask = (
     title: payload.title.trim(),
     description: payload.description.trim(),
     priority: payload.priority,
-    status: requestedStatus,
     expectedHours: payload.expectedHours,
     startDate: payload.startDate || current.startDate,
     dueDate: payload.dueDate,
@@ -237,7 +199,7 @@ export const updateProjectTask = (
   return { ...updated };
 };
 
-/** Add a dependency edge: `fromId` must complete before `toId` (arrow from → to). */
+/** Add a dependency edge: `fromId` before `toId` (arrow from → to). */
 export const addTaskDependency = (
   projectId: string,
   fromId: string,
@@ -294,39 +256,16 @@ export const removeTaskDependency = (
 export const countAllLocalTasks = (projectIds: string[]): number =>
   projectIds.reduce((sum, id) => sum + (readStore()[id]?.length ?? 0), 0);
 
-export const buildTaskStatsFromTasks = (
-  tasks: ProjectTask[],
-  sections: Array<{ id: string; name: string }> = [],
-): TaskStats => {
+export const buildTaskStatsFromTasks = (tasks: ProjectTask[]): TaskStats => {
   const today = new Date().toISOString().slice(0, 10);
-
-  let completed = 0;
-  let inProgress = 0;
   let late = 0;
 
   tasks.forEach((task) => {
-    const status = resolveTaskStatus(task, sections);
-    const overdue = Boolean(task.dueDate && task.dueDate < today);
-
-    if (status === "completed") {
-      completed += 1;
-      return;
-    }
-
-    if (overdue) {
-      late += 1;
-      return;
-    }
-
-    if (status === "in_progress") {
-      inProgress += 1;
-    }
+    if (task.dueDate && task.dueDate < today) late += 1;
   });
 
   return {
     total: tasks.length,
-    inProgress,
-    completed,
     late,
   };
 };

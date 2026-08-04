@@ -1,6 +1,6 @@
 import type { ProjectSection, ProjectTask } from "../../types/project";
 
-export type SectionFlowGate = "completed" | "ready" | "blocked";
+export type SectionFlowGate = "ready";
 
 export type SectionFlowNodeLayout = {
   sectionId: string;
@@ -69,39 +69,23 @@ export const wouldCreateSectionCycle = (
   return false;
 };
 
-/** Section is "done" only when it has tasks and every task is completed. */
+/** Sections are planning stages only — no task-completion gate. */
 export const isSectionWorkComplete = (
-  sectionId: string,
-  tasks: ProjectTask[],
-): boolean => {
-  const sectionTasks = tasks.filter((task) => task.sectionId === sectionId);
-  if (!sectionTasks.length) return false;
-  return sectionTasks.every((task) => task.status === "completed");
-};
+  _sectionId: string,
+  _tasks: ProjectTask[],
+): boolean => false;
 
 export const areSectionDependenciesSatisfied = (
-  section: Pick<ProjectSection, "dependsOnSectionIds">,
-  sectionsById: Map<string, ProjectSection>,
-  tasks: ProjectTask[],
-): boolean => {
-  const deps = (section.dependsOnSectionIds ?? []).filter((id) =>
-    sectionsById.has(id),
-  );
-  if (!deps.length) return true;
-  return deps.every((id) => isSectionWorkComplete(id, tasks));
-};
+  _section: Pick<ProjectSection, "dependsOnSectionIds">,
+  _sectionsById: Map<string, ProjectSection>,
+  _tasks: ProjectTask[],
+): boolean => true;
 
 export const getSectionFlowGate = (
-  section: ProjectSection,
-  sectionsById: Map<string, ProjectSection>,
-  tasks: ProjectTask[],
-): SectionFlowGate => {
-  if (isSectionWorkComplete(section.id, tasks)) return "completed";
-  if (!areSectionDependenciesSatisfied(section, sectionsById, tasks)) {
-    return "blocked";
-  }
-  return "ready";
-};
+  _section: ProjectSection,
+  _sectionsById: Map<string, ProjectSection>,
+  _tasks: ProjectTask[],
+): SectionFlowGate => "ready";
 
 /** Kahn-style layers: sections with no deps first, then dependents. */
 export const buildSectionDependencyLayers = (

@@ -34,7 +34,7 @@ import {
   flowDependencyEdgeTypes,
 } from "./FlowDependencyEdge";
 
-export type TaskFlowFilter = "all" | "ready" | "blocked" | "completed";
+export type TaskFlowFilter = "all";
 
 type TaskNodeData = {
   task: ProjectTask;
@@ -58,9 +58,7 @@ type TaskDependencyFlowProps = {
 };
 
 const gateStyles: Record<TaskFlowGate, string> = {
-  completed: "border-emerald-500/60 bg-emerald-500/10",
   ready: "border-sky-500/60 bg-sky-500/10",
-  blocked: "border-amber-500/60 bg-amber-500/10",
 };
 
 const edgeStyle = {
@@ -204,15 +202,11 @@ function TaskDependencyFlowCanvas({
     const byId = new Map(project.tasks.map((task) => [task.id, task]));
 
     return project.tasks.filter((task) => {
-      const gate = getTaskGate(task, byId);
-      if (filter === "ready" && gate !== "ready") return false;
-      if (filter === "blocked" && gate !== "blocked") return false;
-      if (filter === "completed" && gate !== "completed") return false;
       if (!q) return true;
       const hay = `${task.title} ${task.name} ${task.description}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [filter, project.tasks, search]);
+  }, [project.tasks, search]);
 
   const visibleIds = useMemo(
     () => new Set(filteredTasks.map((task) => task.id)),

@@ -149,28 +149,63 @@ export const normalizeProjectDetail = (item: Record<string, unknown>): Project =
 
 export const normalizeInvitation = (
   item: Record<string, unknown>,
+  fallbackProjectId?: string,
 ): ProjectInvitation | null => {
-  const projectId = readId(item.projectId);
-  const id = readId(item.invitationId, item.id);
+  const projectId = readId(
+    item.projectId,
+    item.ProjectId,
+    item.projectID,
+    fallbackProjectId,
+  );
+  const id = readId(item.invitationId, item.InvitationId, item.id, item.Id);
   if (!id || !projectId) return null;
 
   return {
     id,
     projectId,
-    projectName: String(item.projectName ?? "Untitled").slice(0, 200),
-    projectNumber: projectId,
-    employeeId: String(item.invitedEmployeeId ?? item.employeeId ?? ""),
-    employeeName: String(item.invitedEmployeeName ?? item.employeeName ?? "-").slice(
+    projectName: String(item.projectName ?? item.ProjectName ?? "Untitled").slice(
       0,
       200,
     ),
-    role: roleLabelFromApi(item.role),
-    message: typeof item.message === "string" ? item.message.slice(0, 2000) : undefined,
-    status: invitationStatusFromApi(item.status),
+    projectNumber: projectId,
+    employeeId: String(
+      item.invitedEmployeeId ??
+        item.InvitedEmployeeId ??
+        item.employeeId ??
+        item.EmployeeId ??
+        "",
+    ),
+    employeeName: String(
+      item.invitedEmployeeName ??
+        item.InvitedEmployeeName ??
+        item.employeeName ??
+        item.EmployeeName ??
+        "-",
+    ).slice(0, 200),
+    role: roleLabelFromApi(item.role ?? item.Role),
+    message:
+      typeof item.message === "string"
+        ? item.message.slice(0, 2000)
+        : typeof item.Message === "string"
+          ? item.Message.slice(0, 2000)
+          : undefined,
+    status: invitationStatusFromApi(item.status ?? item.Status),
     startDate: "",
     endDate: "",
-    invitedAt: formatDate(typeof item.invitedAtUtc === "string" ? item.invitedAtUtc : null),
-    expiresAt: formatDate(typeof item.expiresAtUtc === "string" ? item.expiresAtUtc : null),
+    invitedAt: formatDate(
+      typeof item.invitedAtUtc === "string"
+        ? item.invitedAtUtc
+        : typeof item.InvitedAtUtc === "string"
+          ? item.InvitedAtUtc
+          : null,
+    ),
+    expiresAt: formatDate(
+      typeof item.expiresAtUtc === "string"
+        ? item.expiresAtUtc
+        : typeof item.ExpiresAtUtc === "string"
+          ? item.ExpiresAtUtc
+          : null,
+    ),
   };
 };
 
@@ -200,7 +235,7 @@ export const buildProjectStats = (
 };
 
 export const buildTaskStats = (project: Project): TaskStats =>
-  buildTaskStatsFromTasks(project.tasks, project.sections);
+  buildTaskStatsFromTasks(project.tasks);
 
 export const buildProjectDetailStats = (
   project: Project,
@@ -209,5 +244,5 @@ export const buildProjectDetailStats = (
   membersCount: project.membersCount ?? 0,
   tasksCount: project.tasksCount ?? project.tasks.length,
   sectionsCount: project.sectionsCount ?? project.sections.length,
-  completedTasksCount: taskStats.completed,
+  lateTasksCount: taskStats.late,
 });

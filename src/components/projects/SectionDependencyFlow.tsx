@@ -37,7 +37,7 @@ import {
   flowDependencyEdgeTypes,
 } from "./FlowDependencyEdge";
 
-export type SectionFlowFilter = "all" | "ready" | "blocked" | "completed";
+export type SectionFlowFilter = "all";
 
 type SectionNodeData = {
   section: ProjectSection;
@@ -69,9 +69,7 @@ type EditingEdge = {
 };
 
 const gateStyles: Record<SectionFlowGate, string> = {
-  completed: "border-emerald-500/60 bg-emerald-500/10",
   ready: "border-sky-500/60 bg-sky-500/10",
-  blocked: "border-amber-500/60 bg-amber-500/10",
 };
 
 const edgeStyle = {
@@ -219,14 +217,10 @@ function SectionDependencyFlowCanvas({
     const byId = new Map(project.sections.map((section) => [section.id, section]));
 
     return project.sections.filter((section) => {
-      const gate = getSectionFlowGate(section, byId, project.tasks);
-      if (filter === "ready" && gate !== "ready") return false;
-      if (filter === "blocked" && gate !== "blocked") return false;
-      if (filter === "completed" && gate !== "completed") return false;
       if (!q) return true;
       return section.name.toLowerCase().includes(q);
     });
-  }, [filter, project.sections, project.tasks, search]);
+  }, [project.sections, search]);
 
   const visibleIds = useMemo(
     () => new Set(filteredSections.map((section) => section.id)),
@@ -256,8 +250,7 @@ function SectionDependencyFlowCanvas({
           section,
           gate: layout.gate,
           taskCount: sectionTasks.length,
-          completedCount: sectionTasks.filter((task) => task.status === "completed")
-            .length,
+          completedCount: 0,
           onEdit: onEditSection,
           onDelete: onDeleteSection,
         },

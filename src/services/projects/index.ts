@@ -26,7 +26,6 @@ export {
   updateProject,
   updateSection,
   updateTask,
-  updateTaskStatus,
 } from "./project.service";
 
 export {

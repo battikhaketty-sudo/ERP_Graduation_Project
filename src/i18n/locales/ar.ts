@@ -134,11 +134,6 @@ export const ar = {
       high: "عالية",
       urgent: "حرجة",
     },
-    taskStatus: {
-      todo: "جديدة",
-      in_progress: "قيد التنفيذ",
-      completed: "مكتملة",
-    },
     memberRoles: {
       manager: "مدير مشروع",
       member: "عضو",
@@ -471,10 +466,6 @@ export const ar = {
       taskAdded: "تم إضافة المهمة",
       taskUpdated: "تم تحديث المهمة",
       taskDeleted: "تم حذف المهمة",
-      taskCompleted:
-        "تم إكمال المهمة — مُنح {{points}} نقطة لكل مكلّف ({{count}})",
-      taskReopened: "أُعيد فتح المهمة وأُلغيت نقاط الإكمال",
-      taskInProgress: "المهمة قيد التنفيذ",
       memberRemoved: "تم إزالة العضو من المشروع",
       inviteSent: "تم إرسال الدعوة",
       inviteAccepted: "تم قبول الدعوة",
@@ -484,7 +475,7 @@ export const ar = {
     },
     header: {
       projectsTab: "المشاريع",
-      invitationsTab: "الدعوات",
+      invitationsTab: "دعواتي",
     },
     table: {
       empty: "لا توجد مشاريع",
@@ -507,12 +498,12 @@ export const ar = {
       backLabel: "العودة إلى قائمة المشاريع",
       defaultDescription: "تفاصيل المشروع",
       tabs: {
-        general: "حالة المشروع",
-        members: "الفريق",
+        general: "معلومات عامة",
+        members: "الأعضاء",
+        invitations: "إدارة الدعوات",
         flow: "مسار المهام",
         sectionFlow: "مراحل العمل",
-        performance: "الأداء والنقاط",
-        kanban: "لوحة المهام",
+        kanban: "لوحة كانبان",
       },
       fields: {
         number: "الرقم",
@@ -528,8 +519,8 @@ export const ar = {
         title: "مسار المهام",
         subtitle:
           "عرض مهام المشروع وما يجب إنجازه قبل كل مهمة — يُحدَّد ذلك عند إضافة أو تعديل المهمة",
-        completion: "نسبة الإنجاز",
-        completedOf: "{{completed}} من {{total}} مهمة",
+        completion: "تقدم الجدول الزمني",
+        tasksSummary: "{{total}} مهمة · {{late}} متأخرة",
         noTasks: "لا توجد مهام بعد",
         tasksPath: "مسار العمل",
         graphHint:
@@ -568,12 +559,10 @@ export const ar = {
           blocked: "بانتظار مهام أخرى",
           completed: "مكتملة",
         },
-        statusMix: "توزيع الحالة",
+        statusMix: "توزيع المواعيد",
         status: {
-          completed: "مكتمل",
-          inProgress: "قيد التنفيذ",
-          late: "متأخر",
-          other: "أخرى",
+          onTrack: "في الموعد",
+          late: "متأخرة",
         },
         timeline: "الجدول الزمني",
         today: "اليوم",
@@ -599,7 +588,7 @@ export const ar = {
         noSections: "لا توجد أقسام بعد — أضف المراحل لرسم سير العمل",
         noFilterMatch: "لا أقسام تطابق البحث أو التصفية",
         searchPlaceholder: "ابحث عن قسم…",
-        tasksInSection: "{{completed}} / {{count}} مهمة",
+        tasksInSection: "{{count}} مهمة",
         filters: {
           all: "الكل",
           ready: "جاهز",
@@ -607,7 +596,7 @@ export const ar = {
           completed: "مكتمل",
         },
         gate: {
-          ready: "جاهز",
+          ready: "مرحلة",
           blocked: "موقوف",
           completed: "مكتمل",
         },
@@ -627,31 +616,6 @@ export const ar = {
           type: "النوع",
         },
       },
-      performance: {
-        title: "أداء الموظفين والنقاط",
-        subtitle: "تُمنح النقاط عند إكمال المهام للمكلّفين",
-        leaderboard: "ترتيب النقاط في المشروع",
-        totalPoints: "إجمالي النقاط: {{count}}",
-        empty: "لا نقاط بعد — أكمل مهمة مع مكلّف لمنح نقاط",
-        rulesTitle: "قواعد النقاط",
-        rules: {
-          low: "أولوية منخفضة: {{points}} نقطة",
-          medium: "أولوية متوسطة: {{points}} نقطة",
-          high: "أولوية عالية: {{points}} نقطة",
-          urgent: "أولوية حرجة: {{points}} نقطة",
-          assignees: "تُمنح لكل مكلّف على المهمة عند تحويلها إلى مكتملة",
-        },
-        recent: "آخر النقاط المكتسبة",
-        recentEmpty: "لا سجل نقاط بعد",
-        columns: {
-          employee: "الموظف",
-          tasks: "مهام مكتملة",
-          points: "نقاط هذا المشروع",
-          allProjects: "إجمالي كل المشاريع",
-        },
-        multiProjectHint:
-          "نقاط هذا المشروع من مهامه فقط، و«إجمالي كل المشاريع» يجمع كل نقاط الموظف عبر المشاريع",
-      },
     },
     kanban: {
       addSection: "إضافة قسم جديد",
@@ -659,7 +623,7 @@ export const ar = {
       unassigned: "بدون قسم",
     },
     members: {
-      addMember: "إضافة عضو جديد",
+      addMember: "دعوة عضو جديد",
       columns: {
         index: "#",
         id: "id",
@@ -669,8 +633,11 @@ export const ar = {
       },
     },
     invitations: {
-      title: "إدارة الدعوات",
-      empty: "لا توجد دعوات",
+      title: "دعواتي",
+      myTitle: "دعواتي",
+      myEmpty: "لا توجد دعوات واردة بعد — سيتم ربطها عبر API مخصص قريباً",
+      empty: "لا توجد دعوات لهذا المشروع",
+      manageTitle: "إدارة الدعوات",
       searchPlaceholder: "ابحث عن مشروع أو موظف…",
       columns: {
         projectName: "اسم المشروع",
@@ -688,10 +655,7 @@ export const ar = {
       sectionsCount: "عدد الأقسام",
       assignedEmployees: "عدد الموظفين المكلفين",
       membersCount: "عدد الأعضاء",
-      completedTasks: "عدد المهام المكتملة",
       totalTasks: "إجمالي المهام",
-      inProgress: "قيد التنفيذ",
-      completed: "تم الإنجاز",
       late: "متأخرة",
     },
     modals: {
@@ -751,7 +715,14 @@ export const ar = {
         submit: "إضافة المهمة",
         editSubmit: "حفظ التغييرات",
         saving: "جاري الحفظ…",
-        assigneesEmpty: "أضف مكلّفاً واحداً على الأقل — مطلوب",
+        assigneesEmpty: "اختياري — يمكن إضافة مكلّفين من أعضاء المشروع",
+        assigneesNoMembers: "لا أعضاء في المشروع بعد — أضف أعضاءً أولاً ثم اختر المكلّفين",
+        transitions: {
+          title: "سجل انتقالات المهمة",
+          empty: "لا انتقالات بعد — تظهر هنا عند نقل المهمة بين الأقسام",
+          count: "{{count}} انتقال",
+          by: "بواسطة {{name}}",
+        },
         fields: {
           project: "المشروع",
           projectHint: "يُؤخذ تلقائياً من المشروع الحالي",
@@ -762,8 +733,7 @@ export const ar = {
           startDate: "تاريخ البداية",
           dueDate: "تاريخ الاستحقاق",
           priority: "الأولوية",
-          status: "حالة الإنجاز",
-          completionHint: "عند الإكمال يُمنح {{points}} نقطة لكل مكلّف",
+          status: "حالة المهمة",
           assignees: "المكلفون",
           dependsOn: "المهام السابقة (يجب اكتمالها أولاً)",
           dependsOnHint:
@@ -773,7 +743,7 @@ export const ar = {
         placeholders: {
           title: "مثال: تصميم الواجهة الرئيسية",
           description: "وصف مختصر للمهمة (اختياري)",
-          assignee: "ابحث واختر موظفاً…",
+          assignee: "ابحث واختر من أعضاء المشروع…",
         },
         errors: {
           titleRequired: "عنوان المهمة مطلوب",
@@ -824,10 +794,6 @@ export const ar = {
     sectionDetail: {
       backLabel: "العودة إلى المشروع",
       addTask: "إضافة مهمة جديدة",
-      markComplete: "إكمال",
-      reopen: "إعادة فتح",
-      startProgress: "بدء",
-      pointsOnComplete: "+{{points}} نقطة",
       columns: {
         title: "عنوان المهمة",
         priority: "الأولوية",
@@ -1245,7 +1211,7 @@ export const ar = {
     kpi: {
       activeProjects: "المشاريع النشطة",
       overdueTasks: "المهام المتأخرة",
-      completedThisWeek: "منجزة هذا الأسبوع",
+      dueThisWeek: "مستحقة هذا الأسبوع",
       pendingFollowUps: "بانتظار متابعة",
     },
     alerts: {
@@ -1258,7 +1224,7 @@ export const ar = {
       title: "اختصارات سريعة",
       addProject: "إضافة مشروع",
       addEmployee: "إضافة موظف",
-      invitations: "دعوات المشاريع",
+      invitations: "دعواتي",
       attendance: "الحضور والدوام",
       departments: "الأقسام",
       notifications: "الإشعارات",
@@ -1344,7 +1310,7 @@ export const ar = {
       searchPlaceholder: "ابحث عن مشروع…",
       addProject: "إضافة مشروع جديد",
       inviteMember: "دعوة عضو جديد",
-      invitations: "إدارة الدعوات",
+      invitations: "دعواتي",
     },
     hr: {
       title: "قسم HR",
