@@ -18,13 +18,13 @@ import {
   alertErrorClass,
   cancelBtnClass,
   infoBannerClass,
+  inputClass,
   modalBodyClass,
   modalClass,
   modalFooterClass,
-  selectClass,
 } from "../ui/formStyles";
 import { ModalTitleBar } from "../ui/ModalTitleBar";
-import { ROLE_LEVEL_OPTIONS, normalizeRoleLevel, tablePanelClass, tableScrollClass } from "./access-ui";
+import { tablePanelClass, tableScrollClass } from "./access-ui";
 
 type EditRoleModalProps = {
   mode: "add" | "edit";
@@ -103,7 +103,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
         name: role.name,
         description: role.description ?? "",
         isDefault: role.isDefault,
-        level: normalizeRoleLevel(role.level),
+        level: Number(role.level) || 0,
         permissionIds: role.permissionIds,
       });
       setFixedPermissionIds(
@@ -282,17 +282,15 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
             <p className="py-6 text-center text-hr-muted">{t("access.roles.loadingForm")}</p>
           ) : (
             <div className="mb-6 grid gap-4 md:grid-cols-2">
-              {mode === "edit" ? (
-                <FormField label={t("access.roles.fields.number")} hint={t("form.readOnlyId")}>
-                  <div className="flex h-11 items-center justify-center rounded-xl border border-hr-border bg-hr-hover px-4">
-                    {displayRoleNumber ? (
-                      <CopyableIdCell value={displayRoleNumber} head={6} tail={4} />
-                    ) : (
-                      <span className="text-sm text-hr-muted">{t("common.dash")}</span>
-                    )}
-                  </div>
-                </FormField>
-              ) : null}
+              <FormField label={t("access.roles.fields.number")} hint={t("form.readOnlyId")}>
+                <div className="flex h-11 items-center justify-center rounded-xl border border-hr-border bg-hr-hover px-4">
+                  {displayRoleNumber ? (
+                    <CopyableIdCell value={displayRoleNumber} head={6} tail={4} />
+                  ) : (
+                    <span className="text-sm text-hr-muted">{t("common.dash")}</span>
+                  )}
+                </div>
+              </FormField>
               <FormTextInput
                 ref={nameFieldRef}
                 id="role-name"
@@ -314,25 +312,22 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
                 error={getError("level")}
                 htmlFor="role-level"
               >
-                <select
+                <input
                   id="role-level"
+                  type="number"
+                  min={0}
+                  step={1}
                   value={form.level}
                   onChange={(event) => {
                     setForm((current) => ({
                       ...current,
-                      level: Number(event.target.value) || 2,
+                      level: Math.max(0, Number(event.target.value) || 0),
                     }));
                     clearField("level");
                   }}
                   onBlur={() => touch("level")}
-                  className={selectClass}
-                >
-                  {ROLE_LEVEL_OPTIONS.map((option) => (
-                    <option key={option.key} value={option.value}>
-                      {t(`access.level.${option.key}`)} ({option.value})
-                    </option>
-                  ))}
-                </select>
+                  className={inputClass}
+                />
               </FormField>
               <div className="flex items-end pb-1">
                 <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-hr-border px-4 py-3 text-sm text-hr-text transition hover:bg-hr-hover">

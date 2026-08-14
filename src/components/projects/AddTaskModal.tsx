@@ -3,16 +3,25 @@ import { Trash2 } from "lucide-react";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useProjectLabels } from "../../hooks/useProjectLabels";
 import { useTranslation } from "../../i18n";
-import { getProjectMembers } from "../../services/projects";
-import { wouldCreateCycle } from "../../services/projects/taskDependencies";
-import { getTaskTransitions } from "../../services/projects/taskTransitionsStorage";
+import { getAllProjectMembers, getProjectTaskById } from "../../services/projects";
+import { getEmployees } from "../../services/employees";
+import { REFERENCE_DATA_LIMIT } from "../../constants/defaults";
+import {
+  assigneesFromMembers,
+  isActiveProjectMember,
+  memberLookupIds,
+  toActiveAssigneeOptions,
+} from "../../services/projects/project.mapper";
 import type {
   Project,
+  ProjectMember,
   ProjectTask,
   TaskFormPayload,
   TaskPriority,
   TaskTransition,
 } from "../../types/project";
+import { wouldCreateCycle } from "../../services/projects/taskDependencies";
+import { getCurrentActorIds } from "../../utils/accessToken";
 import { sanitizeDecimalInput } from "../../utils/inputConstraints";
 import { mapNamedOptions } from "../../utils/selectOptions";
 import {
@@ -21,7 +30,7 @@ import {
   ModalCloseButton,
   ModalTitleBar,
 } from "../ui/modalStyles";
-import { readOnlyClass } from "../ui/formStyles";
+import { infoBannerClass, readOnlyClass } from "../ui/formStyles";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { ManualDateInput } from "../ui/ManualDateInput";
 import {
@@ -63,10 +72,56 @@ const toDateInputValue = (value?: string) => {
 
 const todayInputValue = () => new Date().toISOString().slice(0, 10);
 
+const clampToProjectStart = (date: string, projectStartDate?: string) => {
+  const projectStart = toDateInputValue(projectStartDate);
+  if (projectStart && date && date < projectStart) return projectStart;
+  return date;
+};
+
 const defaultDueDate = (startDate: string, projectEndDate?: string) => {
   const end = toDateInputValue(projectEndDate);
   if (end && end >= startDate) return end;
   return startDate;
+};
+
+const keepProjectAssignees = (
+  candidateIds: string[],
+  members: ProjectMember[],
+) => {
+  const result: AssigneeOption[] = [];
+  const seen = new Set<string>();
+  for (const id of candidateIds) {
+    const member = members.find(
+      (item) => isActiveProjectMember(item) && memberLookupIds(item).includes(id),
+    );
+    if (!member) continue;
+    const sendId = member.userId || member.id;
+    if (seen.has(sendId)) continue;
+    seen.add(sendId);
+    result.push({ id: sendId, name: member.employeeName || sendId });
+  }
+  return result;
+};
+
+const withEmployeeUserIds = async (members: ProjectMember[]) => {
+  if (!members.length) return members;
+  try {
+    const { data } = await getEmployees(1, REFERENCE_DATA_LIMIT);
+    const byId = new Map<string, { id: string; userId?: string }>();
+    for (const employee of data) {
+      byId.set(employee.id, employee);
+      if (employee.userId) byId.set(employee.userId, employee);
+    }
+    return members.map((member) => {
+      const employee = byId.get(member.employeeId) || byId.get(member.id);
+      return {
+        ...member,
+        userId: member.userId || employee?.userId || undefined,
+      };
+    });
+  } catch {
+    return members;
+  }
 };
 
 export function AddTaskModal({
@@ -83,6 +138,7 @@ export function AddTaskModal({
   const isEditing = Boolean(task);
 
   const [memberOptions, setMemberOptions] = useState<AssigneeOption[]>([]);
+  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -104,87 +160,37 @@ export function AddTaskModal({
     if (!isOpen) return;
     let cancelled = false;
 
-    const run = async () => {
-      setMembersLoading(true);
-      try {
-        const result = await getProjectMembers(project.id, {
-          page: 1,
-          limit: 100,
-        });
-        if (cancelled) return;
-        const options: AssigneeOption[] = [];
-        const seen = new Set<string>();
-        for (const member of result.records) {
-          const id = member.employeeId || member.id;
-          if (!id || seen.has(id)) continue;
-          seen.add(id);
-          options.push({
-            id,
-            name: member.employeeName || id,
-          });
-        }
-        setMemberOptions(options);
-      } catch {
-        if (!cancelled) setMemberOptions([]);
-      } finally {
-        if (!cancelled) setMembersLoading(false);
-      }
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, project.id]);
-
-  const availableAssigneeOptions = useMemo(
-    () =>
-      mapNamedOptions(
-        memberOptions.filter(
-          (member) => !assignees.some((assignee) => assignee.id === member.id),
-        ),
-      ),
-    [assignees, memberOptions],
-  );
-
-  const dependencyOptions = useMemo(() => {
-    const currentId = task?.id;
-    return project.tasks.filter((item) => {
-      if (item.id === currentId) return false;
-      if (!currentId) return true;
-      return !wouldCreateCycle(project.tasks, currentId, item.id);
-    });
-  }, [project.tasks, task?.id]);
-
-  useEffect(() => {
-    if (!isOpen) return;
+    setAssigneePickId("");
+    setError(null);
+    setSaving(false);
+    setAssignees([]);
 
     if (task) {
+      const startDate = clampToProjectStart(
+        toDateInputValue(task.startDate) || todayInputValue(),
+        project.startDate,
+      );
       setForm({
         title: task.title || task.name || "",
         description: task.description || "",
         sectionId: task.sectionId || project.sections[0]?.id || "",
         expectedHours: String(task.expectedHours ?? 1),
-        startDate: toDateInputValue(task.startDate) || todayInputValue(),
+        startDate,
         dueDate:
-          toDateInputValue(task.dueDate) ||
-          defaultDueDate(
-            toDateInputValue(task.startDate) || todayInputValue(),
-            project.endDate,
+          clampToProjectStart(
+            toDateInputValue(task.dueDate) ||
+              defaultDueDate(startDate, project.endDate),
+            project.startDate,
           ),
         priority: task.priority || "medium",
       });
       setDependsOnTaskIds([...(task.dependsOnTaskIds ?? [])]);
-      setAssignees(
-        task.assigneeIds.map((id, index) => ({
-          id,
-          name: task.assigneeNames[index] || id,
-        })),
-      );
-      setTransitions(getTaskTransitions(project.id, task.id));
     } else {
       const sectionId = defaultSectionId || project.sections[0]?.id || "";
-      const startDate = todayInputValue();
+      const startDate = clampToProjectStart(
+        todayInputValue(),
+        project.startDate,
+      );
       setForm({
         title: "",
         description: "",
@@ -195,14 +201,95 @@ export function AddTaskModal({
         priority: "medium",
       });
       setDependsOnTaskIds([]);
-      setAssignees([]);
       setTransitions([]);
     }
 
-    setAssigneePickId("");
-    setError(null);
-    setSaving(false);
-  }, [defaultSectionId, isOpen, project.endDate, project.id, project.sections, project.tasks, task]);
+    const run = async () => {
+      setMembersLoading(true);
+      try {
+        const [rawMembers, detail] = await Promise.all([
+          getAllProjectMembers(project.id),
+          task ? getProjectTaskById(task.id, project.id).catch(() => null) : Promise.resolve(null),
+        ]);
+        if (cancelled) return;
+
+        const members = await withEmployeeUserIds(rawMembers);
+        const options = toActiveAssigneeOptions(members);
+        setProjectMembers(members);
+        setMemberOptions(options);
+
+        if (detail) {
+          setTransitions(detail.transitions);
+          if (detail.dependsOnTaskIds.length) {
+            setDependsOnTaskIds([...detail.dependsOnTaskIds]);
+          }
+        } else if (!task) {
+          setTransitions([]);
+        }
+
+        if (detail?.assignments.length) {
+          setAssignees(assigneesFromMembers(members, detail.assignments));
+        } else {
+          setAssignees(keepProjectAssignees(task?.assigneeIds ?? [], members));
+        }
+      } catch {
+        if (!cancelled) {
+          setProjectMembers([]);
+          setMemberOptions([]);
+          setAssignees([]);
+        }
+      } finally {
+        if (!cancelled) setMembersLoading(false);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [defaultSectionId, isOpen, project.endDate, project.id, project.sections, task]);
+
+  const selectedAssigneeKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const assignee of assignees) {
+      keys.add(assignee.id);
+      const member = projectMembers.find((item) =>
+        memberLookupIds(item).includes(assignee.id),
+      );
+      if (member) {
+        for (const lookupId of memberLookupIds(member)) keys.add(lookupId);
+      }
+    }
+    return keys;
+  }, [assignees, projectMembers]);
+
+  const actorIsProjectMember = useMemo(() => {
+    if (!projectMembers.length) return true;
+    const actorIds = getCurrentActorIds();
+    if (!actorIds.length) return true;
+    return projectMembers.some(
+      (member) =>
+        isActiveProjectMember(member) &&
+        memberLookupIds(member).some((id) => actorIds.includes(id)),
+    );
+  }, [projectMembers]);
+
+  const availableAssigneeOptions = useMemo(
+    () =>
+      mapNamedOptions(
+        memberOptions.filter((member) => !selectedAssigneeKeys.has(member.id)),
+      ),
+    [memberOptions, selectedAssigneeKeys],
+  );
+
+  const dependencyOptions = useMemo(() => {
+    const currentId = task?.id;
+    return project.tasks.filter((item) => {
+      if (item.id === currentId) return false;
+      if (!currentId) return true;
+      return !wouldCreateCycle(project.tasks, currentId, item.id);
+    });
+  }, [project.tasks, task?.id]);
 
   const handleClose = () => {
     if (saving) return;
@@ -218,9 +305,12 @@ export function AddTaskModal({
     project.sections[0];
 
   const addAssignee = (memberId: string) => {
-    if (!memberId) return;
+    if (!memberId || selectedAssigneeKeys.has(memberId)) {
+      setAssigneePickId("");
+      return;
+    }
     const member = memberOptions.find((item) => item.id === memberId);
-    if (!member || assignees.some((item) => item.id === member.id)) {
+    if (!member) {
       setAssigneePickId("");
       return;
     }
@@ -278,8 +368,20 @@ export function AddTaskModal({
       setError(t("projects.modals.addTask.errors.invalidDateRange"));
       return;
     }
+    const projectStart = toDateInputValue(project.startDate);
+    if (projectStart && form.startDate < projectStart) {
+      setError(t("projects.modals.addTask.errors.dateBeforeProjectStart"));
+      return;
+    }
     setSaving(true);
     try {
+      const validAssignees = assignees.filter((assignee) =>
+        projectMembers.some(
+          (member) =>
+            isActiveProjectMember(member) &&
+            (member.id === assignee.id || memberLookupIds(member).includes(assignee.id)),
+        ),
+      );
       await onSubmit({
         title: form.title,
         description: form.description,
@@ -288,8 +390,8 @@ export function AddTaskModal({
         startDate: form.startDate,
         dueDate: form.dueDate,
         priority: form.priority,
-        assigneeIds: assignees.map((item) => item.id),
-        assigneeNames: assignees.map((item) => item.name),
+        assigneeIds: validAssignees.map((item) => item.id),
+        assigneeNames: validAssignees.map((item) => item.name),
         dependsOnTaskIds,
       });
       onClose();
@@ -338,6 +440,9 @@ export function AddTaskModal({
           onSubmit={(event) => void handleSubmit(event)}
           className="space-y-4"
         >
+          {!membersLoading && !actorIsProjectMember ? (
+            <p className={infoBannerClass}>{t("projects.modals.addTask.actorNotMember")}</p>
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-2 block text-sm text-hr-text">
@@ -438,6 +543,7 @@ export function AddTaskModal({
               </label>
               <ManualDateInput
                 value={form.startDate}
+                min={toDateInputValue(project.startDate) || undefined}
                 max={form.dueDate || undefined}
                 onChange={handleStartDateChange}
                 required
@@ -449,10 +555,21 @@ export function AddTaskModal({
               </label>
               <ManualDateInput
                 value={form.dueDate}
-                min={form.startDate || undefined}
+                min={
+                  form.startDate ||
+                  toDateInputValue(project.startDate) ||
+                  undefined
+                }
                 onChange={handleDueDateChange}
                 required
               />
+              {toDateInputValue(project.startDate) ? (
+                <p className="mt-1 text-xs text-hr-muted">
+                  {t("projects.modals.addTask.dateMinHint", {
+                    date: toDateInputValue(project.startDate),
+                  })}
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -523,8 +640,14 @@ export function AddTaskModal({
               value={assigneePickId}
               onChange={addAssignee}
               options={availableAssigneeOptions}
-              placeholder={t("projects.modals.addTask.placeholders.assignee")}
+              placeholder={
+                memberOptions.length
+                  ? t("projects.modals.addTask.placeholders.assignee")
+                  : t("projects.modals.addTask.assigneesNoMembers")
+              }
+              emptyMessage={t("projects.modals.addTask.assigneesNoMembers")}
               loading={membersLoading}
+              disabled={membersLoading || !memberOptions.length}
             />
             <div className="mt-3 rounded-xl border border-hr-border">
               {assignees.length ? (

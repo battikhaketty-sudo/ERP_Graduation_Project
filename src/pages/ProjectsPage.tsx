@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useUrlQueryNavigation } from "../hooks/useUrlQueryNavigation";
 
@@ -13,6 +13,7 @@ import { AddTaskModal } from "../components/projects/AddTaskModal";
 import { InviteMemberModal } from "../components/projects/InviteMemberModal";
 import {
   InvitationsTable,
+  INVITATIONS_PAGE_SIZE,
 } from "../components/projects/InvitationsTable";
 import { ProjectDetailView } from "../components/projects/ProjectDetailView";
 import { ProjectStatsCards } from "../components/projects/ProjectStatsCards";
@@ -34,10 +35,12 @@ import {
   deleteProject,
   deleteSection,
   deleteTask,
+  getMyInvitations,
   getProjectById,
   getProjectStats,
   getProjects,
   getTaskStats,
+  updateInvitationStatus,
   updateMember,
   updateProject,
   updateSection,
@@ -46,6 +49,7 @@ import {
 
 import type {
   Project,
+  ProjectInvitation,
   ProjectMember,
   ProjectSection,
   ProjectStats,
@@ -107,6 +111,8 @@ export function ProjectsPage() {
   >();
   const [pendingOpenTaskModal, setPendingOpenTaskModal] = useState(false);
   const [invitationsReloadKey, setInvitationsReloadKey] = useState(0);
+  const [myInvitations, setMyInvitations] = useState<ProjectInvitation[]>([]);
+  const [invitationsPage, setInvitationsPage] = useState(1);
 
   useEffect(() => {
     if (searchParams.get("add") !== "1") return;
@@ -136,13 +142,13 @@ export function ProjectsPage() {
       setLoading(true);
       setError(null);
 
-      // Personal "My invitations" awaits a dedicated API — do not reuse project invitation lists here.
-      const [projectsResult, statsResult] = await Promise.all([
+      const [projectsResult, statsResult, invitationsResult] = await Promise.all([
           getProjects({
             page: query ? 1 : projectsPage,
             limit: query ? 100 : PROJECTS_PAGE_SIZE,
           }),
           getProjectStats(),
+          getMyInvitations(),
         ]);
 
       let projectRecords = projectsResult.records;
@@ -170,6 +176,8 @@ export function ProjectsPage() {
       }
 
       setStats(statsResult);
+      setMyInvitations(invitationsResult);
+      setInvitationsPage(1);
     } catch (err) {
       setError(getThrownErrorMessage(err, t("projects.page.loadError")));
     } finally {
@@ -380,6 +388,47 @@ export function ProjectsPage() {
     }
   };
 
+  const handleMyInvitationAction = async (
+    invitation: ProjectInvitation,
+    status: "accepted" | "rejected" | "cancelled",
+  ) => {
+    try {
+      await updateInvitationStatus(invitation, status);
+      setMyInvitations(await getMyInvitations());
+      if (status === "accepted") {
+        showToast(t("projects.toasts.inviteAccepted"), "success");
+      } else if (status === "rejected") {
+        showToast(t("projects.toasts.inviteRejected"), "success");
+      } else {
+        showToast(t("projects.toasts.inviteCancelled"), "success");
+      }
+    } catch (err) {
+      const message = getThrownErrorMessage(err, t("projects.page.loadError"));
+      setError(message);
+      showToast(message, "error");
+    }
+  };
+
+  const filteredMyInvitations = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return myInvitations;
+    return myInvitations.filter((invitation) =>
+      [invitation.projectName, invitation.employeeName, invitation.projectId].some(
+        (field) => field.toLowerCase().includes(query),
+      ),
+    );
+  }, [myInvitations, search]);
+
+  const invitationsTotalPages = Math.max(
+    1,
+    Math.ceil(filteredMyInvitations.length / INVITATIONS_PAGE_SIZE),
+  );
+  const paginatedMyInvitations = useMemo(() => {
+    const page = Math.min(invitationsPage, invitationsTotalPages);
+    const start = (page - 1) * INVITATIONS_PAGE_SIZE;
+    return filteredMyInvitations.slice(start, start + INVITATIONS_PAGE_SIZE);
+  }, [filteredMyInvitations, invitationsPage, invitationsTotalPages]);
+
   const addLabel = t("pages.projects.addProject");
   const searchPlaceholder =
     activeTab === "projects"
@@ -474,6 +523,7 @@ export function ProjectsPage() {
           }}
           onDeleteMember={(member) => void handleDeleteMember(member)}
           invitationsReloadKey={invitationsReloadKey}
+          onRefresh={() => refreshSelectedProject(selectedProject.id)}
         />
 
         <AddProjectModal
@@ -550,6 +600,7 @@ export function ProjectsPage() {
           isOpen={isInviteModalOpen}
           projects={[selectedProject]}
           defaultProjectId={selectedProject.id}
+          lockProject
           onClose={() => setIsInviteModalOpen(false)}
           onSubmit={async (payload) => {
             await addInvitation(payload);
@@ -576,6 +627,7 @@ export function ProjectsPage() {
           onSearchChange={(value) => {
             setSearch(value);
             setProjectsPage(1);
+            setInvitationsPage(1);
           }}
           onAddClick={() => {
             setEditingProject(null);
@@ -616,16 +668,22 @@ export function ProjectsPage() {
           />
         ) : (
           <InvitationsTable
-            invitations={[]}
-            currentPage={1}
-            totalPages={1}
-            onPageChange={() => undefined}
+            invitations={paginatedMyInvitations}
+            currentPage={Math.min(invitationsPage, invitationsTotalPages)}
+            totalPages={invitationsTotalPages}
+            onPageChange={setInvitationsPage}
             actionsMode="personal"
             title={t("projects.invitations.myTitle")}
             emptyMessage={t("projects.invitations.myEmpty")}
-            onAccept={() => undefined}
-            onReject={() => undefined}
-            onCancel={() => undefined}
+            onAccept={(invitation) =>
+              void handleMyInvitationAction(invitation, "accepted")
+            }
+            onReject={(invitation) =>
+              void handleMyInvitationAction(invitation, "rejected")
+            }
+            onCancel={(invitation) =>
+              void handleMyInvitationAction(invitation, "cancelled")
+            }
           />
         )}
       </main>

@@ -35,6 +35,7 @@ import { ProjectFlowPanel } from "./ProjectFlowPanel";
 import { ProjectSectionFlowPanel } from "./ProjectSectionFlowPanel";
 import { ProjectTasksChartPanel } from "./ProjectTasksChartPanel";
 import { SectionDetailView } from "./SectionDetailView";
+import { TaskDetailView } from "./TaskDetailView";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { useToast } from "../../context/ToastContext";
 
@@ -56,6 +57,7 @@ type ProjectDetailViewProps = {
   onDeleteMember: (member: ProjectMember) => void;
   /** Bump after sending an invite so the invitations tab reloads. */
   invitationsReloadKey?: number;
+  onRefresh?: () => Promise<void> | void;
 };
 
 type DetailTab =
@@ -82,6 +84,7 @@ export function ProjectDetailView({
   onEditMember,
   onDeleteMember,
   invitationsReloadKey = 0,
+  onRefresh,
 }: ProjectDetailViewProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -91,6 +94,11 @@ export function ProjectDetailView({
     removeValue: clearSectionFromUrl,
     goBack: goBackFromSection,
   } = useUrlQueryNavigation({ param: "section" });
+  const {
+    value: taskId,
+    pushValue: openTaskInUrl,
+    goBack: goBackFromTask,
+  } = useUrlQueryNavigation({ param: "task" });
   const [activeTab, setActiveTab] = useState<DetailTab>("kanban");
   const [selectedSection, setSelectedSection] = useState<ProjectSection | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
@@ -226,6 +234,23 @@ export function ProjectDetailView({
     { key: "sectionFlow", label: t("projects.detail.tabs.sectionFlow") },
   ];
 
+  if (taskId) {
+    return (
+      <TaskDetailView
+        project={project}
+        taskId={taskId}
+        onBack={goBackFromTask}
+        onOpenTask={(nextTaskId) => openTaskInUrl(nextTaskId)}
+        onEdit={(task) => {
+          onEditTask(task);
+        }}
+        onDelete={(task) => {
+          onDeleteTask(task);
+        }}
+      />
+    );
+  }
+
   if (selectedSection) {
     return (
       <SectionDetailView
@@ -240,6 +265,7 @@ export function ProjectDetailView({
         onAddTask={() => onAddTask(selectedSection.id)}
         onEditTask={onEditTask}
         onDeleteTask={onDeleteTask}
+        onTaskClick={(task) => openTaskInUrl(task.id)}
       />
     );
   }
@@ -386,6 +412,7 @@ export function ProjectDetailView({
               onAddSection={onAddSection}
               onAddTask={() => onAddTask()}
               onSectionClick={(section) => openSectionInUrl(section.id)}
+              onTaskClick={(task) => openTaskInUrl(task.id)}
             />
           </div>
         </>
@@ -457,6 +484,7 @@ export function ProjectDetailView({
           onAddSection={onAddSection}
           onAddTask={() => onAddTask()}
           onSectionClick={(section) => openSectionInUrl(section.id)}
+          onTaskClick={(task) => openTaskInUrl(task.id)}
         />
       )}
 

@@ -2,6 +2,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "../../i18n";
 import { DetailBackButton } from "../ui/DetailBackButton";
 import { useMemo, useState } from "react";
+import { sortTasksByPriority } from "../../services/projects";
 import type { Project, ProjectSection, ProjectTask } from "../../types/project";
 import { Pagination } from "../Pagination";
 import { TableAddButton } from "../ui/TableToolbar";
@@ -19,6 +20,7 @@ type SectionDetailViewProps = {
   onAddTask: () => void;
   onEditTask: (task: ProjectTask) => void;
   onDeleteTask: (task: ProjectTask) => void;
+  onTaskClick?: (task: ProjectTask) => void;
 };
 
 export function SectionDetailView({
@@ -30,12 +32,16 @@ export function SectionDetailView({
   onAddTask,
   onEditTask,
   onDeleteTask,
+  onTaskClick,
 }: SectionDetailViewProps) {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
 
   const sectionTasks = useMemo(
-    () => project.tasks.filter((task) => task.sectionId === section.id),
+    () =>
+      sortTasksByPriority(
+        project.tasks.filter((task) => task.sectionId === section.id),
+      ),
     [project.tasks, section.id],
   );
 
@@ -83,50 +89,66 @@ export function SectionDetailView({
           />
         </div>
 
-        <div className="px-2 pb-2 pt-3 sm:px-4">
-          <table className="w-full table-fixed border-collapse text-sm">
+        <div className="px-2 pb-2 pt-3 sm:px-3">
+          <table className="w-full table-fixed border-collapse text-[11px] leading-tight">
             <colgroup>
-              <col className="w-10" />
-              <col className="w-12" />
-              <col />
-              <col className="w-[5.25rem]" />
-              <col className="w-[18%]" />
-              <col className="w-14" />
-              <col className="w-[5.5rem]" />
-              <col className="w-[5.5rem]" />
-              <col className="w-[4.5rem]" />
-              <col className="w-[4.5rem]" />
+              <col className="w-[3%]" />
+              <col className="w-[7%]" />
+              <col className="w-[11%]" />
+              <col className="w-[10%]" />
+              <col className="w-[7%]" />
+              <col className="w-[8%]" />
+              <col className="w-[5%]" />
+              <col className="w-[8%]" />
+              <col className="w-[8%]" />
+              <col className="w-[8%]" />
+              <col className="w-[7%]" />
+              <col className="w-[6%]" />
+              <col className="w-[6%]" />
+              <col className="w-[6%]" />
             </colgroup>
             <thead>
               <tr className="hr-table-head">
-                <th className="px-2 py-2.5 text-center text-xs font-medium">
+                <th className="px-1 py-2 text-center font-medium">
                   {t("table.columns.index")}
                 </th>
-                <th className="px-2 py-2.5 text-center text-xs font-medium">
-                  {t("projects.detail.fields.number")}
+                <th className="px-1 py-2 text-center font-medium">
+                  {t("projects.taskDetail.fields.id")}
                 </th>
-                <th className="px-2 py-2.5 text-center text-xs font-medium">
+                <th className="px-1 py-2 text-center font-medium">
                   {t("projects.sectionDetail.columns.title")}
                 </th>
-                <th className="px-2 py-2.5 text-center text-xs font-medium">
-                  {t("projects.sectionDetail.columns.priority")}
-                </th>
-                <th className="px-2 py-2.5 text-center text-xs font-medium">
+                <th className="px-1 py-2 text-center font-medium">
                   {t("projects.table.columns.description")}
                 </th>
-                <th className="px-2 py-2.5 text-center text-xs font-medium">
+                <th className="px-1 py-2 text-center font-medium">
+                  {t("projects.sectionDetail.columns.priority")}
+                </th>
+                <th className="px-1 py-2 text-center font-medium">
+                  {t("projects.taskDetail.fields.section")}
+                </th>
+                <th className="px-1 py-2 text-center font-medium">
                   {t("projects.sectionDetail.columns.hours")}
                 </th>
-                <th className="px-2 py-2.5 text-center text-xs font-medium">
+                <th className="px-1 py-2 text-center font-medium">
                   {t("projects.detail.fields.startDate")}
                 </th>
-                <th className="px-2 py-2.5 text-center text-xs font-medium">
-                  {t("projects.detail.fields.endDate")}
+                <th className="px-1 py-2 text-center font-medium">
+                  {t("projects.taskDetail.fields.dueDate")}
                 </th>
-                <th className="px-2 py-2.5 text-center text-xs font-medium">
-                  {t("projects.sectionDetail.columns.assignees")}
+                <th className="px-1 py-2 text-center font-medium">
+                  {t("projects.taskDetail.fields.createdAt")}
                 </th>
-                <th className="px-2 py-2.5 text-center text-xs font-medium">
+                <th className="px-1 py-2 text-center font-medium">
+                  {t("projects.sectionDetail.columns.dependencyCount")}
+                </th>
+                <th className="px-1 py-2 text-center font-medium">
+                  {t("projects.sectionDetail.columns.assignmentCount")}
+                </th>
+                <th className="px-1 py-2 text-center font-medium">
+                  {t("projects.sectionDetail.columns.transitionCount")}
+                </th>
+                <th className="px-1 py-2 text-center font-medium">
                   {t("table.columns.actions")}
                 </th>
               </tr>
@@ -134,53 +156,66 @@ export function SectionDetailView({
             <tbody>
               {paginatedTasks.length ? (
                 paginatedTasks.map((task, index) => (
-                  <tr key={task.id} className={index % 2 ? "hr-table-row-alt" : "hr-table-row"}>
-                    <td className="px-2 py-2.5 text-center text-xs text-hr-muted">
+                  <tr
+                    key={task.id}
+                    className={`${index % 2 ? "hr-table-row-alt" : "hr-table-row"} ${
+                      onTaskClick ? "cursor-pointer hover:bg-hr-hover" : ""
+                    }`}
+                    onClick={() => onTaskClick?.(task)}
+                  >
+                    <td className="px-1 py-2 text-center text-hr-muted">
                       <TableRowIndex
                         index={index}
                         page={page}
                         pageSize={SECTION_TASKS_PAGE_SIZE}
                       />
                     </td>
-                    <td className="px-2 py-2.5 text-center text-xs">{task.number}</td>
-                    <td className="truncate px-2 py-2.5 text-center font-medium" title={task.title}>
+                    <td className="truncate px-1 py-2 text-center" title={task.id}>
+                      {task.id.slice(0, 8)}…
+                    </td>
+                    <td className="truncate px-1 py-2 text-center font-medium text-hr-primary" title={task.title}>
                       {task.title}
                     </td>
-                    <td className="px-2 py-2.5 text-center">
-                      <PriorityBadge priority={task.priority} />
-                    </td>
                     <td
-                      className="truncate px-2 py-2.5 text-center text-xs text-hr-muted"
+                      className="truncate px-1 py-2 text-center text-hr-muted"
                       title={task.description || undefined}
                     >
                       {task.description || t("common.dash")}
                     </td>
-                    <td className="px-2 py-2.5 text-center text-xs">{task.expectedHours}</td>
-                    <td className="px-2 py-2.5 text-center text-xs whitespace-nowrap">
+                    <td className="overflow-hidden px-1 py-2 text-center">
+                      <PriorityBadge priority={task.priority} />
+                    </td>
+                    <td className="truncate px-1 py-2 text-center">
+                      {task.sectionName || section.name}
+                    </td>
+                    <td className="px-1 py-2 text-center">{task.expectedHours}</td>
+                    <td className="truncate px-1 py-2 text-center">
                       {task.startDate || t("common.dash")}
                     </td>
-                    <td className="px-2 py-2.5 text-center text-xs whitespace-nowrap">
+                    <td className="truncate px-1 py-2 text-center">
                       {task.dueDate || t("common.dash")}
                     </td>
-                    <td
-                      className="truncate px-2 py-2.5 text-center text-xs"
-                      title={task.assigneeNames.join(", ") || undefined}
-                    >
-                      {task.assigneeNames.length
-                        ? task.assigneeNames.length === 1
-                          ? task.assigneeNames[0]
-                          : task.assigneeNames.length
-                        : t("common.dash")}
+                    <td className="truncate px-1 py-2 text-center">
+                      {task.createdAt || t("common.dash")}
                     </td>
-                    <td className="px-2 py-2.5">
-                      <div className="flex items-center justify-center gap-1.5">
+                    <td className="px-1 py-2 text-center">
+                      {task.dependencyCount ?? task.dependsOnTaskIds.length}
+                    </td>
+                    <td className="px-1 py-2 text-center">
+                      {task.assignmentCount ?? task.assigneeIds.length}
+                    </td>
+                    <td className="px-1 py-2 text-center">
+                      {task.transitionCount ?? 0}
+                    </td>
+                    <td className="px-1 py-2" onClick={(event) => event.stopPropagation()}>
+                      <div className="flex items-center justify-center gap-1">
                         <button
                           type="button"
                           onClick={() => onEditTask(task)}
                           className="text-amber-500"
                           aria-label={t("common.edit")}
                         >
-                          <Pencil className="size-4" />
+                          <Pencil className="size-3.5" />
                         </button>
                         <button
                           type="button"
@@ -188,7 +223,7 @@ export function SectionDetailView({
                           className="text-red-400"
                           aria-label={t("common.delete")}
                         >
-                          <Trash2 className="size-4" />
+                          <Trash2 className="size-3.5" />
                         </button>
                       </div>
                     </td>
@@ -196,7 +231,7 @@ export function SectionDetailView({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={11} className="px-3 py-10 text-center text-hr-muted">
+                  <td colSpan={14} className="px-3 py-10 text-center text-sm text-hr-muted">
                     {t("common.noData")}
                   </td>
                 </tr>

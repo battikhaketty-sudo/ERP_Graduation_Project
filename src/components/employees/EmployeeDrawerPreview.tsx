@@ -57,7 +57,8 @@ export function EmployeeDrawerPreview({
         <EmployeeAvatar
           src={detail.avatar}
           name={detail.name}
-          className="mb-3 size-24 rounded-2xl object-cover ring-2 ring-hr-border"
+          alt=""
+          className="mb-3 size-24 rounded-2xl object-cover ring-2 ring-hr-border text-2xl"
         />
         <h3 className="text-lg font-bold text-hr-text">{detail.name}</h3>
         <div className="mt-2">

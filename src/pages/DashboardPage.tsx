@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Bell,
   Building2,
+  CheckCircle2,
   ClipboardList,
   FolderKanban,
   Plus,

@@ -13,11 +13,12 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
         // Employee/profile media lives outside `/api` on the backend host.
-        "/media": {
+        // Match with leading caret so Vite always proxies instead of SPA fallback.
+        "^/media": {
           target: proxyTarget,
           changeOrigin: true,
           secure: false,
-          rewrite: (path: string) => path.replace(/^\/media/, ""),
+          rewrite: (path: string) => path.replace(/^\/media/, "") || "/",
         },
       }
     : undefined;

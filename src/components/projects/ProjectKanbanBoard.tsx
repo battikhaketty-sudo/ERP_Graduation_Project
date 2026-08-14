@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "../../i18n";
 import { getSectionFlowGate } from "../../services/projects/sectionDependencies";
+import { sortTasksByPriority } from "../../services/projects";
 import type { Project, ProjectSection, ProjectTask } from "../../types/project";
 import { accentBtnClass } from "../ui/formStyles";
 import { PriorityBadge } from "./ProjectBadges";
@@ -11,48 +12,70 @@ type ProjectKanbanBoardProps = {
   onAddSection: () => void;
   onAddTask: () => void;
   onSectionClick?: (section: ProjectSection) => void;
+  onTaskClick?: (task: ProjectTask) => void;
 };
 
 const gateBadgeClass: Record<string, string> = {
   ready: "bg-sky-500/15 text-sky-500",
 };
 
-function TaskCard({ task }: { task: ProjectTask }) {
+function TaskCard({
+  task,
+  onClick,
+}: {
+  task: ProjectTask;
+  onClick?: (task: ProjectTask) => void;
+}) {
   const { t } = useTranslation();
   const visibleAssignees = task.assigneeNames.slice(0, 2);
   const extraCount = task.assigneeNames.length - visibleAssignees.length;
+  const assignmentBadge =
+    task.assignmentCount ??
+    (task.assigneeNames.length || task.assigneeIds.length || 0);
 
   return (
-    <article className="rounded-xl border border-hr-border bg-hr-surface p-3 shadow-sm">
+    <button
+      type="button"
+      onClick={() => onClick?.(task)}
+      className="w-full rounded-xl border border-hr-border bg-hr-surface p-3 text-start shadow-sm transition hover:border-hr-primary hover:bg-hr-hover"
+    >
       <div className="mb-2 flex items-start justify-between gap-2">
         <h4 className="text-sm font-bold text-hr-text">{task.title}</h4>
         <PriorityBadge priority={task.priority} />
       </div>
       {task.description && (
-        <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-hr-muted">{task.description}</p>
+        <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-hr-muted">
+          {task.description}
+        </p>
       )}
       <div className="flex items-center justify-between">
         <span className="text-[11px] text-hr-muted">
           {task.dueDate || task.startDate || t("common.dash")}
         </span>
-        <div className="flex -space-x-2 space-x-reverse">
-          {visibleAssignees.map((name, index) => (
-            <span
-              key={`${name}-${index}`}
-              title={name}
-              className="flex size-7 items-center justify-center rounded-full border-2 border-hr-surface bg-hr-accent-bg text-[10px] font-bold text-hr-primary"
-            >
-              {name.charAt(0)}
-            </span>
-          ))}
-          {extraCount > 0 && (
-            <span className="flex size-7 items-center justify-center rounded-full border-2 border-hr-surface bg-hr-hover text-[10px] font-bold text-hr-muted">
-              +{extraCount}
-            </span>
-          )}
-        </div>
+        {visibleAssignees.length ? (
+          <div className="flex -space-x-2 space-x-reverse">
+            {visibleAssignees.map((name, index) => (
+              <span
+                key={`${name}-${index}`}
+                title={name}
+                className="flex size-7 items-center justify-center rounded-full border-2 border-hr-surface bg-hr-accent-bg text-[10px] font-bold text-hr-primary"
+              >
+                {name.charAt(0)}
+              </span>
+            ))}
+            {extraCount > 0 && (
+              <span className="flex size-7 items-center justify-center rounded-full border-2 border-hr-surface bg-hr-hover text-[10px] font-bold text-hr-muted">
+                +{extraCount}
+              </span>
+            )}
+          </div>
+        ) : assignmentBadge > 0 ? (
+          <span className="flex size-7 items-center justify-center rounded-full bg-hr-accent-bg text-[10px] font-bold text-hr-primary">
+            {assignmentBadge}
+          </span>
+        ) : null}
       </div>
-    </article>
+    </button>
   );
 }
 
@@ -61,12 +84,15 @@ export function ProjectKanbanBoard({
   onAddSection,
   onAddTask,
   onSectionClick,
+  onTaskClick,
 }: ProjectKanbanBoardProps) {
   const { t } = useTranslation();
   const columns = [...project.sections].sort((a, b) => a.displayOrder - b.displayOrder);
   const sectionIds = new Set(columns.map((section) => section.id));
-  const orphanTasks = project.tasks.filter(
-    (task) => !task.sectionId || !sectionIds.has(task.sectionId),
+  const orphanTasks = sortTasksByPriority(
+    project.tasks.filter(
+      (task) => !task.sectionId || !sectionIds.has(task.sectionId),
+    ),
   );
   const sectionsById = useMemo(
     () => new Map(project.sections.map((section) => [section.id, section])),
@@ -99,7 +125,9 @@ export function ProjectKanbanBoard({
       {columns.length || orphanTasks.length ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {columns.map((section) => {
-            const tasks = project.tasks.filter((task) => task.sectionId === section.id);
+            const tasks = sortTasksByPriority(
+              project.tasks.filter((task) => task.sectionId === section.id),
+            );
             const gate = getSectionFlowGate(section, sectionsById, project.tasks);
             return (
               <div key={section.id} className="rounded-xl bg-hr-table-head p-3">
@@ -125,7 +153,9 @@ export function ProjectKanbanBoard({
                 </button>
                 <div className="space-y-2">
                   {tasks.length ? (
-                    tasks.map((task) => <TaskCard key={task.id} task={task} />)
+                    tasks.map((task) => (
+                      <TaskCard key={task.id} task={task} onClick={onTaskClick} />
+                    ))
                   ) : (
                     <p className="rounded-lg bg-hr-surface px-3 py-6 text-center text-xs text-hr-muted">
                       {t("common.noData")}
@@ -146,7 +176,7 @@ export function ProjectKanbanBoard({
               </p>
               <div className="space-y-2">
                 {orphanTasks.map((task) => (
-                  <TaskCard key={task.id} task={task} />
+                  <TaskCard key={task.id} task={task} onClick={onTaskClick} />
                 ))}
               </div>
             </div>

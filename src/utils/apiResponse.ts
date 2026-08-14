@@ -23,6 +23,8 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   "ProjectInvitation.Error.NotFound": "الدعوة غير موجودة.",
   "ProjectInvitation.Error.AlreadyResponded": "تم الرد على هذه الدعوة مسبقاً.",
   "ProjectSection.Error.Name.Duplicate": "اسم القسم موجود مسبقاً في هذا المشروع.",
+  "ProjectMember.Error.NotMember":
+    "حسابك الحالي ليس عضواً في هذا المشروع، لذلك لا يمكن إنشاء أو تعديل المهام. أضف الموظف المرتبط بحسابك إلى أعضاء المشروع (دعوة ثم قبول) ثم أعد المحاولة.",
   "Employee.Error.Email.Duplicate": "البريد الإلكتروني مستخدم مسبقاً.",
   "User.Error.Email.Duplicate":
     "البريد الإلكتروني مستخدم مسبقاً. قد يكون لموظف موجود أو مؤرشف — استخدم بريداً مختلفاً.",

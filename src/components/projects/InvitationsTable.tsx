@@ -89,10 +89,10 @@ export function InvitationsTable({
                 {t("projects.invitations.columns.status")}
               </th>
               <th className="px-2 py-3 text-center font-medium">
-                {t("projects.invitations.columns.startDate")}
+                {t("projects.invitations.columns.responseDate")}
               </th>
               <th className="px-2 py-3 text-center font-medium">
-                {t("projects.invitations.columns.endDate")}
+                {t("projects.invitations.columns.expiresAt")}
               </th>
               <th className="px-2 py-3 text-center font-medium">
                 {t("projects.invitations.columns.invitedAt")}
@@ -136,10 +136,10 @@ export function InvitationsTable({
                     <InvitationStatusBadge status={invitation.status} />
                   </td>
                   <td className="whitespace-nowrap px-2 py-3 text-center">
-                    {invitation.startDate || t("common.dash")}
+                    {invitation.respondedAt || t("common.dash")}
                   </td>
                   <td className="whitespace-nowrap px-2 py-3 text-center">
-                    {invitation.endDate || t("common.dash")}
+                    {invitation.expiresAt || t("common.dash")}
                   </td>
                   <td className="whitespace-nowrap px-2 py-3 text-center">
                     {invitation.invitedAt}

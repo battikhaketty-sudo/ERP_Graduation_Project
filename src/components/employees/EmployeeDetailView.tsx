@@ -1,13 +1,18 @@
 import { Loader, Upload, UserRound } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useTranslation } from "../../i18n";
 import { DetailBackButton } from "../ui/DetailBackButton";
-import type { Employee } from "../../types/employee";
+import type { Employee, EmployeeResumeLine, EmployeeResumeSkill } from "../../types/employee";
 import { getEmployeeById, updateEmployee } from "../../services/employeeApi";
 import { getAllRoles } from "../../services/roles";
 import { getUserById, updateUserRoles } from "../../services/users";
 import { getContractTypes, getDepartments } from "../../services/hrApi";
+import {
+  getResumeLineTypes,
+  syncEmployeeResume,
+  type ResumeLineTypeOption,
+} from "../../services/resumes/resume.service";
 import type { AppRole } from "../../types/role";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
 import {
@@ -26,11 +31,22 @@ import {
   focusAndScrollToFirstError,
 } from "../../utils/formUx";
 import { mapNamedOptions } from "../../utils/selectOptions";
+import { useSkillCatalog } from "../../hooks/useSkillCatalog";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { ManualDateInput } from "../ui/ManualDateInput";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { EmployeeIdImageField } from "./EmployeeIdImageField";
+import { EmployeeResumeLinesEditor } from "./EmployeeResumeLinesEditor";
+import { EmployeeResumeSkillsEditor } from "./EmployeeResumeSkillsEditor";
+import {
+  emptyEmployeeSkillRow,
+  isEmployeeSkillRowComplete,
+  resumeSkillsToRows,
+  toResumeSkillPayload,
+  type EmployeeSkillRow,
+} from "./employeeSkills";
+import { EditUserRolesModal } from "../access/EditUserRolesModal";
 import {
   alertErrorClass,
   cardSurfaceClass,
@@ -84,8 +100,25 @@ export function EmployeeDetailView({
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [fixedRoleIds, setFixedRoleIds] = useState<Set<string>>(new Set());
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [editingUserRoles, setEditingUserRoles] = useState(false);
+  const [lineTypes, setLineTypes] = useState<ResumeLineTypeOption[]>([]);
+  const [lineTypesLoading, setLineTypesLoading] = useState(false);
+  const [skillRows, setSkillRows] = useState<EmployeeSkillRow[]>([
+    emptyEmployeeSkillRow(),
+  ]);
+  const [resumeHydrationKey, setResumeHydrationKey] = useState(0);
+  const resumeBaselineRef = useRef<{
+    lines: EmployeeResumeLine[];
+    skills: EmployeeResumeSkill[];
+  }>({ lines: [], skills: [] });
+  const {
+    skillGroups,
+    loading: skillsLoading,
+    error: skillsError,
+  } = useSkillCatalog(true);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
 
@@ -99,11 +132,25 @@ export function EmployeeDetailView({
       getUserById(userId).catch(() => null),
     ])
       .then(([detail, departmentsResult, contractTypes, roles, userAccount]) => {
-        setEditData({
-          ...detail,
-          isArchived: employee.isArchived ?? detail.isArchived,
-          userAccount: userAccount ?? undefined,
+        if (cancelled) return;
+        setEditData((prev) => {
+          // Keep an unsaved local photo preview if the reload has no server image yet.
+          const pendingLocalPhoto =
+            prev.id === detail.id && prev.avatar?.startsWith("data:")
+              ? prev.avatar
+              : "";
+          return {
+            ...detail,
+            isArchived: employee.isArchived ?? detail.isArchived,
+            userAccount: userAccount ?? undefined,
+            avatar: detail.avatar || pendingLocalPhoto || "",
+          };
         });
+        resumeBaselineRef.current = {
+          lines: detail.resumeLines ?? [],
+          skills: detail.resumeSkills ?? [],
+        };
+        setResumeHydrationKey((key) => key + 1);
         setAvailableRoles(roles);
         setSelectedRoleIds(userAccount?.roles.map((role) => role.roleId) ?? []);
         setFixedRoleIds(
@@ -128,11 +175,60 @@ export function EmployeeDetailView({
         );
       })
       .catch((err) => {
+        if (cancelled) return;
         setEditData(employee);
         setError(getThrownErrorMessage(err, t("employees.errors.loadDetail")));
       })
-      .finally(() => setLoading(false));
-  }, [employee.id, employee, t]);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // Only reload when switching employees — not on every parent object identity change.
+  }, [employee.id, employee.isArchived, employee.userId, t]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLineTypesLoading(true);
+    getResumeLineTypes()
+      .then((types) => {
+        if (!cancelled) setLineTypes(types);
+      })
+      .catch(() => {
+        if (!cancelled) setLineTypes([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLineTypesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setSkillRows(
+      resumeSkillsToRows(editData.resumeSkills ?? [], skillGroups),
+    );
+    // Hydration key captures server reloads; skillGroups fills type/level ids when catalog arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- avoid resetting while the user edits skill rows
+  }, [resumeHydrationKey, skillGroups]);
+
+  const draftResumeSkills = useMemo(
+    () =>
+      skillRows
+        .filter(isEmployeeSkillRowComplete)
+        .filter(
+          (row, index, rows) =>
+            rows.findIndex(
+              (entry) =>
+                entry.skillId === row.skillId && entry.levelId === row.levelId,
+            ) === index,
+        )
+        .map(toResumeSkillPayload),
+    [skillRows],
+  );
 
   const handleChange = (field: keyof Employee, value: string) => {
     const sanitized = sanitizeEmployeeField(String(field), value);
@@ -221,6 +317,70 @@ export function EmployeeDetailView({
       setActiveTab("personal");
     }
 
+    const incompleteSkill = skillRows.some(
+      (row) =>
+        (row.typeId || row.skillId || row.levelId) &&
+        !isEmployeeSkillRowComplete(row),
+    );
+    if (incompleteSkill) {
+      nextErrors.resumeSkills = t("employees.modal.skills.selectCategoryFirst");
+      setActiveTab("resume");
+    }
+
+    const hasDuplicateSkill = skillRows.some((row, index) => {
+      if (!isEmployeeSkillRowComplete(row)) return false;
+      return skillRows.some(
+        (entry, entryIndex) =>
+          entryIndex !== index &&
+          entry.skillId === row.skillId &&
+          entry.levelId === row.levelId,
+      );
+    });
+    if (hasDuplicateSkill) {
+      nextErrors.resumeSkills = t("employees.modal.skills.duplicateSkill");
+      setActiveTab("resume");
+    }
+
+    for (const [index, line] of (editData.resumeLines ?? []).entries()) {
+      if (!line.title.trim() && !line.fromDate && !line.type) continue;
+      if (!line.title.trim()) {
+        nextErrors[`resumeLineTitle-${index}`] = t(
+          "employees.detail.resumeLineErrors.titleRequired",
+        );
+      }
+      if (!line.type) {
+        nextErrors[`resumeLineType-${index}`] = t(
+          "employees.detail.resumeLineErrors.typeRequired",
+        );
+      }
+      if (!line.fromDate) {
+        nextErrors[`resumeLineFrom-${index}`] = t(
+          "employees.detail.resumeLineErrors.fromDateRequired",
+        );
+      }
+      if (line.fromDate && line.toDate && line.toDate < line.fromDate) {
+        nextErrors[`resumeLineTo-${index}`] = t(
+          "employees.detail.resumeLineErrors.dateOrder",
+        );
+      }
+    }
+    if (
+      Object.keys(nextErrors).some((key) => key.startsWith("resumeLine")) ||
+      nextErrors.resumeSkills
+    ) {
+      setActiveTab("resume");
+    }
+
+    const resumeTouched =
+      (editData.resumeLines?.length ?? 0) > 0 ||
+      draftResumeSkills.length > 0 ||
+      resumeBaselineRef.current.lines.length > 0 ||
+      resumeBaselineRef.current.skills.length > 0;
+    if (resumeTouched && !editData.resumeId) {
+      nextErrors.resumeId = t("employees.detail.resumeMissingId");
+      setActiveTab("resume");
+    }
+
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       afterValidationPaint(() => focusAndScrollToFirstError());
@@ -236,8 +396,40 @@ export function EmployeeDetailView({
     setError(null);
 
     try {
-      const updated = await updateEmployee(editData.id, editData);
-      const userId = updated.userId || updated.id;
+      const submittedEmail = editData.email.trim();
+      const submittedLocalPhoto = editData.avatar?.startsWith("data:")
+        ? editData.avatar
+        : "";
+      const resumeDraft = {
+        lines: (editData.resumeLines ?? []).filter(
+          (line) => line.title.trim() && line.type && line.fromDate,
+        ),
+        skills: draftResumeSkills,
+      };
+      const updated = await updateEmployee(editData.id, {
+        ...editData,
+        resumeSkills: resumeDraft.skills,
+        resumeLines: resumeDraft.lines,
+      });
+
+      if (editData.resumeId) {
+        await syncEmployeeResume(
+          editData.resumeId,
+          resumeBaselineRef.current,
+          resumeDraft,
+        );
+      }
+
+      const refreshed = await getEmployeeById(editData.id).catch(() => updated);
+      resumeBaselineRef.current = {
+        lines: refreshed.resumeLines ?? [],
+        skills: refreshed.resumeSkills ?? [],
+      };
+      setResumeHydrationKey((key) => key + 1);
+
+      const emailAccepted =
+        refreshed.email.trim().toLowerCase() === submittedEmail.toLowerCase();
+      const userId = refreshed.userId || refreshed.id;
       const nextRoleIds = [...new Set([...selectedRoleIds, ...fixedRoleIds])];
       const previousRoleIds = [
         ...new Set([
@@ -269,12 +461,19 @@ export function EmployeeDetailView({
         }
       }
 
+      // Prefer the just-uploaded preview so a missing/broken API media path
+      // does not wipe the photo the user already selected.
+      const serverPhoto = refreshed.avatar?.trim() || "";
+      const photoMissingOnServer = Boolean(submittedLocalPhoto) && !serverPhoto;
       const keptLocalPhoto =
-        editData.avatar?.startsWith("data:") &&
-        (!updated.avatar || updated.avatar.includes("ui-avatars.com"))
-          ? editData.avatar
-          : updated.avatar;
-      const merged = { ...updated, userAccount, avatar: keptLocalPhoto };
+        submittedLocalPhoto || serverPhoto || editData.avatar || "";
+      const merged = {
+        ...refreshed,
+        userAccount,
+        avatar: keptLocalPhoto,
+        // Keep the typed email visible if the update API ignored it (schema has no Email on PUT).
+        email: emailAccepted ? refreshed.email : submittedEmail,
+      };
       setEditData(merged);
       if (userAccount) {
         setSelectedRoleIds(userAccount.roles.map((role) => role.roleId));
@@ -285,7 +484,11 @@ export function EmployeeDetailView({
         );
       }
       onUpdate(merged);
-      if (roleWarning) {
+      if (photoMissingOnServer) {
+        setError(t("employees.errors.photoNotPersistedByServer"));
+      } else if (!emailAccepted && submittedEmail) {
+        setError(t("employees.errors.emailNotUpdatedByServer"));
+      } else if (roleWarning) {
         setError(roleWarning);
       }
     } catch (err) {
@@ -341,9 +544,19 @@ export function EmployeeDetailView({
       </div>
 
       <section className={cardSurfaceClass}>
-        <div className="flex items-center gap-2 border-b border-hr-border px-5 py-4">
-          <UserRound className="size-5 text-hr-primary" />
-          <h2 className="text-lg font-bold text-hr-text">{t("employees.detail.title")}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hr-border px-5 py-4">
+          <div className="flex items-center gap-2">
+            <UserRound className="size-5 text-hr-primary" />
+            <h2 className="text-lg font-bold text-hr-text">{t("employees.detail.title")}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditingUserRoles(true)}
+            disabled={loading || !(editData.userId || editData.id)}
+            className="inline-flex h-10 items-center rounded-xl bg-hr-primary px-4 text-sm font-bold text-white transition hover:bg-hr-primary-hover disabled:opacity-60"
+          >
+            {t("employees.detail.editUserRoles")}
+          </button>
         </div>
 
         {error && (
@@ -377,14 +590,6 @@ export function EmployeeDetailView({
             <div>
               {activeTab === "personal" && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <EmployeeField
-                    label={t("employees.detail.fields.userId")}
-                    hint={t("employees.detail.fields.userIdHint")}
-                  >
-                    <div className="flex h-11 items-center rounded-xl border border-hr-border bg-hr-hover px-4">
-                      <CopyableIdCell value={editData.userId || editData.employeeId || "-"} />
-                    </div>
-                  </EmployeeField>
                   <EmployeeField label={t("employees.detail.fields.fullName")}>
                     <input
                       value={editData.name}
@@ -413,16 +618,34 @@ export function EmployeeDetailView({
                       <option value="female">{t("common.female")}</option>
                     </select>
                   </EmployeeField>
-                  {editData.genderName ? (
-                    <EmployeeField label={t("employees.table.columns.gender")}>
-                      <input
-                        value={editData.genderName}
-                        readOnly
-                        className={readOnlyClass}
-                      />
-                    </EmployeeField>
-                  ) : null}
-                  <EmployeeField label={t("employees.detail.fields.email")} error={fieldErrors.email}>
+                  <EmployeeField label={t("employees.detail.fields.maritalStatus")}>
+                    <select
+                      value={editData.maritalStatus || ""}
+                      onChange={(e) => handleChange("maritalStatus", e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">
+                        {t("employees.detail.placeholders.selectMaritalStatus")}
+                      </option>
+                      <option value="أعزب">
+                        {t("employees.detail.maritalOptions.single")}
+                      </option>
+                      <option value="متزوج">
+                        {t("employees.detail.maritalOptions.married")}
+                      </option>
+                      <option value="مطلق">
+                        {t("employees.detail.maritalOptions.divorced")}
+                      </option>
+                      <option value="أرمل">
+                        {t("employees.detail.maritalOptions.widowed")}
+                      </option>
+                    </select>
+                  </EmployeeField>
+                  <EmployeeField
+                    label={t("employees.detail.fields.email")}
+                    error={fieldErrors.email}
+                    hint={t("employees.detail.fields.emailHint")}
+                  >
                     <input
                       type="email"
                       inputMode="email"
@@ -440,6 +663,51 @@ export function EmployeeDetailView({
                       onChange={(e) => handleChange("phone", e.target.value)}
                       className={inputClass}
                     />
+                  </EmployeeField>
+                  <EmployeeField label={t("employees.detail.fields.degreeLevel")}>
+                    <select
+                      value={editData.degreeLevel || ""}
+                      onChange={(e) => handleChange("degreeLevel", e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">
+                        {t("employees.detail.placeholders.selectDegreeLevel")}
+                      </option>
+                      <option value="خريج">
+                        {t("employees.detail.degreeOptions.graduate")}
+                      </option>
+                      <option value="بكالوريوس">
+                        {t("employees.detail.degreeOptions.bachelor")}
+                      </option>
+                      <option value="ماجستير">
+                        {t("employees.detail.degreeOptions.master")}
+                      </option>
+                      <option value="دكتوراه">
+                        {t("employees.detail.degreeOptions.doctorate")}
+                      </option>
+                      <option value="دبلوم">
+                        {t("employees.detail.degreeOptions.diploma")}
+                      </option>
+                      <option value="ثانوية">
+                        {t("employees.detail.degreeOptions.highSchool")}
+                      </option>
+                    </select>
+                  </EmployeeField>
+                  <EmployeeField label={t("employees.detail.fields.fieldOfStudy")}>
+                    <input
+                      value={editData.fieldOfStudy || ""}
+                      onChange={(e) => handleChange("fieldOfStudy", e.target.value)}
+                      className={inputClass}
+                      placeholder={t("employees.detail.placeholders.fieldOfStudy")}
+                    />
+                  </EmployeeField>
+                  <EmployeeField
+                    label={t("employees.detail.fields.userId")}
+                    hint={t("employees.detail.fields.userIdHint")}
+                  >
+                    <div className="flex h-11 items-center rounded-xl border border-hr-border bg-hr-hover px-4">
+                      <CopyableIdCell value={editData.userId || editData.employeeId || "-"} />
+                    </div>
                   </EmployeeField>
                 </div>
               )}
@@ -678,86 +946,44 @@ export function EmployeeDetailView({
 
               {activeTab === "resume" && (
                 <div className="space-y-6">
+                  <p className="rounded-xl border border-hr-border bg-hr-hover/40 px-4 py-3 text-sm text-hr-muted">
+                    {t("employees.detail.resumeSyncHint")}
+                  </p>
+                  {fieldErrors.resumeId ? (
+                    <p className={alertErrorClass}>{fieldErrors.resumeId}</p>
+                  ) : null}
+
                   <div>
                     <h3 className="mb-3 text-base font-bold text-hr-text">
                       {t("employees.detail.resumeLinesTitle")}
                     </h3>
-                    {editData.resumeLines?.length ? (
-                      <div className="space-y-3">
-                        {editData.resumeLines.map((line) => (
-                          <article
-                            key={line.id}
-                            className="rounded-xl border border-hr-border bg-hr-table-alt p-4"
-                          >
-                            <div className="mb-1 flex flex-wrap items-center gap-2">
-                              <h4 className="font-semibold text-hr-text">{line.title}</h4>
-                              {line.typeName ? (
-                                <span className="rounded-full bg-hr-primary/10 px-2.5 py-0.5 text-xs font-medium text-hr-primary">
-                                  {line.typeName}
-                                </span>
-                              ) : null}
-                            </div>
-                            {line.description ? (
-                              <p className="text-sm text-hr-muted">{line.description}</p>
-                            ) : null}
-                            {(line.fromDate || line.toDate) && (
-                              <p className="mt-2 text-xs text-hr-muted" dir="ltr">
-                                {line.fromDate || "—"} → {line.toDate || "—"}
-                              </p>
-                            )}
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-hr-muted">
-                        {t("employees.detail.resumeLinesEmpty")}
-                      </p>
-                    )}
+                    <EmployeeResumeLinesEditor
+                      lines={editData.resumeLines ?? []}
+                      lineTypes={lineTypes}
+                      loading={lineTypesLoading}
+                      disabled={saving || !editData.resumeId}
+                      onChange={(lines) =>
+                        setEditData((prev) => ({ ...prev, resumeLines: lines }))
+                      }
+                    />
                   </div>
 
                   <div>
                     <h3 className="mb-3 text-base font-bold text-hr-text">
                       {t("employees.detail.resumeSkillsTitle")}
                     </h3>
-                    {editData.resumeSkills?.length ? (
-                      <div className="overflow-x-auto rounded-xl border border-hr-border">
-                        <table className="min-w-[480px] w-full text-sm">
-                          <thead className="bg-hr-table-head text-hr-muted">
-                            <tr>
-                              <th className="px-3 py-3 text-start font-medium">
-                                {t("employees.modal.fields.skillName")}
-                              </th>
-                              <th className="px-3 py-3 text-start font-medium">
-                                {t("employees.modal.fields.skillCategory")}
-                              </th>
-                              <th className="px-3 py-3 text-start font-medium">
-                                {t("employees.modal.fields.skillLevel")}
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {editData.resumeSkills.map((skill, index) => (
-                              <tr
-                                key={`${skill.name}-${index}`}
-                                className={
-                                  index % 2
-                                    ? "border-t border-hr-border bg-hr-table-head"
-                                    : "border-t border-hr-border bg-hr-surface"
-                                }
-                              >
-                                <td className="px-3 py-3 text-hr-text">{skill.name}</td>
-                                <td className="px-3 py-3 text-hr-muted">{skill.type || t("common.dash")}</td>
-                                <td className="px-3 py-3 text-hr-muted">{skill.level || t("common.dash")}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-hr-muted">
-                        {t("employees.detail.resumeSkillsEmpty")}
+                    {fieldErrors.resumeSkills ? (
+                      <p className={`mb-3 ${alertErrorClass}`}>
+                        {fieldErrors.resumeSkills}
                       </p>
-                    )}
+                    ) : null}
+                    <EmployeeResumeSkillsEditor
+                      skills={skillRows}
+                      onChange={setSkillRows}
+                      skillGroups={skillGroups}
+                      loading={skillsLoading || saving || !editData.resumeId}
+                      error={skillsError}
+                    />
                   </div>
                 </div>
               )}
@@ -767,15 +993,34 @@ export function EmployeeDetailView({
               <p className="self-start text-sm font-medium text-hr-text">
                 {t("employees.detail.fields.photo")}
               </p>
-              <EmployeeAvatar
-                src={editData.avatar}
-                name={editData.name}
-                alt={editData.name}
-                className="h-[180px] w-[170px] rounded-2xl border border-hr-border object-cover"
-              />
+              {editData.avatar ? (
+                <img
+                  key={editData.avatar.slice(0, 64)}
+                  src={editData.avatar}
+                  alt=""
+                  className="h-[180px] w-[170px] rounded-2xl border border-hr-border object-cover"
+                  onError={(event) => {
+                    const current = editData.avatar || "";
+                    // Never wipe a local preview the user just chose.
+                    if (current.startsWith("data:")) return;
+                    // If a remote URL fails, fall back to initials only.
+                    (event.currentTarget as HTMLImageElement).style.display = "none";
+                    setEditData((prev) =>
+                      prev.avatar === current ? { ...prev, avatar: "" } : prev,
+                    );
+                  }}
+                />
+              ) : (
+                <EmployeeAvatar
+                  src=""
+                  name={editData.name}
+                  alt=""
+                  className="h-[180px] w-[170px] rounded-2xl border border-hr-border object-cover text-4xl"
+                />
+              )}
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-hr-border bg-hr-surface px-4 py-2 text-sm font-medium text-hr-text transition hover:border-hr-primary">
                 <Upload className="size-4" />
-                {t("employees.detail.changeIdImage")}
+                {t("employees.detail.changePhoto")}
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif"
@@ -788,7 +1033,6 @@ export function EmployeeDetailView({
                       event.target.value = "";
                       return;
                     }
-                    // Keep uploads reasonable for multipart forms (~5MB).
                     if (file.size > 5 * 1024 * 1024) {
                       setError(t("employees.errors.photoTooLarge"));
                       event.target.value = "";
@@ -797,10 +1041,18 @@ export function EmployeeDetailView({
                     setError(null);
                     const reader = new FileReader();
                     reader.onload = () => {
+                      const result = typeof reader.result === "string" ? reader.result : "";
+                      if (!result) {
+                        setError(t("employees.errors.photoInvalid"));
+                        return;
+                      }
                       setEditData((prev) => ({
                         ...prev,
-                        avatar: (reader.result as string) || prev.avatar,
+                        avatar: result,
                       }));
+                    };
+                    reader.onerror = () => {
+                      setError(t("employees.errors.photoInvalid"));
                     };
                     reader.readAsDataURL(file);
                     event.target.value = "";
@@ -836,6 +1088,30 @@ export function EmployeeDetailView({
           </button>
         </div>
       </section>
+
+      {editingUserRoles && (editData.userId || editData.id) ? (
+        <EditUserRolesModal
+          userId={editData.userId || editData.id}
+          onClose={() => setEditingUserRoles(false)}
+          onSaved={() => {
+            const userId = editData.userId || editData.id;
+            void getUserById(userId)
+              .then((userAccount) => {
+                setEditData((prev) => ({ ...prev, userAccount }));
+                setSelectedRoleIds(userAccount.roles.map((role) => role.roleId));
+                setFixedRoleIds(
+                  new Set(
+                    userAccount.roles
+                      .filter((role) => role.isFixed)
+                      .map((role) => role.roleId),
+                  ),
+                );
+              })
+              .catch(() => undefined);
+            setEditingUserRoles(false);
+          }}
+        />
+      ) : null}
     </main>
   );
 }

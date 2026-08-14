@@ -60,6 +60,9 @@ export const sanitizeEmployeeField = (field: string, value: string) => {
     case "name":
     case "fullName":
     case "nationality":
+    case "fieldOfStudy":
+    case "maritalStatus":
+    case "degreeLevel":
       return sanitizeLettersAndSpaces(value);
     case "email":
       return sanitizeEmailInput(value);

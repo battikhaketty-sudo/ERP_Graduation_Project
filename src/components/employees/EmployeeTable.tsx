@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, Eye, Pencil } from "lucide-react";
+import { Archive, ArchiveRestore, Eye, Pencil, X } from "lucide-react";
 import { DEFAULT_PAGE_SIZE } from "../../constants/defaults";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useTranslation } from "../../i18n";
@@ -21,6 +21,10 @@ type EmployeeTableProps = {
   onEmployeeClick: (employee: Employee) => void;
   onEmployeeEdit?: (employee: Employee) => void;
   onToggleArchive: (employee: Employee) => void;
+  onBulkArchive?: () => void;
+  onBulkEdit?: () => void;
+  onClearSelection?: () => void;
+  archiveView?: "active" | "archived";
   onAddClick?: () => void;
 };
 
@@ -35,6 +39,10 @@ export function EmployeeTable({
   onEmployeeClick,
   onEmployeeEdit,
   onToggleArchive,
+  onBulkArchive,
+  onBulkEdit,
+  onClearSelection,
+  archiveView = "active",
   onAddClick,
 }: EmployeeTableProps) {
   const { t } = useTranslation();
@@ -42,6 +50,8 @@ export function EmployeeTable({
   const nameAlignClass = dir === "rtl" ? "text-right" : "text-left";
   const allSelected =
     employees.length > 0 && employees.every((employee) => selectedIds.has(employee.id));
+  const selectedCount = selectedIds.size;
+  const isArchivedView = archiveView === "archived";
 
   return (
     <section className="hr-card">
@@ -52,6 +62,56 @@ export function EmployeeTable({
           onAddClick={onAddClick}
         />
       ) : null}
+
+      {selectedCount > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-hr-border bg-hr-hover/40 px-4 py-3 sm:px-5">
+          <span className="me-auto text-sm font-medium text-hr-text">
+            {t("employees.bulk.selectedCount", { count: String(selectedCount) })}
+          </span>
+          {selectedCount === 1 && onBulkEdit ? (
+            <button
+              type="button"
+              onClick={onBulkEdit}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-hr-border bg-hr-surface px-3 text-sm font-medium text-hr-text transition hover:border-hr-primary hover:text-hr-primary"
+            >
+              <Pencil className="size-4" />
+              {t("common.edit")}
+            </button>
+          ) : null}
+          {onBulkArchive ? (
+            <button
+              type="button"
+              onClick={onBulkArchive}
+              className={[
+                "inline-flex h-9 items-center gap-1.5 rounded-lg border bg-hr-surface px-3 text-sm font-medium transition",
+                isArchivedView
+                  ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900/50 dark:hover:bg-emerald-950/30"
+                  : "border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-900/50 dark:hover:bg-amber-950/30",
+              ].join(" ")}
+            >
+              {isArchivedView ? (
+                <ArchiveRestore className="size-4" />
+              ) : (
+                <Archive className="size-4" />
+              )}
+              {isArchivedView
+                ? t("employees.bulk.unarchive")
+                : t("employees.bulk.archive")}
+            </button>
+          ) : null}
+          {onClearSelection ? (
+            <button
+              type="button"
+              onClick={onClearSelection}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm text-hr-muted transition hover:text-hr-text"
+            >
+              <X className="size-4" />
+              {t("employees.bulk.clearSelection")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="min-w-0 overflow-x-auto">
         {employees.length === 0 ? (
           <EmptyState
@@ -136,7 +196,7 @@ export function EmployeeTable({
                       <EmployeeAvatar
                         src={employee.avatar}
                         name={employee.name}
-                        className="size-9 shrink-0 rounded-full object-cover ring-1 ring-hr-border"
+                        className="size-9 shrink-0 rounded-full object-cover ring-1 ring-hr-border text-xs"
                       />
                       <span
                         className="max-w-[140px] truncate font-medium text-hr-text"

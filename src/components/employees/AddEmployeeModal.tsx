@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle,
   Loader,
-  Upload,
 } from "lucide-react";
 import { DEFAULT_EMPLOYEE_PASSWORD } from "../../constants/defaults";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -43,7 +42,6 @@ import {
   alertErrorClass,
   alertSuccessClass,
   cancelBtnLgClass,
-  dashedZoneClass,
   modalBodyClass,
   modalFooterClass,
   ModalCloseButton,
@@ -88,7 +86,6 @@ export function AddEmployeeModal({
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const firstFieldRef = useModalAutoFocus<HTMLInputElement>(isOpen);
 
   const {
@@ -116,7 +113,9 @@ export function AddEmployeeModal({
     birthDate: "",
     gender: "",
     nationality: "",
-    personalImage: "",
+    maritalStatus: "",
+    degreeLevel: "",
+    fieldOfStudy: "",
     departmentId: "",
     role: "Front_end" as WorkRole,
     joiningDate: "",
@@ -173,42 +172,6 @@ export function AddEmployeeModal({
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      setErrors((prev) => ({
-        ...prev,
-        personalImage: t("employees.errors.photoInvalid"),
-      }));
-      e.target.value = "";
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setErrors((prev) => ({
-        ...prev,
-        personalImage: t("employees.errors.photoTooLarge"),
-      }));
-      e.target.value = "";
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setFormData((prev) => ({
-        ...prev,
-        personalImage: (event.target?.result as string) || "",
-      }));
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next.personalImage;
-        return next;
-      });
-    };
-    reader.readAsDataURL(file);
   };
 
   const validateForm = () => {
@@ -295,10 +258,13 @@ export function AddEmployeeModal({
         password: formData.password,
         role: formData.role,
         address: `${formData.nationality || "-"} - ${selectedDepartment?.name || "-"}`,
-        avatar: formData.personalImage,
+        avatar: "",
         birthDate: formData.birthDate,
         gender: formData.gender as Employee["gender"],
         nationality: formData.nationality,
+        maritalStatus: formData.maritalStatus || undefined,
+        degreeLevel: formData.degreeLevel || undefined,
+        fieldOfStudy: formData.fieldOfStudy || undefined,
         department: selectedDepartment?.name,
         departmentId: formData.departmentId,
         contractTypeId: formData.contractTypeId,
@@ -495,15 +461,6 @@ export function AddEmployeeModal({
                   />
                 </EmployeeField>
 
-                <EmployeeField label={t("employees.modal.fields.password")}>
-                  <PasswordInput
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    className={inputClass}
-                  />
-                </EmployeeField>
-
                 <EmployeeField
                   label={t("employees.modal.fields.idNumber")}
                   error={errors.idNumber}
@@ -518,38 +475,86 @@ export function AddEmployeeModal({
                     className={inputClass}
                   />
                 </EmployeeField>
+
+                <EmployeeField label={t("employees.modal.fields.maritalStatus")}>
+                  <select
+                    name="maritalStatus"
+                    value={formData.maritalStatus}
+                    onChange={handleChange}
+                    className={inputClass}
+                  >
+                    <option value="">
+                      {t("employees.modal.placeholders.selectMaritalStatus")}
+                    </option>
+                    <option value="أعزب">
+                      {t("employees.detail.maritalOptions.single")}
+                    </option>
+                    <option value="متزوج">
+                      {t("employees.detail.maritalOptions.married")}
+                    </option>
+                    <option value="مطلق">
+                      {t("employees.detail.maritalOptions.divorced")}
+                    </option>
+                    <option value="أرمل">
+                      {t("employees.detail.maritalOptions.widowed")}
+                    </option>
+                  </select>
+                </EmployeeField>
+
+                <EmployeeField label={t("employees.modal.fields.degreeLevel")}>
+                  <select
+                    name="degreeLevel"
+                    value={formData.degreeLevel}
+                    onChange={handleChange}
+                    className={inputClass}
+                  >
+                    <option value="">
+                      {t("employees.modal.placeholders.selectDegreeLevel")}
+                    </option>
+                    <option value="خريج">
+                      {t("employees.detail.degreeOptions.graduate")}
+                    </option>
+                    <option value="بكالوريوس">
+                      {t("employees.detail.degreeOptions.bachelor")}
+                    </option>
+                    <option value="ماجستير">
+                      {t("employees.detail.degreeOptions.master")}
+                    </option>
+                    <option value="دكتوراه">
+                      {t("employees.detail.degreeOptions.doctorate")}
+                    </option>
+                    <option value="دبلوم">
+                      {t("employees.detail.degreeOptions.diploma")}
+                    </option>
+                    <option value="ثانوية">
+                      {t("employees.detail.degreeOptions.highSchool")}
+                    </option>
+                  </select>
+                </EmployeeField>
+
+                <EmployeeField label={t("employees.modal.fields.fieldOfStudy")}>
+                  <input
+                    name="fieldOfStudy"
+                    value={formData.fieldOfStudy}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder={t("employees.modal.placeholders.fieldOfStudy")}
+                  />
+                </EmployeeField>
+
+                <EmployeeField label={t("employees.modal.fields.password")}>
+                  <PasswordInput
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    className={inputClass}
+                  />
+                </EmployeeField>
               </div>
 
-              <EmployeeField
-                label={t("employees.modal.fields.photo")}
-                error={errors.personalImage}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`flex w-full max-w-[280px] flex-col items-center justify-center rounded-2xl px-4 py-8 ${dashedZoneClass}`}
-                >
-                  {formData.personalImage ? (
-                    <img
-                      src={formData.personalImage}
-                      alt={t("common.preview")}
-                      className="mb-3 size-24 rounded-xl object-cover"
-                    />
-                  ) : (
-                    <Upload className="mb-2 size-8 text-hr-muted" />
-                  )}
-                  <span className="text-sm text-hr-muted">
-                    {t("employees.modal.uploadPhotoHint")}
-                  </span>
-                </button>
-              </EmployeeField>
+              <p className="rounded-xl border border-dashed border-hr-border bg-hr-hover/30 px-4 py-3 text-sm text-hr-muted">
+                {t("employees.modal.photoLaterHint")}
+              </p>
             </div>
           )}
 

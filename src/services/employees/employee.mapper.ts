@@ -1,6 +1,9 @@
-import type { Employee, EmployeeResumeLine } from "../../types/employee";
+import type {
+  Employee,
+  EmployeeResumeLine,
+  EmployeeResumeSkill,
+} from "../../types/employee";
 import { env } from "../../config/env";
-import { DEFAULT_AVATAR_URL } from "../../constants/defaults";
 import { normalizeBirthDateValue } from "../../utils/employeeDates";
 
 const MEDIA_PROXY_PREFIX = "/media";
@@ -39,8 +42,10 @@ export const buildNamedAvatarUrl = (name?: string) => {
 
 /**
  * Resolve employee/media file paths to a browser-loadable URL.
- * Uses same-origin `/media` when the API is proxied so images work despite
- * broken backend TLS and avoid mixed-content blocks on HTTPS hosts.
+ *
+ * Prefer the API media host directly. Only rewrite through same-origin `/media`
+ * when the page is HTTPS and the file is HTTP (mixed-content block).
+ * (The Vite `/media` proxy has been falling through to SPA HTML in local dev.)
  */
 export const resolveMediaUrl = (path?: string | null) => {
   if (!path?.trim()) return "";
@@ -48,30 +53,51 @@ export const resolveMediaUrl = (path?: string | null) => {
   const raw = path.trim().replace(/\\/g, "/");
   if (raw.startsWith("data:")) return raw;
 
-  if (/^https?:\/\//i.test(raw)) {
-    try {
-      const url = new URL(raw);
-      if (usesProxiedApi()) {
-        return toProxiedMediaUrl(`${url.pathname}${url.search}`);
-      }
-      // Keep the original scheme — do not force https (backend TLS is unreliable).
-      return `${url.protocol}//${url.host}${url.pathname}${url.search}`;
-    } catch {
-      return raw;
+  let absolute: URL;
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      absolute = new URL(raw);
+    } else {
+      const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
+      absolute = new URL(`${getDirectMediaHost()}${normalizedPath}`);
     }
+  } catch {
+    return raw;
   }
 
-  const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
-  if (usesProxiedApi()) {
-    return toProxiedMediaUrl(normalizedPath);
+  const pageIsHttps =
+    typeof window !== "undefined" && window.location.protocol === "https:";
+
+  if (pageIsHttps && absolute.protocol === "http:" && usesProxiedApi()) {
+    return toProxiedMediaUrl(`${absolute.pathname}${absolute.search}`);
   }
-  return `${getDirectMediaHost()}${normalizedPath}`;
+
+  return `${absolute.protocol}//${absolute.host}${absolute.pathname}${absolute.search}`;
 };
 
-export const resolveAvatarUrl = (path?: string | null, name?: string) => {
-  const fallback = name ? buildNamedAvatarUrl(name) : DEFAULT_AVATAR_URL;
-  if (!path?.trim()) return fallback;
-  return resolveMediaUrl(path) || fallback;
+const readProfileImagePath = (
+  item: Record<string, unknown>,
+  personal?: Record<string, unknown>,
+) => {
+  const candidates = [
+    personal?.profileImagePath,
+    personal?.ProfileImagePath,
+    personal?.profileImageUrl,
+    personal?.ProfileImageUrl,
+    item.profileImagePath,
+    item.ProfileImagePath,
+    item.profileImageUrl,
+    item.ProfileImageUrl,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+};
+
+export const resolveAvatarUrl = (path?: string | null, _name?: string) => {
+  if (!path?.trim()) return "";
+  return resolveMediaUrl(path) || "";
 };
 
 export const isArchivedEmployeeRecord = (item: Record<string, unknown>) => {
@@ -88,19 +114,28 @@ export const isArchivedEmployeeRecord = (item: Record<string, unknown>) => {
 const mapResumeLines = (resume: Record<string, unknown>): EmployeeResumeLine[] => {
   if (!Array.isArray(resume.lines)) return [];
 
-  return (resume.lines as Record<string, unknown>[]).map((line) => ({
-    id: String(line.id || crypto.randomUUID()),
-    title: String(line.title || ""),
-    description: line.description ? String(line.description) : undefined,
-    typeName: String(line.typeName || line.type || ""),
-    fromDate: line.fromDate ? String(line.fromDate).split("T")[0] : undefined,
-    toDate: line.toDate ? String(line.toDate).split("T")[0] : undefined,
-  }));
+  return (resume.lines as Record<string, unknown>[]).map((line) => {
+    const typeValue = Number(line.type ?? 0);
+    return {
+      id: String(line.id || `local-${crypto.randomUUID()}`),
+      title: String(line.title || ""),
+      description: line.description ? String(line.description) : undefined,
+      type: Number.isFinite(typeValue) ? typeValue : 0,
+      typeName: String(line.typeName || ""),
+      fromDate: line.fromDate ? String(line.fromDate).split("T")[0] : undefined,
+      toDate: line.toDate ? String(line.toDate).split("T")[0] : undefined,
+    };
+  });
 };
 
-const mapResumeSkills = (resume: Record<string, unknown>) =>
+const mapResumeSkills = (
+  resume: Record<string, unknown>,
+): EmployeeResumeSkill[] =>
   Array.isArray(resume.skills)
     ? (resume.skills as Record<string, unknown>[]).map((skill) => ({
+        id: skill.id ? String(skill.id) : undefined,
+        skillId: String(skill.skillId || ""),
+        skillLevelId: String(skill.skillLevelId || ""),
         name: String(skill.skillName || skill.name || ""),
         type: String(skill.skillTypeName || skill.type || ""),
         level: String(skill.skillLevelName || skill.level || ""),
@@ -126,10 +161,7 @@ export const normalizeEmployee = (
       departmentId: String(item.departmentId || ""),
       managerId: String(item.managerId || ""),
       managerName: String(item.managerName || ""),
-      avatar: resolveAvatarUrl(
-        String(item.profileImagePath || ""),
-        String(item.legalName || item.name || ""),
-      ),
+      avatar: resolveAvatarUrl(readProfileImagePath(item)),
       isArchived: isArchivedEmployeeRecord(item),
       role: "Front_end",
       address:
@@ -160,15 +192,36 @@ export const normalizeEmployee = (
     role: "Front_end",
     address:
       `${citizenship.nationality || ""} - ${work.departmentName || ""}`.trim() || "-",
-    avatar: resolveAvatarUrl(
-      String(personal.profileImagePath || ""),
-      String(personal.legalName || item.name || ""),
-    ),
+    avatar: resolveAvatarUrl(readProfileImagePath(item, personal)),
     isArchived: isArchivedEmployeeRecord(item),
     birthDate: normalizeBirthDateValue(String(personal.birthDay || "")) || undefined,
     gender: personal.gender === 2 || personal.gender === "2" ? "female" : "male",
     genderName: personal.genderName ? String(personal.genderName) : undefined,
     nationality: String(citizenship.nationality || "غير محدد"),
+    maritalStatus: String(
+      personal.maritalStatus ||
+        personal.MaritalStatus ||
+        personal.socialStatus ||
+        personal.SocialStatus ||
+        citizenship.maritalStatus ||
+        citizenship.MaritalStatus ||
+        "",
+    ),
+    degreeLevel: String(
+      personal.degreeLevel ||
+        personal.DegreeLevel ||
+        personal.certificateLevel ||
+        personal.CertificateLevel ||
+        personal.educationLevel ||
+        "",
+    ),
+    fieldOfStudy: String(
+      personal.fieldOfStudy ||
+        personal.FieldOfStudy ||
+        personal.studyField ||
+        personal.StudyField ||
+        "",
+    ),
     department: String(work.departmentName || "غير محدد"),
     departmentId: String(work.departmentId || item.departmentId || ""),
     managerId: String(work.managerId || item.managerId || ""),

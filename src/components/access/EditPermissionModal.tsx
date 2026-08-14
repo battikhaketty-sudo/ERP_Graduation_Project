@@ -15,8 +15,10 @@ import {
 } from "../../services/permissions";
 import type { AppPermission, PermissionFormPayload } from "../../types/permission";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
+import { FormField } from "../ui/FormField";
 import { FormTextInput } from "../ui/FormTextInput";
 import { FormTextarea } from "../ui/FormTextarea";
+import { CopyableIdCell } from "../ui/CopyableIdCell";
 import {
   alertErrorClass,
   cancelBtnClass,
@@ -172,6 +174,15 @@ export function EditPermissionModal({
         {error ? <p className={`mb-4 ${alertErrorClass}`}>{error}</p> : null}
 
         <div className="space-y-4">
+          <FormField label={t("access.permissions.fields.number")} hint={t("form.readOnlyId")}>
+            <div className="flex h-11 items-center justify-center rounded-xl border border-hr-border bg-hr-hover px-4">
+              {permission?.id ? (
+                <CopyableIdCell value={permission.id} head={6} tail={4} />
+              ) : (
+                <span className="text-sm text-hr-muted">{t("common.dash")}</span>
+              )}
+            </div>
+          </FormField>
           <FormTextInput
             ref={nameFieldRef}
             id="permission-name"

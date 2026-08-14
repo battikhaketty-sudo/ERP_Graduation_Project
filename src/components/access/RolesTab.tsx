@@ -11,13 +11,7 @@ import { CopyableIdCell } from "../ui/CopyableIdCell";
 import { TableRowIndex } from "../ui/TableRowIndex";
 import { iconBtnClass } from "../ui/formStyles";
 import { EditRoleModal } from "./EditRoleModal";
-import {
-  ROLE_LEVEL_BADGE_CLASS,
-  getRoleLevelKey,
-  tablePanelClass,
-  tableScrollClass,
-  yesNoBadgeClass,
-} from "./access-ui";
+import { tablePanelClass, tableScrollClass, yesNoBadgeClass } from "./access-ui";
 
 type RolesTabProps = {
   search: string;
@@ -133,7 +127,6 @@ export function RolesTab({ search, onNotice, onDataChanged }: RolesTabProps) {
                 </tr>
               ) : (
                 roles.map((role, index) => {
-                  const levelKey = getRoleLevelKey(role.level);
                   return (
                     <tr
                       key={role.id}
@@ -151,15 +144,8 @@ export function RolesTab({ search, onNotice, onDataChanged }: RolesTabProps) {
                       <td className="max-w-[220px] truncate px-3 py-3 text-center text-hr-muted">
                         {role.description || t("common.dash")}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        <span
-                          className={[
-                            "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
-                            ROLE_LEVEL_BADGE_CLASS[levelKey],
-                          ].join(" ")}
-                        >
-                          {t(`access.level.${levelKey}`)}
-                        </span>
+                      <td className="px-3 py-3 text-center text-hr-text">
+                        {role.level}
                       </td>
                       <td className="px-3 py-3 text-center">
                         <span

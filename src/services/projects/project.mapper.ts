@@ -5,9 +5,20 @@ import type {
   ProjectMember,
   ProjectSection,
   ProjectStats,
+  ProjectTask,
+  ProjectTaskDetail,
+  TaskAssignment,
+  TaskDependency,
   TaskStats,
+  TaskTransition,
 } from "../../types/project";
-import { invitationStatusFromApi, projectStatusFromApi, roleLabelFromApi } from "./project.enums";
+import {
+  invitationStatusFromApi,
+  projectStatusFromApi,
+  roleLabelFromApi,
+  taskDependencyTypeFromApi,
+  taskPriorityFromApi,
+} from "./project.enums";
 import { extractRowNumber } from "../../utils/tableRowNumber";
 import { buildTaskStatsFromTasks } from "./taskStorage";
 
@@ -69,19 +80,95 @@ export const filterProjectSections = (
 };
 
 export const normalizeMember = (item: Record<string, unknown>): ProjectMember | null => {
-  const employeeId = readId(item.employeeId, item.memberId);
-  const id = readId(item.memberId, item.employeeId);
-  if (!id || !employeeId) return null;
+  const employeeId = readId(item.employeeId, item.EmployeeId);
+  const userId = readId(item.userId, item.UserId);
+  const memberId = readId(item.memberId, item.MemberId, item.id, item.Id);
+  const assignmentId = memberId || employeeId || userId;
+  if (!assignmentId) return null;
 
   return {
-    id,
-    employeeId,
-    employeeName: String(item.employeeName ?? "-").slice(0, 200),
-    role: roleLabelFromApi(item.role),
-    joinedAt: formatDate(typeof item.joinedAtUtc === "string" ? item.joinedAtUtc : null),
-    leftAt: formatDate(typeof item.leftAtUtc === "string" ? item.leftAtUtc : null),
+    id: assignmentId,
+    employeeId: employeeId || assignmentId,
+    userId: userId || undefined,
+    employeeName: String(
+      item.employeeName ?? item.EmployeeName ?? "-",
+    ).slice(0, 200),
+    role: roleLabelFromApi(item.role ?? item.Role),
+    joinedAt: formatDate(
+      typeof item.joinedAtUtc === "string"
+        ? item.joinedAtUtc
+        : typeof item.JoinedAtUtc === "string"
+          ? item.JoinedAtUtc
+          : null,
+    ),
+    leftAt: formatDate(
+      typeof item.leftAtUtc === "string"
+        ? item.leftAtUtc
+        : typeof item.LeftAtUtc === "string"
+          ? item.LeftAtUtc
+          : null,
+    ),
     rowNumber: extractRowNumber(item),
   };
+};
+
+/** Active project members only — left members cannot be assigned to tasks. */
+export const isActiveProjectMember = (member: ProjectMember) => !member.leftAt?.trim();
+
+export const memberLookupIds = (member: ProjectMember) =>
+  [member.id, member.employeeId, member.userId].filter(
+    (value): value is string => Boolean(value),
+  );
+
+export const toActiveAssigneeOptions = (members: ProjectMember[]) => {
+  const options: Array<{ id: string; name: string }> = [];
+  const seen = new Set<string>();
+
+  for (const member of members) {
+    if (!isActiveProjectMember(member)) continue;
+    const id = member.userId || member.employeeId || member.id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    for (const lookupId of memberLookupIds(member)) seen.add(lookupId);
+    options.push({ id, name: member.employeeName || id });
+  }
+
+  return options;
+};
+
+export const memberMatchesAssignment = (
+  member: ProjectMember,
+  assignment: { memberId?: string; employeeId?: string },
+) => {
+  const memberIds = new Set(memberLookupIds(member));
+  return [assignment.memberId, assignment.employeeId].some(
+    (value) => value && memberIds.has(value),
+  );
+};
+
+export const assigneesFromMembers = (
+  members: ProjectMember[],
+  assignments: Array<{ memberId?: string; employeeId?: string; employeeName?: string }>,
+) => {
+  const options: Array<{ id: string; name: string }> = [];
+  const seen = new Set<string>();
+
+  for (const assignment of assignments) {
+    const member = members.find(
+      (item) => isActiveProjectMember(item) && memberMatchesAssignment(item, assignment),
+    );
+    if (!member) continue;
+    const sendId = assignment.memberId || member.userId || member.id;
+    if (!sendId || seen.has(sendId)) continue;
+    seen.add(sendId);
+    for (const lookupId of memberLookupIds(member)) seen.add(lookupId);
+    options.push({
+      id: sendId,
+      name: member.employeeName || assignment.employeeName || sendId,
+    });
+  }
+
+  return options;
 };
 
 export const normalizeProjectListItem = (item: Record<string, unknown>): Project | null => {
@@ -190,8 +277,25 @@ export const normalizeInvitation = (
           ? item.Message.slice(0, 2000)
           : undefined,
     status: invitationStatusFromApi(item.status ?? item.Status),
-    startDate: "",
-    endDate: "",
+    respondedAt: formatDate(
+      typeof item.respondedAtUtc === "string"
+        ? item.respondedAtUtc
+        : typeof item.RespondedAtUtc === "string"
+          ? item.RespondedAtUtc
+          : typeof item.respondedAt === "string"
+            ? item.respondedAt
+            : typeof item.RespondedAt === "string"
+              ? item.RespondedAt
+              : typeof item.acceptedAtUtc === "string"
+                ? item.acceptedAtUtc
+                : typeof item.AcceptedAtUtc === "string"
+                  ? item.AcceptedAtUtc
+                  : typeof item.rejectedAtUtc === "string"
+                    ? item.rejectedAtUtc
+                    : typeof item.RejectedAtUtc === "string"
+                      ? item.RejectedAtUtc
+                      : null,
+    ),
     invitedAt: formatDate(
       typeof item.invitedAtUtc === "string"
         ? item.invitedAtUtc
@@ -246,3 +350,222 @@ export const buildProjectDetailStats = (
   sectionsCount: project.sectionsCount ?? project.sections.length,
   lateTasksCount: taskStats.late,
 });
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return "";
+  return value.slice(0, 10);
+};
+
+export const normalizeTaskListItem = (
+  item: Record<string, unknown>,
+  fallbackProjectId = "",
+): ProjectTask | null => {
+  const id = readId(item.id, item.Id, item.taskId, item.TaskId);
+  if (!id) return null;
+
+  const title = String(item.title ?? item.Title ?? "").slice(0, 200);
+  const sectionId = readId(
+    item.projectSectionId,
+    item.ProjectSectionId,
+    item.sectionId,
+  );
+  const dependencyCount = Number(item.dependencyCount ?? item.DependencyCount ?? 0) || 0;
+  const assignmentCount = Number(item.assignmentCount ?? item.AssignmentCount ?? 0) || 0;
+  const transitionCount = Number(item.transitionCount ?? item.TransitionCount ?? 0) || 0;
+
+  return {
+    id,
+    projectId: fallbackProjectId,
+    sectionId,
+    sectionName: String(
+      item.projectSectionName ?? item.ProjectSectionName ?? "",
+    ).slice(0, 200),
+    number: Number(item.number ?? item.Number ?? 0) || 0,
+    name: title,
+    title,
+    description: String(item.description ?? item.Description ?? "").slice(0, 5000),
+    priority: taskPriorityFromApi(item.priority ?? item.Priority),
+    expectedHours: Math.max(
+      0,
+      Number(item.estimatedHours ?? item.EstimatedHours ?? 0) || 0,
+    ),
+    startDate: formatDateTime(
+      typeof item.startDate === "string"
+        ? item.startDate
+        : typeof item.StartDate === "string"
+          ? item.StartDate
+          : null,
+    ),
+    dueDate: formatDateTime(
+      typeof item.dueDate === "string"
+        ? item.dueDate
+        : typeof item.DueDate === "string"
+          ? item.DueDate
+          : null,
+    ),
+    createdAt: formatDateTime(
+      typeof item.createdAtUtc === "string"
+        ? item.createdAtUtc
+        : typeof item.CreatedAtUtc === "string"
+          ? item.CreatedAtUtc
+          : null,
+    ),
+    assigneeIds: [],
+    assigneeNames: [],
+    dependsOnTaskIds: [],
+    dependencyCount,
+    assignmentCount,
+    transitionCount,
+  };
+};
+
+const normalizeTaskAssignment = (
+  item: Record<string, unknown>,
+): TaskAssignment | null => {
+  const memberId = readId(item.memberId, item.MemberId);
+  const employeeId = readId(item.employeeId, item.EmployeeId);
+  const assignmentId = memberId || employeeId;
+  if (!assignmentId) return null;
+  return {
+    memberId: assignmentId,
+    employeeId: employeeId || assignmentId,
+    employeeName: String(
+      item.employeeName ?? item.EmployeeName ?? "-",
+    ).slice(0, 200),
+    assignedAt: formatDateTime(
+      typeof item.assignedAtUtc === "string"
+        ? item.assignedAtUtc
+        : typeof item.AssignedAtUtc === "string"
+          ? item.AssignedAtUtc
+          : null,
+    ),
+  };
+};
+
+const normalizeTaskDependency = (
+  item: Record<string, unknown>,
+): TaskDependency | null => {
+  const taskId = readId(item.taskId, item.TaskId, item.predecessorId);
+  if (!taskId) return null;
+  return {
+    taskId,
+    taskTitle: String(item.taskTitle ?? item.TaskTitle ?? taskId).slice(0, 200),
+    dependencyType: taskDependencyTypeFromApi(
+      item.dependencyType ?? item.DependencyType ?? item.type,
+    ),
+    createdAt: formatDateTime(
+      typeof item.createdAtUtc === "string"
+        ? item.createdAtUtc
+        : typeof item.CreatedAtUtc === "string"
+          ? item.CreatedAtUtc
+          : null,
+    ),
+  };
+};
+
+const normalizeTaskTransition = (
+  item: Record<string, unknown>,
+  taskId: string,
+  index: number,
+): TaskTransition => {
+  const fromSectionId = readId(item.fromSectionId, item.FromSectionId);
+  const toSectionId = readId(item.toSectionId, item.ToSectionId);
+  const employeeId = readId(item.employeeId, item.EmployeeId);
+  const createdAtUtc = String(
+    item.createdAtUtc ?? item.CreatedAtUtc ?? "",
+  );
+  return {
+    id: readId(item.id, item.Id) || `${taskId}-${fromSectionId}-${toSectionId}-${index}`,
+    taskId,
+    memberId: employeeId,
+    memberName: String(item.employeeName ?? item.EmployeeName ?? "-").slice(0, 200),
+    fromSectionId,
+    fromSectionName: String(
+      item.fromSectionName ?? item.FromSectionName ?? fromSectionId,
+    ).slice(0, 200),
+    toSectionId,
+    toSectionName: String(
+      item.toSectionName ?? item.ToSectionName ?? toSectionId,
+    ).slice(0, 200),
+    createdAtUtc,
+  };
+};
+
+export const normalizeTaskDetail = (
+  item: Record<string, unknown>,
+  fallbackProjectId = "",
+): ProjectTaskDetail | null => {
+  const base = normalizeTaskListItem(item, fallbackProjectId);
+  if (!base) return null;
+
+  const startDate = formatDateTime(
+    typeof item.startDateUtc === "string"
+      ? item.startDateUtc
+      : typeof item.StartDateUtc === "string"
+        ? item.StartDateUtc
+        : typeof item.startDate === "string"
+          ? item.startDate
+          : null,
+  );
+  const dueDate = formatDateTime(
+    typeof item.dueDateUtc === "string"
+      ? item.dueDateUtc
+      : typeof item.DueDateUtc === "string"
+        ? item.DueDateUtc
+        : typeof item.dueDate === "string"
+          ? item.dueDate
+          : null,
+  );
+
+  const assignments = Array.isArray(item.assignments)
+    ? item.assignments
+        .map((row) => normalizeTaskAssignment(row as Record<string, unknown>))
+        .filter((row): row is TaskAssignment => Boolean(row))
+    : Array.isArray(item.Assignments)
+      ? item.Assignments.map((row) =>
+          normalizeTaskAssignment(row as Record<string, unknown>),
+        ).filter((row): row is TaskAssignment => Boolean(row))
+      : [];
+
+  const dependencies = Array.isArray(item.dependencies)
+    ? item.dependencies
+        .map((row) => normalizeTaskDependency(row as Record<string, unknown>))
+        .filter((row): row is TaskDependency => Boolean(row))
+    : Array.isArray(item.Dependencies)
+      ? item.Dependencies.map((row) =>
+          normalizeTaskDependency(row as Record<string, unknown>),
+        ).filter((row): row is TaskDependency => Boolean(row))
+      : [];
+
+  const rawTransitions = Array.isArray(item.transitions)
+    ? item.transitions
+    : Array.isArray(item.Transitions)
+      ? item.Transitions
+      : [];
+  const transitions = rawTransitions.map((row, index) =>
+    normalizeTaskTransition(row as Record<string, unknown>, base.id, index),
+  );
+
+  return {
+    ...base,
+    sectionId: readId(
+      item.projectSectionId,
+      item.ProjectSectionId,
+      base.sectionId,
+    ),
+    sectionName: String(
+      item.projectSectionName ?? item.ProjectSectionName ?? base.sectionName ?? "",
+    ).slice(0, 200),
+    startDate: startDate || base.startDate,
+    dueDate: dueDate || base.dueDate,
+    assigneeIds: assignments.map((row) => row.memberId).filter(Boolean),
+    assigneeNames: assignments.map((row) => row.employeeName),
+    dependsOnTaskIds: dependencies.map((row) => row.taskId),
+    dependencyCount: dependencies.length,
+    assignmentCount: assignments.length,
+    transitionCount: transitions.length,
+    assignments,
+    dependencies,
+    transitions,
+  };
+};

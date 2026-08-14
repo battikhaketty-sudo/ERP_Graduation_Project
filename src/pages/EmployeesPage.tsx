@@ -140,11 +140,15 @@ export function EmployeesPage() {
       return;
     }
 
-    const fromList = employees.find((employee) => employee.id === employeeId);
-    if (fromList) {
-      setFullPageEmployee(fromList);
-      return;
-    }
+    // Keep the open detail record stable — don't replace it with a list stub
+    // on every employees refresh (that wipes local photo previews).
+    setFullPageEmployee((current) => {
+      if (current?.id === employeeId) return current;
+      return employees.find((employee) => employee.id === employeeId) ?? current;
+    });
+
+    const fromList = employees.some((employee) => employee.id === employeeId);
+    if (fromList) return;
 
     let cancelled = false;
 
@@ -297,6 +301,72 @@ export function EmployeesPage() {
     setSelectedIds(new Set());
   };
 
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkEdit = () => {
+    const id = [...selectedIds][0];
+    if (!id) return;
+    const employee = filteredEmployees.find((item) => item.id === id);
+    if (employee) {
+      openEmployeeInUrl(employee.id);
+      clearSelection();
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    const targets = filteredEmployees.filter((employee) =>
+      selectedIds.has(employee.id),
+    );
+    if (!targets.length) return;
+
+    const isArchived = archiveView === "archived";
+    const confirmed = await confirm({
+      title: isArchived
+        ? t("employees.bulk.unarchiveTitle")
+        : t("employees.bulk.archiveTitle"),
+      message: isArchived
+        ? t("employees.bulk.unarchiveMessage", { count: String(targets.length) })
+        : t("employees.bulk.archiveMessage", { count: String(targets.length) }),
+      confirmLabel: isArchived
+        ? t("employees.bulk.unarchive")
+        : t("employees.bulk.archive"),
+    });
+    if (!confirmed) return;
+
+    try {
+      for (const employee of targets) {
+        if (isArchived) {
+          await unarchiveEmployee(employee.id);
+          removeArchivedEmployee(employee.id);
+        } else {
+          await archiveEmployee(employee.id);
+          addArchivedEmployee(employee);
+        }
+      }
+      showToast(
+        isArchived
+          ? t("employees.toasts.bulkUnarchiveSuccess", {
+              count: String(targets.length),
+            })
+          : t("employees.toasts.bulkArchiveSuccess", {
+              count: String(targets.length),
+            }),
+        "success",
+      );
+      setError(null);
+      clearSelection();
+      setDrawerEmployee(null);
+      await fetchEmployees();
+    } catch (err) {
+      const message = getThrownErrorMessage(
+        err,
+        isArchived ? t("employees.errors.unarchive") : t("employees.errors.archive"),
+      );
+      setError(message);
+      showToast(message, "error");
+    }
+  };
+
   if (fullPageEmployee) {
     return (
       <EmployeeDetailView
@@ -344,6 +414,10 @@ export function EmployeesPage() {
             onEmployeeClick={setDrawerEmployee}
             onEmployeeEdit={(employee) => openEmployeeInUrl(employee.id)}
             onToggleArchive={handleToggleArchive}
+            onBulkArchive={() => void handleBulkArchive()}
+            onBulkEdit={handleBulkEdit}
+            onClearSelection={clearSelection}
+            archiveView={archiveView}
             onAddClick={() => setIsAddModalOpen(true)}
           />
         )}

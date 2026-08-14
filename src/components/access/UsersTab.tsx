@@ -1,10 +1,7 @@
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ROUTES } from "../../constants/routes";
-import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 import { useTranslation } from "../../i18n";
-import { deleteUser, getUsers } from "../../services/users";
+import { getUsers } from "../../services/users";
 import type { UserAccount } from "../../types/user";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { Pagination } from "../Pagination";
@@ -24,8 +21,6 @@ const PAGE_SIZE = 10;
 
 export function UsersTab({ search, onNotice, onDataChanged }: UsersTabProps) {
   const { t } = useTranslation();
-  const { confirm } = useConfirmDialog();
-  const navigate = useNavigate();
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -61,30 +56,10 @@ export function UsersTab({ search, onNotice, onDataChanged }: UsersTabProps) {
     setPage(1);
   }, [search]);
 
-  const handleDelete = async (user: UserAccount) => {
-    const confirmed = await confirm({
-      message: t("access.users.deleteConfirm", { email: user.email }),
-    });
-    if (!confirmed) return;
-
-    try {
-      await deleteUser(user.id);
-      onNotice(null);
-      onDataChanged();
-      await loadUsers();
-    } catch (err) {
-      onNotice(getThrownErrorMessage(err, t("access.users.errors.delete")));
-    }
-  };
-
   return (
     <>
       <section className={tablePanelClass}>
-        <TablePanelHeader
-          title={t("access.users.title")}
-          addLabel={t("access.users.addLabel")}
-          onAddClick={() => navigate(`${ROUTES.employees}?add=1`)}
-        />
+        <TablePanelHeader title={t("access.users.title")} />
 
         <div className={tableScrollClass}>
           <table className="w-full table-fixed border-collapse text-sm">
@@ -150,14 +125,6 @@ export function UsersTab({ search, onNotice, onDataChanged }: UsersTabProps) {
                           aria-label={t("access.users.editRolesTitle")}
                         >
                           <Pencil className="size-4 text-amber-500" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDelete(user)}
-                          className={iconBtnClass}
-                          aria-label={t("common.delete")}
-                        >
-                          <Trash2 className="size-4 text-red-500" />
                         </button>
                       </div>
                     </td>
