@@ -1,29 +1,51 @@
 import type { Employee } from "../../types/employee";
 import { DEFAULT_EMPLOYEE_PASSWORD } from "../../constants/defaults";
+import {
+  getBirthDateIssue,
+  normalizeBirthDateValue,
+} from "../../utils/employeeDates";
 import { toApiGender } from "./employee.mapper";
 
-const toBlob = async (base64Image: string) => {
-  const response = await fetch(base64Image);
-  return response.blob();
+/** Convert a data-URL to a File without relying on fetch(data:) quirks. */
+const dataUrlToFile = (dataUrl: string, fileNameBase: string) => {
+  const comma = dataUrl.indexOf(",");
+  if (comma < 0) {
+    throw new Error("INVALID_IMAGE_DATA");
+  }
+  const header = dataUrl.slice(0, comma);
+  const base64 = dataUrl.slice(comma + 1);
+  const mimeMatch = /data:(.*?);/i.exec(header);
+  const mime = mimeMatch?.[1] || "image/jpeg";
+  const extension =
+    mime === "image/png"
+      ? "png"
+      : mime === "image/webp"
+        ? "webp"
+        : mime === "image/gif"
+          ? "gif"
+          : "jpg";
+
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return new File([bytes], `${fileNameBase}.${extension}`, { type: mime });
 };
 
 const appendImageIfDataUrl = async (
   formData: FormData,
-  fieldName: string,
+  fieldNames: string[],
   value: string | undefined,
   fileNameBase: string,
 ) => {
   if (!value?.startsWith("data:")) return;
-  const blob = await toBlob(value);
-  const extension =
-    blob.type === "image/png"
-      ? "png"
-      : blob.type === "image/webp"
-        ? "webp"
-        : blob.type === "image/gif"
-          ? "gif"
-          : "jpg";
-  formData.append(fieldName, blob, `${fileNameBase}.${extension}`);
+  const file = dataUrlToFile(value, fileNameBase);
+  // ASP.NET binders differ — send the documented nested name plus a flat alias.
+  for (const fieldName of fieldNames) {
+    formData.append(fieldName, file);
+  }
 };
 
 export const buildEmployeeFormData = async (
@@ -33,6 +55,10 @@ export const buildEmployeeFormData = async (
   const formData = new FormData();
 
   formData.append("Email", data.email.trim());
+  // Some binders accept lowercase; UpdateEmployee docs omit Email, but create uses it.
+  if (mode === "update") {
+    formData.append("email", data.email.trim());
+  }
   if (mode === "create") {
     formData.append("Password", data.password || DEFAULT_EMPLOYEE_PASSWORD);
   } else if (data.password?.trim()) {
@@ -43,7 +69,12 @@ export const buildEmployeeFormData = async (
   formData.append("PersonalInfo.MobileNumber", data.phone.trim());
 
   if (data.birthDate) {
-    formData.append("PersonalInfo.Birthday", new Date(data.birthDate).toISOString());
+    const normalized = normalizeBirthDateValue(data.birthDate);
+    if (!normalized || getBirthDateIssue(normalized)) {
+      throw new Error("INVALID_BIRTH_DATE");
+    }
+    // Noon UTC avoids day-shift when the browser is behind/ahead of UTC.
+    formData.append("PersonalInfo.Birthday", `${normalized}T12:00:00.000Z`);
   }
 
   formData.append("WorkInfo.DepartmentId", data.departmentId || "");
@@ -54,14 +85,14 @@ export const buildEmployeeFormData = async (
   formData.append("WorkInfo.Salary", String(data.salary ?? 0));
 
   if (data.joiningDate && data.contractEndDate) {
-    formData.append(
-      "WorkInfo.ContractTimeRangeFrom",
-      new Date(data.joiningDate).toISOString(),
-    );
-    formData.append(
-      "WorkInfo.ContractTimeRangeTo",
-      new Date(data.contractEndDate).toISOString(),
-    );
+    const from = new Date(data.joiningDate);
+    const to = new Date(data.contractEndDate);
+    if (!Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime())) {
+      const start = from.getTime() <= to.getTime() ? from : to;
+      const end = from.getTime() <= to.getTime() ? to : from;
+      formData.append("WorkInfo.ContractTimeRangeFrom", start.toISOString());
+      formData.append("WorkInfo.ContractTimeRangeTo", end.toISOString());
+    }
   }
 
   if (data.nationality) {
@@ -72,21 +103,36 @@ export const buildEmployeeFormData = async (
     formData.append("CitizenshipInfo.IdentificationNo", data.idNumber);
   }
 
+  // Extra personal fields from the product design. Sent under PersonalInfo;
+  // ignored harmlessly if the current API binder does not map them yet.
+  if (data.maritalStatus?.trim()) {
+    formData.append("PersonalInfo.MaritalStatus", data.maritalStatus.trim());
+    formData.append("CitizenshipInfo.MaritalStatus", data.maritalStatus.trim());
+  }
+  if (data.degreeLevel?.trim()) {
+    formData.append("PersonalInfo.DegreeLevel", data.degreeLevel.trim());
+    formData.append("PersonalInfo.CertificateLevel", data.degreeLevel.trim());
+  }
+  if (data.fieldOfStudy?.trim()) {
+    formData.append("PersonalInfo.FieldOfStudy", data.fieldOfStudy.trim());
+    formData.append("PersonalInfo.StudyField", data.fieldOfStudy.trim());
+  }
+
   await appendImageIfDataUrl(
     formData,
-    "PersonalInfo.ProfileImage",
+    ["PersonalInfo.ProfileImage", "ProfileImage"],
     data.avatar,
     "avatar",
   );
   await appendImageIfDataUrl(
     formData,
-    "CitizenshipInfo.IdCardFrontImage",
+    ["CitizenshipInfo.IdCardFrontImage", "IdCardFrontImage"],
     data.idCardFrontImage,
     "id-front",
   );
   await appendImageIfDataUrl(
     formData,
-    "CitizenshipInfo.IdCardBackImage",
+    ["CitizenshipInfo.IdCardBackImage", "IdCardBackImage"],
     data.idCardBackImage,
     "id-back",
   );

@@ -6,9 +6,21 @@ export type EmployeeResumeLine = {
   id: string;
   title: string;
   description?: string;
+  /** API ResumeLineType enum value. */
+  type: number;
   typeName: string;
   fromDate?: string;
   toDate?: string;
+};
+
+export type EmployeeResumeSkill = {
+  /** Resume-skill row id (for update/delete). */
+  id?: string;
+  skillId: string;
+  skillLevelId: string;
+  name: string;
+  type: string;
+  level: string;
 };
 
 export type Employee = {
@@ -24,6 +36,12 @@ export type Employee = {
   gender?: "male" | "female";
   genderName?: string;
   nationality?: string;
+  /** Marital / social status (e.g. أعزب). */
+  maritalStatus?: string;
+  /** Degree / certificate level (e.g. خريج). */
+  degreeLevel?: string;
+  /** Field of study (e.g. كلية هندسة معلوماتية). */
+  fieldOfStudy?: string;
   employeeId?: string;
   userId?: string;
   department?: string;
@@ -49,7 +67,7 @@ export type Employee = {
   password?: string;
   resumeId?: string;
   resumeLines?: EmployeeResumeLine[];
-  resumeSkills?: Array<{ name: string; type: string; level: string }>;
+  resumeSkills?: EmployeeResumeSkill[];
   isArchived?: boolean;
   userAccount?: UserAccount;
 };

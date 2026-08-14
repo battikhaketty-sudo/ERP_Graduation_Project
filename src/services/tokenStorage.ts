@@ -1,4 +1,5 @@
 import type { AuthUser } from "../types/auth";
+import { clearNotificationsState } from "./notificationsStorage";
 import { clearAllLocalProjectData } from "./projects/localProjectData";
 
 const TOKEN_KEY = "token";
@@ -43,6 +44,7 @@ export const clearSession = () => {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   clearAllLocalProjectData();
+  clearNotificationsState();
 };
 
 export const hasActiveSession = () => Boolean(getToken() && getStoredUser());

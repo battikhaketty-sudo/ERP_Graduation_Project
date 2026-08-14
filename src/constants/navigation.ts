@@ -15,10 +15,11 @@ export type NavItem = {
   labelKey: TranslationKey;
   icon: typeof LayoutGrid;
   to?: string;
+  end?: boolean;
 };
 
 export const navItems: NavItem[] = [
-  { id: "dashboard", labelKey: "nav.dashboard", icon: LayoutGrid },
+  { id: "dashboard", labelKey: "nav.dashboard", icon: LayoutGrid, to: ROUTES.dashboard, end: true },
   { id: "projects", labelKey: "nav.projects", icon: FolderKanban, to: ROUTES.projects },
   { id: "employees", labelKey: "nav.employees", icon: Users, to: ROUTES.employees },
   { id: "departments", labelKey: "nav.departments", icon: PanelsTopLeft, to: ROUTES.departments },

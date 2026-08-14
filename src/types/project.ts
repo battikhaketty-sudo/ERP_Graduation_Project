@@ -9,7 +9,39 @@ export type InvitationStatus =
 
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
-export type TaskStatus = "todo" | "in_progress" | "completed";
+export type TaskDependencyType =
+  | "finish_to_start"
+  | "start_to_start"
+  | "finish_to_finish"
+  | "start_to_finish";
+
+/** Recorded when a task moves from one section to another. */
+export type TaskTransition = {
+  id: string;
+  taskId: string;
+  memberId: string;
+  memberName: string;
+  fromSectionId: string;
+  fromSectionName: string;
+  toSectionId: string;
+  toSectionName: string;
+  /** ISO-8601 UTC timestamp */
+  createdAtUtc: string;
+};
+
+export type TaskDependency = {
+  taskId: string;
+  taskTitle: string;
+  dependencyType: TaskDependencyType;
+  createdAt: string;
+};
+
+export type TaskAssignment = {
+  memberId: string;
+  employeeId: string;
+  employeeName: string;
+  assignedAt: string;
+};
 
 export type ProjectSection = {
   id: string;
@@ -24,6 +56,7 @@ export type ProjectSection = {
 export type ProjectMember = {
   id: string;
   employeeId: string;
+  userId?: string;
   employeeName: string;
   role: string;
   joinedAt: string;
@@ -35,19 +68,30 @@ export type ProjectTask = {
   id: string;
   projectId: string;
   sectionId: string;
+  sectionName?: string;
   number: number;
   name: string;
   title: string;
   description: string;
   priority: TaskPriority;
-  status: TaskStatus;
   expectedHours: number;
   startDate: string;
   dueDate: string;
+  createdAt?: string;
   assigneeIds: string[];
   assigneeNames: string[];
-  /** Task ids that must be completed before this task is unblocked. */
+  /** Task ids that should be done before this task (display / planning graph). */
   dependsOnTaskIds: string[];
+  dependencyCount?: number;
+  assignmentCount?: number;
+  transitionCount?: number;
+};
+
+/** Full task payload from GET /project-tasks/{id}. */
+export type ProjectTaskDetail = ProjectTask & {
+  assignments: TaskAssignment[];
+  dependencies: TaskDependency[];
+  transitions: TaskTransition[];
 };
 
 export type Project = {
@@ -77,7 +121,7 @@ export type ProjectDetailStats = {
   membersCount: number;
   tasksCount: number;
   sectionsCount: number;
-  completedTasksCount: number;
+  lateTasksCount: number;
 };
 
 export type ProjectInvitation = {
@@ -90,8 +134,8 @@ export type ProjectInvitation = {
   role: string;
   message?: string;
   status: InvitationStatus;
-  startDate: string;
-  endDate: string;
+  /** When the invitee accepted/rejected (if available from API). */
+  respondedAt: string;
   invitedAt: string;
   expiresAt: string;
 };
@@ -122,6 +166,8 @@ export type SectionFormPayload = {
   name: string;
   displayOrder: number;
   dependsOnSectionIds?: string[];
+  /** Labels on arrows from prerequisite section → this section (keyed by prerequisite id). */
+  dependencyEdgeLabels?: Record<string, string>;
 };
 
 export type TaskFormPayload = {
@@ -132,7 +178,6 @@ export type TaskFormPayload = {
   startDate: string;
   dueDate: string;
   priority: TaskPriority;
-  status: TaskStatus;
   assigneeIds: string[];
   assigneeNames: string[];
   dependsOnTaskIds?: string[];
@@ -147,8 +192,6 @@ export type ProjectStats = {
 
 export type TaskStats = {
   total: number;
-  inProgress: number;
-  completed: number;
   late: number;
 };
 

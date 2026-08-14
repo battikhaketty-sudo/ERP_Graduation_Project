@@ -1,18 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { usePreferences } from "../../context/PreferencesContext";
-import { useReferenceOptions } from "../../hooks/useReferenceOptions";
 import { useProjectLabels } from "../../hooks/useProjectLabels";
 import { useTranslation } from "../../i18n";
-import { wouldCreateCycle, canSetTaskStatus, getBlockingDependencyTitles } from "../../services/projects/taskDependencies";
+import { getAllProjectMembers, getProjectTaskById } from "../../services/projects";
+import { getEmployees } from "../../services/employees";
+import { REFERENCE_DATA_LIMIT } from "../../constants/defaults";
+import {
+  assigneesFromMembers,
+  isActiveProjectMember,
+  memberLookupIds,
+  toActiveAssigneeOptions,
+} from "../../services/projects/project.mapper";
 import type {
   Project,
-  ProjectSection,
+  ProjectMember,
   ProjectTask,
   TaskFormPayload,
   TaskPriority,
-  TaskStatus,
+  TaskTransition,
 } from "../../types/project";
+import { wouldCreateCycle } from "../../services/projects/taskDependencies";
+import { getCurrentActorIds } from "../../utils/accessToken";
 import { sanitizeDecimalInput } from "../../utils/inputConstraints";
 import { mapNamedOptions } from "../../utils/selectOptions";
 import {
@@ -21,14 +30,18 @@ import {
   ModalCloseButton,
   ModalTitleBar,
 } from "../ui/modalStyles";
-import { readOnlyClass } from "../ui/formStyles";
+import { infoBannerClass, readOnlyClass } from "../ui/formStyles";
 import { SearchableSelect } from "../ui/SearchableSelect";
+import { ManualDateInput } from "../ui/ManualDateInput";
 import {
   inputClass,
   modalCardClass,
   modalOverlayClass,
   textareaClass,
 } from "./project-ui";
+import { TaskTransitionsPanel } from "./TaskTransitionsPanel";
+
+type AssigneeOption = { id: string; name: string };
 
 type AddTaskModalProps = {
   isOpen: boolean;
@@ -40,7 +53,6 @@ type AddTaskModalProps = {
 };
 
 const priorities: TaskPriority[] = ["low", "medium", "high", "urgent"];
-const statuses: TaskStatus[] = ["todo", "in_progress", "completed"];
 
 const priorityButtonClass: Record<TaskPriority, string> = {
   low: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950/50 dark:text-orange-300 dark:border-orange-900/50",
@@ -49,14 +61,6 @@ const priorityButtonClass: Record<TaskPriority, string> = {
   high: "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-900/50",
   urgent:
     "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-900/50",
-};
-
-const statusButtonClass: Record<TaskStatus, string> = {
-  todo: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/60 dark:text-slate-200 dark:border-slate-700",
-  in_progress:
-    "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-900/50",
-  completed:
-    "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-300 dark:border-green-900/50",
 };
 
 const toDateInputValue = (value?: string) => {
@@ -68,10 +72,56 @@ const toDateInputValue = (value?: string) => {
 
 const todayInputValue = () => new Date().toISOString().slice(0, 10);
 
+const clampToProjectStart = (date: string, projectStartDate?: string) => {
+  const projectStart = toDateInputValue(projectStartDate);
+  if (projectStart && date && date < projectStart) return projectStart;
+  return date;
+};
+
 const defaultDueDate = (startDate: string, projectEndDate?: string) => {
   const end = toDateInputValue(projectEndDate);
   if (end && end >= startDate) return end;
   return startDate;
+};
+
+const keepProjectAssignees = (
+  candidateIds: string[],
+  members: ProjectMember[],
+) => {
+  const result: AssigneeOption[] = [];
+  const seen = new Set<string>();
+  for (const id of candidateIds) {
+    const member = members.find(
+      (item) => isActiveProjectMember(item) && memberLookupIds(item).includes(id),
+    );
+    if (!member) continue;
+    const sendId = member.userId || member.id;
+    if (seen.has(sendId)) continue;
+    seen.add(sendId);
+    result.push({ id: sendId, name: member.employeeName || sendId });
+  }
+  return result;
+};
+
+const withEmployeeUserIds = async (members: ProjectMember[]) => {
+  if (!members.length) return members;
+  try {
+    const { data } = await getEmployees(1, REFERENCE_DATA_LIMIT);
+    const byId = new Map<string, { id: string; userId?: string }>();
+    for (const employee of data) {
+      byId.set(employee.id, employee);
+      if (employee.userId) byId.set(employee.userId, employee);
+    }
+    return members.map((member) => {
+      const employee = byId.get(member.employeeId) || byId.get(member.id);
+      return {
+        ...member,
+        userId: member.userId || employee?.userId || undefined,
+      };
+    });
+  } catch {
+    return members;
+  }
 };
 
 export function AddTaskModal({
@@ -84,14 +134,12 @@ export function AddTaskModal({
 }: AddTaskModalProps) {
   const { t } = useTranslation();
   const { dir } = usePreferences();
-  const { priorityLabel, taskStatusLabel } = useProjectLabels();
+  const { priorityLabel } = useProjectLabels();
   const isEditing = Boolean(task);
-  const { employees, loading } = useReferenceOptions(isOpen, {
-    departments: true,
-    contractTypes: false,
-    employees: true,
-  });
 
+  const [memberOptions, setMemberOptions] = useState<AssigneeOption[]>([]);
+  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -100,24 +148,138 @@ export function AddTaskModal({
     startDate: "",
     dueDate: "",
     priority: "medium" as TaskPriority,
-    status: "todo" as TaskStatus,
   });
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>([]);
-  const [assignees, setAssignees] = useState<
-    Array<{ id: string; name: string }>
-  >([]);
+  const [assignees, setAssignees] = useState<AssigneeOption[]>([]);
   const [assigneePickId, setAssigneePickId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [transitions, setTransitions] = useState<TaskTransition[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+
+    setAssigneePickId("");
+    setError(null);
+    setSaving(false);
+    setAssignees([]);
+
+    if (task) {
+      const startDate = clampToProjectStart(
+        toDateInputValue(task.startDate) || todayInputValue(),
+        project.startDate,
+      );
+      setForm({
+        title: task.title || task.name || "",
+        description: task.description || "",
+        sectionId: task.sectionId || project.sections[0]?.id || "",
+        expectedHours: String(task.expectedHours ?? 1),
+        startDate,
+        dueDate:
+          clampToProjectStart(
+            toDateInputValue(task.dueDate) ||
+              defaultDueDate(startDate, project.endDate),
+            project.startDate,
+          ),
+        priority: task.priority || "medium",
+      });
+      setDependsOnTaskIds([...(task.dependsOnTaskIds ?? [])]);
+    } else {
+      const sectionId = defaultSectionId || project.sections[0]?.id || "";
+      const startDate = clampToProjectStart(
+        todayInputValue(),
+        project.startDate,
+      );
+      setForm({
+        title: "",
+        description: "",
+        sectionId,
+        expectedHours: "1",
+        startDate,
+        dueDate: defaultDueDate(startDate, project.endDate),
+        priority: "medium",
+      });
+      setDependsOnTaskIds([]);
+      setTransitions([]);
+    }
+
+    const run = async () => {
+      setMembersLoading(true);
+      try {
+        const [rawMembers, detail] = await Promise.all([
+          getAllProjectMembers(project.id),
+          task ? getProjectTaskById(task.id, project.id).catch(() => null) : Promise.resolve(null),
+        ]);
+        if (cancelled) return;
+
+        const members = await withEmployeeUserIds(rawMembers);
+        const options = toActiveAssigneeOptions(members);
+        setProjectMembers(members);
+        setMemberOptions(options);
+
+        if (detail) {
+          setTransitions(detail.transitions);
+          if (detail.dependsOnTaskIds.length) {
+            setDependsOnTaskIds([...detail.dependsOnTaskIds]);
+          }
+        } else if (!task) {
+          setTransitions([]);
+        }
+
+        if (detail?.assignments.length) {
+          setAssignees(assigneesFromMembers(members, detail.assignments));
+        } else {
+          setAssignees(keepProjectAssignees(task?.assigneeIds ?? [], members));
+        }
+      } catch {
+        if (!cancelled) {
+          setProjectMembers([]);
+          setMemberOptions([]);
+          setAssignees([]);
+        }
+      } finally {
+        if (!cancelled) setMembersLoading(false);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [defaultSectionId, isOpen, project.endDate, project.id, project.sections, task]);
+
+  const selectedAssigneeKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const assignee of assignees) {
+      keys.add(assignee.id);
+      const member = projectMembers.find((item) =>
+        memberLookupIds(item).includes(assignee.id),
+      );
+      if (member) {
+        for (const lookupId of memberLookupIds(member)) keys.add(lookupId);
+      }
+    }
+    return keys;
+  }, [assignees, projectMembers]);
+
+  const actorIsProjectMember = useMemo(() => {
+    if (!projectMembers.length) return true;
+    const actorIds = getCurrentActorIds();
+    if (!actorIds.length) return true;
+    return projectMembers.some(
+      (member) =>
+        isActiveProjectMember(member) &&
+        memberLookupIds(member).some((id) => actorIds.includes(id)),
+    );
+  }, [projectMembers]);
 
   const availableAssigneeOptions = useMemo(
     () =>
       mapNamedOptions(
-        employees.filter(
-          (employee) => !assignees.some((assignee) => assignee.id === employee.id),
-        ),
+        memberOptions.filter((member) => !selectedAssigneeKeys.has(member.id)),
       ),
-    [assignees, employees],
+    [memberOptions, selectedAssigneeKeys],
   );
 
   const dependencyOptions = useMemo(() => {
@@ -128,81 +290,6 @@ export function AddTaskModal({
       return !wouldCreateCycle(project.tasks, currentId, item.id);
     });
   }, [project.tasks, task?.id]);
-
-  const blockingTitles = useMemo(() => {
-    const draft = {
-      id: task?.id ?? "__new__",
-      dependsOnTaskIds,
-    };
-    return getBlockingDependencyTitles(draft, project.tasks);
-  }, [dependsOnTaskIds, project.tasks, task?.id]);
-
-  const statusAllowed = useMemo(() => {
-    const draft = {
-      id: task?.id ?? "__new__",
-      dependsOnTaskIds,
-    };
-    return {
-      todo: true,
-      in_progress: canSetTaskStatus(draft, "in_progress", project.tasks),
-      completed: canSetTaskStatus(draft, "completed", project.tasks),
-    } as Record<TaskStatus, boolean>;
-  }, [dependsOnTaskIds, project.tasks, task?.id]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    if (task) {
-      setForm({
-        title: task.title || task.name || "",
-        description: task.description || "",
-        sectionId: task.sectionId || project.sections[0]?.id || "",
-        expectedHours: String(task.expectedHours ?? 1),
-        startDate: toDateInputValue(task.startDate) || todayInputValue(),
-        dueDate:
-          toDateInputValue(task.dueDate) ||
-          defaultDueDate(
-            toDateInputValue(task.startDate) || todayInputValue(),
-            project.endDate,
-          ),
-        priority: task.priority || "medium",
-        status: task.status || "todo",
-      });
-      setDependsOnTaskIds([...(task.dependsOnTaskIds ?? [])]);
-      setAssignees(
-        task.assigneeIds.map((id, index) => ({
-          id,
-          name: task.assigneeNames[index] || id,
-        })),
-      );
-    } else {
-      const sectionId = defaultSectionId || project.sections[0]?.id || "";
-      const startDate = todayInputValue();
-      setForm({
-        title: "",
-        description: "",
-        sectionId,
-        expectedHours: "1",
-        startDate,
-        dueDate: defaultDueDate(startDate, project.endDate),
-        priority: "medium",
-        status: "todo",
-      });
-      setDependsOnTaskIds([]);
-      setAssignees([]);
-    }
-
-    setAssigneePickId("");
-    setError(null);
-    setSaving(false);
-  }, [defaultSectionId, isOpen, project.endDate, project.id, project.sections, project.tasks, task]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    if (!statusAllowed[form.status]) {
-      setForm((prev) => ({ ...prev, status: "todo" }));
-    }
-  }, [form.status, isOpen, statusAllowed]);
 
   const handleClose = () => {
     if (saving) return;
@@ -217,14 +304,17 @@ export function AddTaskModal({
     project.sections.find((section) => section.id === form.sectionId) ??
     project.sections[0];
 
-  const addAssignee = (employeeId: string) => {
-    if (!employeeId) return;
-    const employee = employees.find((item) => item.id === employeeId);
-    if (!employee || assignees.some((item) => item.id === employee.id)) {
+  const addAssignee = (memberId: string) => {
+    if (!memberId || selectedAssigneeKeys.has(memberId)) {
       setAssigneePickId("");
       return;
     }
-    setAssignees((prev) => [...prev, employee]);
+    const member = memberOptions.find((item) => item.id === memberId);
+    if (!member) {
+      setAssigneePickId("");
+      return;
+    }
+    setAssignees((prev) => [...prev, member]);
     setAssigneePickId("");
   };
 
@@ -278,21 +368,20 @@ export function AddTaskModal({
       setError(t("projects.modals.addTask.errors.invalidDateRange"));
       return;
     }
-    if (!assignees.length) {
-      setError(t("projects.modals.addTask.errors.assigneeRequired"));
+    const projectStart = toDateInputValue(project.startDate);
+    if (projectStart && form.startDate < projectStart) {
+      setError(t("projects.modals.addTask.errors.dateBeforeProjectStart"));
       return;
     }
-    if (!statusAllowed[form.status]) {
-      setError(
-        t("projects.modals.addTask.errors.depsNotReady", {
-          tasks: blockingTitles.join("، ") || "—",
-        }),
-      );
-      return;
-    }
-
     setSaving(true);
     try {
+      const validAssignees = assignees.filter((assignee) =>
+        projectMembers.some(
+          (member) =>
+            isActiveProjectMember(member) &&
+            (member.id === assignee.id || memberLookupIds(member).includes(assignee.id)),
+        ),
+      );
       await onSubmit({
         title: form.title,
         description: form.description,
@@ -301,9 +390,8 @@ export function AddTaskModal({
         startDate: form.startDate,
         dueDate: form.dueDate,
         priority: form.priority,
-        status: form.status,
-        assigneeIds: assignees.map((item) => item.id),
-        assigneeNames: assignees.map((item) => item.name),
+        assigneeIds: validAssignees.map((item) => item.id),
+        assigneeNames: validAssignees.map((item) => item.name),
         dependsOnTaskIds,
       });
       onClose();
@@ -352,6 +440,9 @@ export function AddTaskModal({
           onSubmit={(event) => void handleSubmit(event)}
           className="space-y-4"
         >
+          {!membersLoading && !actorIsProjectMember ? (
+            <p className={infoBannerClass}>{t("projects.modals.addTask.actorNotMember")}</p>
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-2 block text-sm text-hr-text">
@@ -450,12 +541,11 @@ export function AddTaskModal({
               <label className="mb-2 block text-sm text-hr-text">
                 {t("projects.modals.addTask.fields.startDate")}
               </label>
-              <input
-                type="date"
+              <ManualDateInput
                 value={form.startDate}
+                min={toDateInputValue(project.startDate) || undefined}
                 max={form.dueDate || undefined}
-                onChange={(event) => handleStartDateChange(event.target.value)}
-                className={inputClass}
+                onChange={handleStartDateChange}
                 required
               />
             </div>
@@ -463,60 +553,24 @@ export function AddTaskModal({
               <label className="mb-2 block text-sm text-hr-text">
                 {t("projects.modals.addTask.fields.dueDate")}
               </label>
-              <input
-                type="date"
+              <ManualDateInput
                 value={form.dueDate}
-                min={form.startDate || undefined}
-                onChange={(event) => handleDueDateChange(event.target.value)}
-                className={inputClass}
+                min={
+                  form.startDate ||
+                  toDateInputValue(project.startDate) ||
+                  undefined
+                }
+                onChange={handleDueDateChange}
                 required
               />
+              {toDateInputValue(project.startDate) ? (
+                <p className="mt-1 text-xs text-hr-muted">
+                  {t("projects.modals.addTask.dateMinHint", {
+                    date: toDateInputValue(project.startDate),
+                  })}
+                </p>
+              ) : null}
             </div>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm text-hr-text">
-              {t("projects.modals.addTask.fields.status")}
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {statuses.map((status) => {
-                const allowed = statusAllowed[status];
-                return (
-                  <button
-                    key={status}
-                    type="button"
-                    disabled={!allowed}
-                    onClick={() => {
-                      if (!allowed) return;
-                      setForm((prev) => ({ ...prev, status }));
-                    }}
-                    className={[
-                      "rounded-xl border px-3 py-2 text-sm font-medium transition",
-                      form.status === status
-                        ? statusButtonClass[status]
-                        : "border-hr-border bg-hr-surface text-hr-muted",
-                      !allowed ? "cursor-not-allowed opacity-40" : "",
-                    ].join(" ")}
-                    title={
-                      !allowed
-                        ? t("projects.modals.addTask.errors.depsNotReady", {
-                            tasks: blockingTitles.join("، ") || "—",
-                          })
-                        : undefined
-                    }
-                  >
-                    {taskStatusLabel(status)}
-                  </button>
-                );
-              })}
-            </div>
-            {blockingTitles.length ? (
-              <p className="mt-2 text-xs text-amber-500">
-                {t("projects.modals.addTask.depsBlockedHint", {
-                  tasks: blockingTitles.join("، "),
-                })}
-              </p>
-            ) : null}
           </div>
 
           <div>
@@ -586,8 +640,14 @@ export function AddTaskModal({
               value={assigneePickId}
               onChange={addAssignee}
               options={availableAssigneeOptions}
-              placeholder={t("projects.modals.addTask.placeholders.assignee")}
-              loading={loading}
+              placeholder={
+                memberOptions.length
+                  ? t("projects.modals.addTask.placeholders.assignee")
+                  : t("projects.modals.addTask.assigneesNoMembers")
+              }
+              emptyMessage={t("projects.modals.addTask.assigneesNoMembers")}
+              loading={membersLoading}
+              disabled={membersLoading || !memberOptions.length}
             />
             <div className="mt-3 rounded-xl border border-hr-border">
               {assignees.length ? (
@@ -609,11 +669,15 @@ export function AddTaskModal({
                 ))
               ) : (
                 <p className="px-4 py-6 text-center text-sm text-hr-muted">
-                  {t("projects.modals.addTask.assigneesEmpty")}
+                  {memberOptions.length
+                    ? t("projects.modals.addTask.assigneesEmpty")
+                    : t("projects.modals.addTask.assigneesNoMembers")}
                 </p>
               )}
             </div>
           </div>
+
+          {isEditing ? <TaskTransitionsPanel transitions={transitions} /> : null}
 
           {error && <p className={alertErrorClass}>{error}</p>}
 

@@ -29,8 +29,12 @@ import {
   type TaskFlowGate,
 } from "../../services/projects/taskDependencies";
 import type { Project, ProjectTask } from "../../types/project";
+import {
+  fanInBow,
+  flowDependencyEdgeTypes,
+} from "./FlowDependencyEdge";
 
-export type TaskFlowFilter = "all" | "ready" | "blocked" | "completed";
+export type TaskFlowFilter = "all";
 
 type TaskNodeData = {
   task: ProjectTask;
@@ -54,9 +58,7 @@ type TaskDependencyFlowProps = {
 };
 
 const gateStyles: Record<TaskFlowGate, string> = {
-  completed: "border-emerald-500/60 bg-emerald-500/10",
   ready: "border-sky-500/60 bg-sky-500/10",
-  blocked: "border-amber-500/60 bg-amber-500/10",
 };
 
 const edgeStyle = {
@@ -73,7 +75,7 @@ const edgeMarker = {
 
 function TaskFlowNodeComponent({ data }: NodeProps<Node<TaskNodeData>>) {
   const { t } = useTranslation();
-  const { taskStatusLabel, priorityLabel } = useProjectLabels();
+  const { priorityLabel } = useProjectLabels();
 
   return (
     <div
@@ -97,8 +99,7 @@ function TaskFlowNodeComponent({ data }: NodeProps<Node<TaskNodeData>>) {
         </span>
       </div>
       <p className="mb-2 truncate text-[11px] text-hr-muted">
-        {data.sectionName || t("common.dash")} · {taskStatusLabel(data.task.status)} ·{" "}
-        {priorityLabel(data.task.priority)}
+        {data.sectionName || t("common.dash")} · {priorityLabel(data.task.priority)}
       </p>
       <div className="flex items-center gap-1">
         <button
@@ -179,6 +180,8 @@ const nodeTypes = {
   terminalNode: TerminalFlowNode,
 };
 
+const edgeTypes = flowDependencyEdgeTypes;
+
 function TaskDependencyFlowCanvas({
   project,
   filter,
@@ -199,15 +202,11 @@ function TaskDependencyFlowCanvas({
     const byId = new Map(project.tasks.map((task) => [task.id, task]));
 
     return project.tasks.filter((task) => {
-      const gate = getTaskGate(task, byId);
-      if (filter === "ready" && gate !== "ready") return false;
-      if (filter === "blocked" && gate !== "blocked") return false;
-      if (filter === "completed" && gate !== "completed") return false;
       if (!q) return true;
       const hay = `${task.title} ${task.name} ${task.description}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [filter, project.tasks, search]);
+  }, [project.tasks, search]);
 
   const visibleIds = useMemo(
     () => new Set(filteredTasks.map((task) => task.id)),
@@ -274,19 +273,35 @@ function TaskDependencyFlowCanvas({
   ]);
 
   const initialEdges: Edge[] = useMemo(() => {
+    const titleById = new Map(
+      project.tasks.map((task) => [task.id, task.title || task.name]),
+    );
+
     const taskEdges = dependencyEdges(project.tasks)
       .filter(
         (edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target),
       )
-      .map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        animated: false,
-        markerEnd: edgeMarker,
-        style: edgeStyle,
-        interactive: false,
-      }));
+      .map((edge) => {
+        const bow = fanInBow(edge.fanIndex, edge.fanCount, edge.span);
+        const sourceTitle = titleById.get(edge.source) || "";
+        return {
+          id: edge.id,
+          type: "flowDep" as const,
+          source: edge.source,
+          target: edge.target,
+          animated: false,
+          markerEnd: edgeMarker,
+          style: edgeStyle,
+          interactionWidth: 24,
+          data: {
+            bow,
+            label:
+              edge.fanCount > 1 || edge.span > 1
+                ? sourceTitle.slice(0, 18)
+                : undefined,
+          },
+        };
+      });
 
     const terminalEdges = buildAutoTerminalEdges(
       filteredTasks,
@@ -294,12 +309,13 @@ function TaskDependencyFlowCanvas({
       FLOW_END_ID,
     ).map((edge) => ({
       id: edge.id,
+      type: "flowDep" as const,
       source: edge.source,
       target: edge.target,
       animated: false,
       markerEnd: edgeMarker,
-      style: edgeStyle,
-      interactive: false,
+      style: { ...edgeStyle, strokeDasharray: "5 4" },
+      data: { bow: 0, muted: true },
     }));
 
     return [...taskEdges, ...terminalEdges];
@@ -329,11 +345,12 @@ function TaskDependencyFlowCanvas({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         nodesConnectable={false}
         edgesReconnectable={false}
         elementsSelectable
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.25 }}
         minZoom={0.2}
         maxZoom={1.75}
         proOptions={{ hideAttribution: true }}

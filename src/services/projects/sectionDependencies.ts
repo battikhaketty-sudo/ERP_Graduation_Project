@@ -1,6 +1,6 @@
 import type { ProjectSection, ProjectTask } from "../../types/project";
 
-export type SectionFlowGate = "completed" | "ready" | "blocked";
+export type SectionFlowGate = "ready";
 
 export type SectionFlowNodeLayout = {
   sectionId: string;
@@ -13,8 +13,8 @@ export type SectionFlowNodeLayout = {
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 96;
-const LAYER_GAP_X = 280;
-const LAYER_GAP_Y = 130;
+const LAYER_GAP_X = 300;
+const LAYER_GAP_Y = NODE_HEIGHT + 56;
 
 const knownIds = (sections: ProjectSection[]) =>
   new Set(sections.map((section) => section.id));
@@ -69,39 +69,23 @@ export const wouldCreateSectionCycle = (
   return false;
 };
 
-/** Section is "done" only when it has tasks and every task is completed. */
+/** Sections are planning stages only — no task-completion gate. */
 export const isSectionWorkComplete = (
-  sectionId: string,
-  tasks: ProjectTask[],
-): boolean => {
-  const sectionTasks = tasks.filter((task) => task.sectionId === sectionId);
-  if (!sectionTasks.length) return false;
-  return sectionTasks.every((task) => task.status === "completed");
-};
+  _sectionId: string,
+  _tasks: ProjectTask[],
+): boolean => false;
 
 export const areSectionDependenciesSatisfied = (
-  section: Pick<ProjectSection, "dependsOnSectionIds">,
-  sectionsById: Map<string, ProjectSection>,
-  tasks: ProjectTask[],
-): boolean => {
-  const deps = (section.dependsOnSectionIds ?? []).filter((id) =>
-    sectionsById.has(id),
-  );
-  if (!deps.length) return true;
-  return deps.every((id) => isSectionWorkComplete(id, tasks));
-};
+  _section: Pick<ProjectSection, "dependsOnSectionIds">,
+  _sectionsById: Map<string, ProjectSection>,
+  _tasks: ProjectTask[],
+): boolean => true;
 
 export const getSectionFlowGate = (
-  section: ProjectSection,
-  sectionsById: Map<string, ProjectSection>,
-  tasks: ProjectTask[],
-): SectionFlowGate => {
-  if (isSectionWorkComplete(section.id, tasks)) return "completed";
-  if (!areSectionDependenciesSatisfied(section, sectionsById, tasks)) {
-    return "blocked";
-  }
-  return "ready";
-};
+  _section: ProjectSection,
+  _sectionsById: Map<string, ProjectSection>,
+  _tasks: ProjectTask[],
+): SectionFlowGate => "ready";
 
 /** Kahn-style layers: sections with no deps first, then dependents. */
 export const buildSectionDependencyLayers = (
@@ -168,12 +152,98 @@ export const layoutSectionDependencyGraph = (
 ): SectionFlowNodeLayout[] => {
   const byId = new Map(sections.map((section) => [section.id, section]));
   const layers = buildSectionDependencyLayers(sections);
-  const layouts: SectionFlowNodeLayout[] = [];
+  const layerOf = new Map<string, number>();
+  layers.forEach((layer, layerIndex) => {
+    layer.forEach((id) => layerOf.set(id, layerIndex));
+  });
+
+  const yOf = new Map<string, number>();
+  const spread = (count: number) => {
+    if (count <= 1) return [0];
+    const totalHeight = (count - 1) * LAYER_GAP_Y;
+    const startY = -totalHeight / 2;
+    return Array.from({ length: count }, (_, i) => startY + i * LAYER_GAP_Y);
+  };
+
+  layers.forEach((layer) => {
+    const ys = spread(layer.length);
+    layer.forEach((id, index) => yOf.set(id, ys[index] ?? 0));
+  });
+
+  for (let pass = 0; pass < 3; pass++) {
+    layers.forEach((layer) => {
+      const scored = layer.map((id) => {
+        const section = byId.get(id);
+        const parents = (section?.dependsOnSectionIds ?? []).filter((depId) =>
+          yOf.has(depId),
+        );
+        const desired = parents.length
+          ? parents.reduce((sum, depId) => sum + (yOf.get(depId) ?? 0), 0) /
+            parents.length
+          : (yOf.get(id) ?? 0);
+        return { id, desired };
+      });
+      scored.sort(
+        (a, b) => a.desired - b.desired || a.id.localeCompare(b.id),
+      );
+      const ys = spread(scored.length);
+      scored.forEach((item, index) => {
+        yOf.set(
+          item.id,
+          scored.length === 1 ? item.desired : (ys[index] ?? 0),
+        );
+      });
+    });
+  }
+
+  sections.forEach((section) => {
+    const parents = (section.dependsOnSectionIds ?? []).filter((id) =>
+      yOf.has(id),
+    );
+    if (parents.length < 2) return;
+    const rounded = parents.map((id) => Math.round((yOf.get(id) ?? 0) / 10));
+    if (new Set(rounded).size === parents.length) {
+      const avg =
+        parents.reduce((sum, id) => sum + (yOf.get(id) ?? 0), 0) /
+        parents.length;
+      yOf.set(section.id, avg);
+      return;
+    }
+    const ordered = [...parents].sort((a, b) => a.localeCompare(b));
+    const ys = spread(ordered.length);
+    ordered.forEach((id, index) => yOf.set(id, ys[index] ?? 0));
+    const avg =
+      ordered.reduce((sum, id) => sum + (yOf.get(id) ?? 0), 0) / ordered.length;
+    yOf.set(section.id, avg);
+  });
+
+  layers.forEach((layer) => {
+    if (layer.length <= 1) return;
+    const ordered = [...layer].sort(
+      (a, b) =>
+        (yOf.get(a) ?? 0) - (yOf.get(b) ?? 0) || a.localeCompare(b),
+    );
+    const ys = spread(ordered.length);
+    ordered.forEach((id, index) => yOf.set(id, ys[index] ?? 0));
+  });
 
   layers.forEach((layer, layerIndex) => {
-    const totalHeight = layer.length * LAYER_GAP_Y;
-    const startY = -totalHeight / 2 + LAYER_GAP_Y / 2;
+    if (layer.length !== 1 || layerIndex === 0) return;
+    const id = layer[0];
+    const section = byId.get(id);
+    if (!section) return;
+    const parents = (section.dependsOnSectionIds ?? []).filter((depId) =>
+      layerOf.has(depId),
+    );
+    const hasSkip = parents.some(
+      (depId) => (layerOf.get(id) ?? 0) - (layerOf.get(depId) ?? 0) > 1,
+    );
+    if (!hasSkip || Math.abs(yOf.get(id) ?? 0) > 8) return;
+    yOf.set(id, LAYER_GAP_Y * 0.35);
+  });
 
+  const layouts: SectionFlowNodeLayout[] = [];
+  layers.forEach((layer, layerIndex) => {
     layer.forEach((sectionId, indexInLayer) => {
       const section = byId.get(sectionId);
       if (!section) return;
@@ -182,7 +252,7 @@ export const layoutSectionDependencyGraph = (
         layer: layerIndex,
         indexInLayer,
         x: (layerIndex + 1) * LAYER_GAP_X,
-        y: startY + indexInLayer * LAYER_GAP_Y,
+        y: yOf.get(sectionId) ?? 0,
         gate: getSectionFlowGate(section, byId, tasks),
       });
     });
@@ -207,24 +277,59 @@ export const getSectionTerminalLayout = (
   };
 };
 
+export type SectionDependencyEdgeSpec = {
+  id: string;
+  source: string;
+  target: string;
+  span: number;
+  fanIndex: number;
+  fanCount: number;
+};
+
 export const sectionDependencyEdges = (
   sections: ProjectSection[],
-): Array<{ id: string; source: string; target: string }> => {
+): SectionDependencyEdgeSpec[] => {
   const ids = knownIds(sections);
-  const edges: Array<{ id: string; source: string; target: string }> = [];
+  const layers = buildSectionDependencyLayers(sections);
+  const layerOf = new Map<string, number>();
+  layers.forEach((layer, layerIndex) => {
+    layer.forEach((id) => layerOf.set(id, layerIndex));
+  });
+
+  const raw: Array<{ id: string; source: string; target: string; span: number }> =
+    [];
 
   sections.forEach((section) => {
     for (const depId of section.dependsOnSectionIds ?? []) {
       if (!ids.has(depId)) continue;
-      edges.push({
+      const span = Math.max(
+        1,
+        (layerOf.get(section.id) ?? 0) - (layerOf.get(depId) ?? 0),
+      );
+      raw.push({
         id: `${depId}->${section.id}`,
         source: depId,
         target: section.id,
+        span,
       });
     }
   });
 
-  return edges;
+  const fanCountByTarget = new Map<string, number>();
+  raw.forEach((edge) => {
+    fanCountByTarget.set(
+      edge.target,
+      (fanCountByTarget.get(edge.target) ?? 0) + 1,
+    );
+  });
+  const fanIndexByTarget = new Map<string, number>();
+
+  return raw.map((edge) => {
+    const fanCount = fanCountByTarget.get(edge.target) ?? 1;
+    const fanIndex = fanIndexByTarget.get(edge.target) ?? 0;
+    fanIndexByTarget.set(edge.target, fanIndex + 1);
+    return { ...edge, fanIndex, fanCount };
+  });
 };
 
 export const buildAutoSectionTerminalEdges = (

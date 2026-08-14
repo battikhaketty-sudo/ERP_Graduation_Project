@@ -149,7 +149,8 @@ html[lang="en"] {
   }
 
   .hr-detail-footer {
-    @apply flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-hr-border bg-hr-hover px-5 py-4;
+    @apply sticky bottom-0 z-20 flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-hr-border bg-hr-surface/95 px-5 py-4 backdrop-blur-md;
+    box-shadow: 0 -8px 24px color-mix(in srgb, rgb(var(--hr-text)) 6%, transparent);
   }
 
   .hr-subtle-panel {

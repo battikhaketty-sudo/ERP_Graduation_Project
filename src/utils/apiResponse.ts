@@ -23,6 +23,8 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   "ProjectInvitation.Error.NotFound": "الدعوة غير موجودة.",
   "ProjectInvitation.Error.AlreadyResponded": "تم الرد على هذه الدعوة مسبقاً.",
   "ProjectSection.Error.Name.Duplicate": "اسم القسم موجود مسبقاً في هذا المشروع.",
+  "ProjectMember.Error.NotMember":
+    "حسابك الحالي ليس عضواً في هذا المشروع، لذلك لا يمكن إنشاء أو تعديل المهام. أضف الموظف المرتبط بحسابك إلى أعضاء المشروع (دعوة ثم قبول) ثم أعد المحاولة.",
   "Employee.Error.Email.Duplicate": "البريد الإلكتروني مستخدم مسبقاً.",
   "User.Error.Email.Duplicate":
     "البريد الإلكتروني مستخدم مسبقاً. قد يكون لموظف موجود أو مؤرشف — استخدم بريداً مختلفاً.",
@@ -179,16 +181,22 @@ export const unwrapData = <T>(payload: unknown): T | null => {
 };
 
 export const unwrapPage = <T>(payload: unknown): T[] => {
-  const data = unwrapData<PagedResult<T>>(payload);
+  const data = unwrapData<unknown>(payload);
   if (!data) return [];
-  return Array.isArray(data.page) ? data.page : [];
+  if (Array.isArray(data)) return data as T[];
+  if (typeof data !== "object") return [];
+
+  const obj = data as Record<string, unknown>;
+  const page =
+    obj.page ?? obj.Page ?? obj.items ?? obj.Items ?? obj.records ?? obj.Records;
+  return Array.isArray(page) ? (page as T[]) : [];
 };
 
 export const unwrapPagedMeta = (payload: unknown) => {
-  const data = unwrapData<PagedResult<unknown>>(payload);
-  const totalItems = Number(data?.totalItems ?? 0);
-  const currentPage = Number(data?.currentPage ?? 1);
-  const hasMore = Boolean(data?.hasMore);
+  const data = unwrapData<Record<string, unknown>>(payload);
+  const totalItems = Number(data?.totalItems ?? data?.TotalItems ?? 0);
+  const currentPage = Number(data?.currentPage ?? data?.CurrentPage ?? 1);
+  const hasMore = Boolean(data?.hasMore ?? data?.HasMore);
 
   return {
     totalItems,

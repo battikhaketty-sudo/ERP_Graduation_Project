@@ -2,6 +2,7 @@ import { Outlet, useNavigate } from "react-router-dom";
 import { CommandBar } from "../components/command/CommandBar";
 import { AppTopBar } from "../components/layout/AppTopBar";
 import { Sidebar } from "../components/Sidebar";
+import { ScrollToTopButton } from "../components/ui/ScrollToTopButton";
 import { ToastStack } from "../components/ui/ToastStack";
 import { CommandBarProvider } from "../context/CommandBarContext";
 import { ConfirmDialogProvider } from "../context/ConfirmDialogContext";
@@ -27,11 +28,15 @@ function AppShell() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <AppTopBar user={user} onLogout={handleLogout} />
 
-        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+        <div
+          data-app-scroll
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+        >
           <Outlet />
         </div>
       </div>
 
+      <ScrollToTopButton />
       <CommandBar />
       <ToastStack />
     </div>

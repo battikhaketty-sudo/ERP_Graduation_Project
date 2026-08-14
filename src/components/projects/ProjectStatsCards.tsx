@@ -85,9 +85,9 @@ export function ProjectDetailStatsCards({ stats }: ProjectDetailStatsCardsProps)
       text: "text-[#E8940A]",
     },
     {
-      key: "completedTasks",
-      label: t("projects.stats.completedTasks"),
-      value: stats.completedTasksCount,
+      key: "lateTasks",
+      label: t("projects.stats.late"),
+      value: stats.lateTasksCount,
       border: "border-[#FF6B6B]",
       text: "text-[#E04545]",
     },
@@ -123,18 +123,6 @@ export function TaskStatsCards({ stats }: TaskStatsCardsProps) {
       className: STATUS_BADGE_CLASS.info,
     },
     {
-      key: "inProgress",
-      label: t("projects.stats.inProgress"),
-      value: stats.inProgress,
-      className: STATUS_BADGE_CLASS.warning,
-    },
-    {
-      key: "completed",
-      label: t("projects.stats.completed"),
-      value: stats.completed,
-      className: STATUS_BADGE_CLASS.success,
-    },
-    {
       key: "late",
       label: t("projects.stats.late"),
       value: stats.late,
@@ -143,7 +131,7 @@ export function TaskStatsCards({ stats }: TaskStatsCardsProps) {
   ];
 
   return (
-    <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="mb-5 grid grid-cols-2 gap-3">
       {cards.map((card) => (
         <div key={card.key} className={`rounded-2xl p-4 ${card.className}`}>
           <p className="text-2xl font-bold">{card.value}</p>

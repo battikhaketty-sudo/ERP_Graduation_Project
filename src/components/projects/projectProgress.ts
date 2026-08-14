@@ -5,7 +5,6 @@ import type {
   TaskStats,
 } from "../../types/project";
 import { buildTaskStatsFromTasks } from "../../services/projects/taskStorage";
-import { resolveTaskStatus } from "../../services/projects/taskStatus";
 
 export type SectionFlowItem = {
   id: string;
@@ -13,11 +12,11 @@ export type SectionFlowItem = {
   taskCount: number;
   isActive: boolean;
   /** Visual stage for node styling */
-  stage: "idle" | "busy" | "done";
+  stage: "idle" | "busy";
 };
 
 export type StatusDistributionItem = {
-  key: "completed" | "inProgress" | "late" | "other";
+  key: "onTrack" | "late";
   count: number;
   percent: number;
 };
@@ -63,9 +62,27 @@ const formatDateLabel = (value?: string) => {
   return value.slice(0, 10);
 };
 
-export const getCompletionPercent = (taskStats: TaskStats) => {
-  if (!taskStats.total) return 0;
-  return Math.round((taskStats.completed / taskStats.total) * 100);
+/** Progress from project status / timeline — not task completion. */
+export const getCompletionPercent = (
+  project: Pick<Project, "status" | "startDate" | "endDate">,
+  tasks: ProjectTask[] = [],
+) => {
+  if (project.status === "completed") return 100;
+  if (project.status === "not_started" && !tasks.length) return 0;
+
+  const timeline = buildTimelineProgress(
+    project.startDate,
+    project.endDate,
+    tasks,
+  );
+  if (timeline.hasRange) {
+    if (project.status === "not_started") {
+      return Math.min(25, timeline.elapsedPercent);
+    }
+    return Math.min(95, Math.max(10, timeline.elapsedPercent));
+  }
+
+  return project.status === "in_progress" ? 45 : 0;
 };
 
 export const buildSectionFlow = (
@@ -92,20 +109,12 @@ export const buildSectionFlow = (
     const sectionTasks = tasksBySection.get(section.id) ?? [];
     const taskCount = sectionTasks.length;
 
-    let stage: SectionFlowItem["stage"] = "idle";
-    if (taskCount > 0) {
-      const allDone = sectionTasks.every(
-        (task) => resolveTaskStatus(task, sections) === "completed",
-      );
-      stage = allDone ? "done" : "busy";
-    }
-
     return {
       id: section.id,
       name: section.name,
       taskCount,
       isActive: taskCount > 0 && taskCount === maxCount && maxCount > 0,
-      stage,
+      stage: taskCount > 0 ? "busy" : "idle",
     };
   });
 };
@@ -113,15 +122,10 @@ export const buildSectionFlow = (
 export const buildStatusDistribution = (
   taskStats: TaskStats,
 ): StatusDistributionItem[] => {
-  const other = Math.max(
-    0,
-    taskStats.total - taskStats.completed - taskStats.inProgress - taskStats.late,
-  );
+  const onTrack = Math.max(0, taskStats.total - taskStats.late);
   const rows: Array<Omit<StatusDistributionItem, "percent">> = [
-    { key: "completed", count: taskStats.completed },
-    { key: "inProgress", count: taskStats.inProgress },
+    { key: "onTrack", count: onTrack },
     { key: "late", count: taskStats.late },
-    { key: "other", count: other },
   ];
 
   return rows.map((row) => ({
@@ -189,32 +193,14 @@ export const buildTimelineProgress = (
 };
 
 /** Soft list progress when full task stats may be unavailable. */
-export const getProjectListProgressPercent = (project: Project): number => {
-  if (project.tasks?.length) {
-    const stats = buildTaskStatsFromTasks(project.tasks, project.sections);
-    return getCompletionPercent(stats);
-  }
-
-  if (project.status === "completed") return 100;
-  if (project.status === "not_started") return 0;
-
-  const timeline = buildTimelineProgress(
-    project.startDate,
-    project.endDate,
-    project.tasks ?? [],
-  );
-  if (timeline.hasRange) {
-    return Math.min(90, Math.max(10, timeline.elapsedPercent));
-  }
-
-  return 45;
-};
+export const getProjectListProgressPercent = (project: Project): number =>
+  getCompletionPercent(project, project.tasks ?? []);
 
 export const buildProjectProgressSnapshot = (
   project: Project,
   taskStats: TaskStats,
 ): ProjectProgressSnapshot => ({
-  completionPercent: getCompletionPercent(taskStats),
+  completionPercent: getCompletionPercent(project, project.tasks ?? []),
   taskStats,
   sectionFlow: buildSectionFlow(project.sections, project.tasks ?? []),
   statusDistribution: buildStatusDistribution(taskStats),

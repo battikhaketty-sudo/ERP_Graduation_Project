@@ -11,7 +11,7 @@ import {
   type Department,
 } from "../../services/hrApi";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
-import { alertErrorClass, cardSurfaceClass, readOnlyClass } from "../ui/formStyles";
+import { alertErrorClass, cardSurfaceClass, detailFooterClass, readOnlyClass } from "../ui/formStyles";
 import { DetailBackButton } from "../ui/DetailBackButton";
 import { DepartmentField, inputClass } from "./department-ui";
 
@@ -125,42 +125,15 @@ export function DepartmentDetailView({
 
   return (
     <main
-      className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6"
+      className="min-w-0 flex-1 bg-hr-bg px-4 py-4 sm:px-6 sm:py-6"
       dir={dir}
     >
       <DetailBackButton label={t("departments.detail.backLabel")} onClick={onBack} />
 
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-hr-primary sm:text-[22px]">
-            {t("departments.detail.breadcrumb")}
-          </h1>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="h-10 rounded-xl bg-red-500 px-5 text-sm font-bold text-white transition hover:bg-red-600"
-          >
-            {t("departments.detail.delete")}
-          </button>
-          <button
-            type="button"
-            onClick={onBack}
-            className="h-10 rounded-xl border border-hr-primary bg-hr-surface px-5 text-sm font-bold text-hr-primary transition hover:bg-hr-hover"
-          >
-            {t("departments.detail.undo")}
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || loading}
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-hr-primary px-5 text-sm font-bold text-white transition hover:bg-hr-primary-hover disabled:opacity-60"
-          >
-            {saving && <Loader className="size-4 animate-spin" />}
-            {t("departments.detail.save")}
-          </button>
-        </div>
+      <div className="mb-5">
+        <h1 className="text-xl font-bold text-hr-primary sm:text-[22px]">
+          {t("departments.detail.breadcrumb")}
+        </h1>
       </div>
 
       <section className={`${cardSurfaceClass} p-5 sm:p-6`}>
@@ -314,6 +287,32 @@ export function DepartmentDetailView({
           </div>
         )}
       </section>
+
+      <div className={`${detailFooterClass} mt-5`}>
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="h-10 rounded-xl bg-red-500 px-5 text-sm font-bold text-white transition hover:bg-red-600"
+        >
+          {t("departments.detail.delete")}
+        </button>
+        <button
+          type="button"
+          onClick={onBack}
+          className="h-10 rounded-xl border border-hr-primary bg-hr-surface px-5 text-sm font-bold text-hr-primary transition hover:bg-hr-hover"
+        >
+          {t("departments.detail.undo")}
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || loading}
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-hr-primary px-5 text-sm font-bold text-white transition hover:bg-hr-primary-hover disabled:opacity-60"
+        >
+          {saving && <Loader className="size-4 animate-spin" />}
+          {t("departments.detail.save")}
+        </button>
+      </div>
     </main>
   );
 }

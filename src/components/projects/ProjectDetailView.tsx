@@ -5,16 +5,25 @@ import { DetailBackButton } from "../ui/DetailBackButton";
 import { StatusBanner } from "../ui/StatusBanner";
 import { cardSurfaceClass, subtlePanelClass } from "../ui/formStyles";
 import { buildProjectDetailStats } from "../../services/projects/project.mapper";
-import { getProjectMembers } from "../../services/projects";
+import {
+  getProjectInvitations,
+  getProjectMembers,
+  updateInvitationStatus,
+} from "../../services/projects";
 import type {
   Project,
   ProjectDetailStats,
+  ProjectInvitation,
   ProjectMember,
   ProjectSection,
   ProjectTask,
   TaskStats,
 } from "../../types/project";
 import { EditMemberModal } from "./EditMemberModal";
+import {
+  InvitationsTable,
+  INVITATIONS_PAGE_SIZE,
+} from "./InvitationsTable";
 import { ProjectKanbanBoard } from "./ProjectKanbanBoard";
 import {
   MEMBERS_PAGE_SIZE,
@@ -23,10 +32,12 @@ import {
 import { ProjectStatusBadge } from "./ProjectBadges";
 import { ProjectDetailStatsCards } from "./ProjectStatsCards";
 import { ProjectFlowPanel } from "./ProjectFlowPanel";
-import { ProjectPerformancePanel } from "./ProjectPerformancePanel";
 import { ProjectSectionFlowPanel } from "./ProjectSectionFlowPanel";
 import { ProjectTasksChartPanel } from "./ProjectTasksChartPanel";
 import { SectionDetailView } from "./SectionDetailView";
+import { TaskDetailView } from "./TaskDetailView";
+import { getThrownErrorMessage } from "../../utils/apiResponse";
+import { useToast } from "../../context/ToastContext";
 
 type ProjectDetailViewProps = {
   project: Project;
@@ -44,14 +55,17 @@ type ProjectDetailViewProps = {
   onInviteMember: () => void;
   onEditMember: (member: ProjectMember, role: string) => Promise<void>;
   onDeleteMember: (member: ProjectMember) => void;
+  /** Bump after sending an invite so the invitations tab reloads. */
+  invitationsReloadKey?: number;
+  onRefresh?: () => Promise<void> | void;
 };
 
 type DetailTab =
   | "general"
   | "members"
+  | "invitations"
   | "flow"
   | "sectionFlow"
-  | "performance"
   | "kanban";
 
 export function ProjectDetailView({
@@ -64,21 +78,28 @@ export function ProjectDetailView({
   onAddSection,
   onEditSection,
   onDeleteSection,
-  onMoveSection: _onMoveSection,
   onEditTask,
   onDeleteTask,
   onInviteMember,
   onEditMember,
   onDeleteMember,
+  invitationsReloadKey = 0,
+  onRefresh,
 }: ProjectDetailViewProps) {
   const { t } = useTranslation();
+  const { showToast } = useToast();
   const {
     value: sectionId,
     pushValue: openSectionInUrl,
     removeValue: clearSectionFromUrl,
     goBack: goBackFromSection,
   } = useUrlQueryNavigation({ param: "section" });
-  const [activeTab, setActiveTab] = useState<DetailTab>("general");
+  const {
+    value: taskId,
+    pushValue: openTaskInUrl,
+    goBack: goBackFromTask,
+  } = useUrlQueryNavigation({ param: "task" });
+  const [activeTab, setActiveTab] = useState<DetailTab>("kanban");
   const [selectedSection, setSelectedSection] = useState<ProjectSection | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [membersPage, setMembersPage] = useState(1);
@@ -87,6 +108,11 @@ export function ProjectDetailView({
   const [membersError, setMembersError] = useState<string | null>(null);
   const [editingMember, setEditingMember] = useState<ProjectMember | null>(null);
   const [membersReloadKey, setMembersReloadKey] = useState(0);
+  const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
+  const [invitationsPage, setInvitationsPage] = useState(1);
+  const [invitationsLoading, setInvitationsLoading] = useState(false);
+  const [invitationsError, setInvitationsError] = useState<string | null>(null);
+  const [invitationsLocalReload, setInvitationsLocalReload] = useState(0);
 
   const detailStats: ProjectDetailStats = useMemo(
     () => buildProjectDetailStats(project, taskStats),
@@ -128,6 +154,34 @@ export function ProjectDetailView({
   }, [membersPage, membersReloadKey, project.id, t]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      setInvitationsLoading(true);
+      setInvitationsError(null);
+      try {
+        const records = await getProjectInvitations(project.id, { limit: 100 });
+        if (cancelled) return;
+        setInvitations(records);
+        setInvitationsPage(1);
+      } catch (err) {
+        if (cancelled) return;
+        setInvitations([]);
+        setInvitationsError(
+          getThrownErrorMessage(err, t("projects.page.loadDetailError")),
+        );
+      } finally {
+        if (!cancelled) setInvitationsLoading(false);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [invitationsLocalReload, invitationsReloadKey, project.id, t]);
+
+  useEffect(() => {
     if (!sectionId) {
       setSelectedSection(null);
       return;
@@ -141,22 +195,61 @@ export function ProjectDetailView({
     }
   }, [clearSectionFromUrl, project.sections, sectionId]);
 
+  const invitationsTotalPages = Math.max(
+    1,
+    Math.ceil(invitations.length / INVITATIONS_PAGE_SIZE),
+  );
+  const paginatedInvitations = useMemo(() => {
+    const start = (invitationsPage - 1) * INVITATIONS_PAGE_SIZE;
+    return invitations.slice(start, start + INVITATIONS_PAGE_SIZE);
+  }, [invitations, invitationsPage]);
+
+  const handleInvitationAction = async (
+    invitation: ProjectInvitation,
+    status: "accepted" | "rejected" | "cancelled",
+  ) => {
+    try {
+      await updateInvitationStatus(invitation, status);
+      setInvitationsLocalReload((key) => key + 1);
+      if (status === "accepted") {
+        showToast(t("projects.toasts.inviteAccepted"), "success");
+      } else if (status === "rejected") {
+        showToast(t("projects.toasts.inviteRejected"), "success");
+      } else {
+        showToast(t("projects.toasts.inviteCancelled"), "success");
+      }
+    } catch (err) {
+      const message = getThrownErrorMessage(err, t("projects.page.loadError"));
+      setInvitationsError(message);
+      showToast(message, "error");
+    }
+  };
+
   const tabs: Array<{ key: DetailTab; label: string }> = [
+    { key: "kanban", label: t("projects.detail.tabs.kanban") },
     { key: "general", label: t("projects.detail.tabs.general") },
     { key: "members", label: t("projects.detail.tabs.members") },
+    { key: "invitations", label: t("projects.detail.tabs.invitations") },
     { key: "flow", label: t("projects.detail.tabs.flow") },
     { key: "sectionFlow", label: t("projects.detail.tabs.sectionFlow") },
-    { key: "performance", label: t("projects.detail.tabs.performance") },
-    { key: "kanban", label: t("projects.detail.tabs.kanban") },
   ];
 
-  const performanceRevision = useMemo(
-    () =>
-      (project.tasks ?? [])
-        .map((task) => `${task.id}:${task.status}:${task.priority}:${task.assigneeIds.join(",")}`)
-        .join("|"),
-    [project.tasks],
-  );
+  if (taskId) {
+    return (
+      <TaskDetailView
+        project={project}
+        taskId={taskId}
+        onBack={goBackFromTask}
+        onOpenTask={(nextTaskId) => openTaskInUrl(nextTaskId)}
+        onEdit={(task) => {
+          onEditTask(task);
+        }}
+        onDelete={(task) => {
+          onDeleteTask(task);
+        }}
+      />
+    );
+  }
 
   if (selectedSection) {
     return (
@@ -172,15 +265,20 @@ export function ProjectDetailView({
         onAddTask={() => onAddTask(selectedSection.id)}
         onEditTask={onEditTask}
         onDeleteTask={onDeleteTask}
+        onTaskClick={(task) => openTaskInUrl(task.id)}
       />
     );
   }
 
-  const showMembersTable = activeTab === "general" || activeTab === "members";
-  const showKanban = activeTab === "general" || activeTab === "members" || activeTab === "kanban";
+  const showMembersTable = activeTab === "members";
+  const showInvitations = activeTab === "invitations";
+  const showKanban = activeTab === "kanban";
+  const showGeneral = activeTab === "general";
+  const showFlow = activeTab === "flow";
+  const showSectionFlow = activeTab === "sectionFlow";
 
   return (
-    <main className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6">
+    <main className="min-w-0 flex-1 bg-hr-bg px-4 py-4 sm:px-6 sm:py-6">
       <DetailBackButton
         label={t("projects.detail.backLabel")}
         onClick={onBack}
@@ -232,15 +330,15 @@ export function ProjectDetailView({
         </div>
       </div>
 
-      {(activeTab === "general" ||
-        activeTab === "members" ||
-        activeTab === "flow" ||
-        activeTab === "sectionFlow" ||
-        activeTab === "performance") && (
+      {(showGeneral ||
+        showMembersTable ||
+        showInvitations ||
+        showFlow ||
+        showSectionFlow) && (
         <ProjectDetailStatsCards stats={detailStats} />
       )}
 
-      {activeTab === "flow" && (
+      {showFlow && (
         <>
           <ProjectFlowPanel
             project={project}
@@ -256,7 +354,7 @@ export function ProjectDetailView({
         </>
       )}
 
-      {activeTab === "sectionFlow" && (
+      {showSectionFlow && (
         <ProjectSectionFlowPanel
           project={project}
           onAddSection={onAddSection}
@@ -265,49 +363,59 @@ export function ProjectDetailView({
         />
       )}
 
-      {activeTab === "performance" && (
-        <ProjectPerformancePanel
-          project={project}
-          revision={performanceRevision}
-        />
-      )}
-
-      {activeTab === "general" && (
-        <section className={`mb-5 ${cardSurfaceClass} p-5`}>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <InfoItem
-              label={t("projects.detail.fields.number")}
-              value={project.id}
-              dir="ltr"
-            />
-            <InfoItem label={t("projects.detail.fields.name")} value={project.name} />
-            <InfoItem
-              label={t("projects.detail.fields.description")}
-              value={project.description || t("common.dash")}
-            />
-            <InfoItem
-              label={t("projects.detail.fields.managerId")}
-              value={project.managerId || t("common.dash")}
-            />
-            <InfoItem label={t("projects.detail.fields.managerName")} value={project.managerName} />
-            <div>
-              <p className="mb-1 text-xs text-hr-muted">{t("projects.table.columns.status")}</p>
-              <ProjectStatusBadge status={project.status} />
+      {showGeneral && (
+        <>
+          <section className={`mb-5 ${cardSurfaceClass} p-5`}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InfoItem label={t("projects.detail.fields.name")} value={project.name} />
+              <div className={subtlePanelClass}>
+                <p className="mb-1 text-xs text-hr-muted">{t("projects.table.columns.status")}</p>
+                <ProjectStatusBadge status={project.status} />
+              </div>
+              <InfoItem
+                label={t("projects.detail.fields.managerName")}
+                value={project.managerName || t("common.dash")}
+              />
+              <InfoItem
+                label={t("projects.detail.fields.endDate")}
+                value={project.endDate || t("common.dash")}
+              />
+              <InfoItem
+                label={t("projects.detail.fields.startDate")}
+                value={project.startDate || t("common.dash")}
+              />
+              <InfoItem
+                label={t("projects.detail.fields.description")}
+                value={project.description || t("common.dash")}
+              />
             </div>
-            <InfoItem
-              label={t("projects.detail.fields.startDate")}
-              value={project.startDate || t("common.dash")}
-            />
-            <InfoItem
-              label={t("projects.detail.fields.endDate")}
-              value={project.endDate || t("common.dash")}
-            />
-            <InfoItem
-              label={t("projects.detail.fields.createdAt")}
-              value={project.createdAt || t("common.dash")}
+          </section>
+          <div className="mb-5">
+            {membersError && (
+              <StatusBanner variant="error" message={membersError} className="mb-3" />
+            )}
+            <ProjectMembersTable
+              members={members}
+              currentPage={membersPage}
+              totalPages={membersTotalPages}
+              loading={membersLoading}
+              onPageChange={setMembersPage}
+              onEdit={setEditingMember}
+              onDelete={onDeleteMember}
+              showAddButton
+              onAddClick={onInviteMember}
             />
           </div>
-        </section>
+          <div className="mb-5">
+            <ProjectKanbanBoard
+              project={project}
+              onAddSection={onAddSection}
+              onAddTask={() => onAddTask()}
+              onSectionClick={(section) => openSectionInUrl(section.id)}
+              onTaskClick={(task) => openTaskInUrl(task.id)}
+            />
+          </div>
+        </>
       )}
 
       {showMembersTable && (
@@ -329,12 +437,54 @@ export function ProjectDetailView({
         </div>
       )}
 
+      {showInvitations && (
+        <div className="mb-5">
+          {invitationsError && (
+            <StatusBanner
+              variant="error"
+              message={invitationsError}
+              className="mb-3"
+            />
+          )}
+          {invitationsLoading ? (
+            <section className={cardSurfaceClass}>
+              <p className="px-5 py-10 text-center text-sm text-hr-muted">
+                {t("common.loading")}
+              </p>
+            </section>
+          ) : (
+            <InvitationsTable
+              invitations={paginatedInvitations}
+              currentPage={invitationsPage}
+              totalPages={invitationsTotalPages}
+              onPageChange={setInvitationsPage}
+              onAccept={(invitation) =>
+                void handleInvitationAction(invitation, "accepted")
+              }
+              onReject={(invitation) =>
+                void handleInvitationAction(invitation, "rejected")
+              }
+              onCancel={(invitation) =>
+                void handleInvitationAction(invitation, "cancelled")
+              }
+              projectScoped
+              actionsMode="manage"
+              title={t("projects.invitations.manageTitle")}
+              emptyMessage={t("projects.invitations.empty")}
+              showInviteButton
+              onInviteClick={onInviteMember}
+            />
+          )}
+        </div>
+      )}
+
       {showKanban && (
         <ProjectKanbanBoard
           project={project}
           onAddSection={onAddSection}
           onAddTask={() => onAddTask()}
           onSectionClick={(section) => openSectionInUrl(section.id)}
+          onTaskClick={(task) => openTaskInUrl(task.id)}
         />
       )}
 

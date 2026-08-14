@@ -15,7 +15,7 @@ type ProjectSectionFlowPanelProps = {
   onDeleteSection?: (section: ProjectSection) => void;
 };
 
-const FILTERS: SectionFlowFilter[] = ["all", "ready", "blocked", "completed"];
+const FILTERS: SectionFlowFilter[] = ["all"];
 
 export function ProjectSectionFlowPanel({
   project,
@@ -25,7 +25,7 @@ export function ProjectSectionFlowPanel({
 }: ProjectSectionFlowPanelProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<SectionFlowFilter>("all");
+  const [filter] = useState<SectionFlowFilter>("all");
 
   return (
     <section className={`mb-5 ${cardSurfaceClass} overflow-hidden`}>
@@ -64,13 +64,7 @@ export function ProjectSectionFlowPanel({
               <button
                 key={key}
                 type="button"
-                onClick={() => setFilter(key)}
-                className={[
-                  "rounded-lg px-3 py-1.5 text-xs font-medium transition",
-                  filter === key
-                    ? "bg-hr-primary text-white"
-                    : "bg-hr-table-alt text-hr-muted hover:text-hr-text",
-                ].join(" ")}
+                className="rounded-lg bg-hr-primary px-3 py-1.5 text-xs font-medium text-white"
               >
                 {t(`projects.detail.sectionFlow.filters.${key}`)}
               </button>

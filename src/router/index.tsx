@@ -3,6 +3,7 @@ import { guestLoader, requireAuthLoader, rootAuthLoader } from "../auth/loaders"
 import { ROUTES } from "../constants/routes";
 import { AppLayout } from "../layouts/AppLayout";
 import { AccessManagementPage } from "../pages/AccessManagementPage";
+import { DashboardPage } from "../pages/DashboardPage";
 import { DepartmentsPage } from "../pages/DepartmentsPage";
 import { EmployeesPage } from "../pages/EmployeesPage";
 import { HrPage } from "../pages/HrPage";
@@ -26,7 +27,7 @@ export const router = createBrowserRouter([
         loader: requireAuthLoader,
         element: <AppLayout />,
         children: [
-          { index: true, element: <Navigate to={ROUTES.projects} replace /> },
+          { index: true, element: <DashboardPage /> },
           { path: ROUTES.projects, element: <ProjectsPage /> },
           { path: ROUTES.employees, element: <EmployeesPage /> },
           { path: ROUTES.departments, element: <DepartmentsPage /> },
@@ -35,7 +36,7 @@ export const router = createBrowserRouter([
           { path: ROUTES.notifications, element: <NotificationsPage /> },
         ],
       },
-      { path: "*", element: <Navigate to={ROUTES.projects} replace /> },
+      { path: "*", element: <Navigate to={ROUTES.dashboard} replace /> },
     ],
   },
 ]);

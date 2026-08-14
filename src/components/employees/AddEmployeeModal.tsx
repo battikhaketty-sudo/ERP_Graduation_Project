@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle,
   Loader,
-  Upload,
 } from "lucide-react";
 import { DEFAULT_EMPLOYEE_PASSWORD } from "../../constants/defaults";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -18,10 +17,20 @@ import {
   isValidPhone,
   sanitizeEmployeeField,
 } from "../../utils/inputConstraints";
+import {
+  getBirthDateIssue,
+  normalizeBirthDateValue,
+} from "../../utils/employeeDates";
+import {
+  afterValidationPaint,
+  focusAndScrollToFirstError,
+} from "../../utils/formUx";
 import { mapNamedOptions } from "../../utils/selectOptions";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
+import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { PasswordInput } from "../ui/PasswordInput";
+import { ManualDateInput } from "../ui/ManualDateInput";
 import { EmployeeResumeSkillsEditor } from "./EmployeeResumeSkillsEditor";
 import {
   emptyEmployeeSkillRow,
@@ -33,7 +42,6 @@ import {
   alertErrorClass,
   alertSuccessClass,
   cancelBtnLgClass,
-  dashedZoneClass,
   modalBodyClass,
   modalFooterClass,
   ModalCloseButton,
@@ -74,10 +82,10 @@ export function AddEmployeeModal({
   );
   const [activeTab, setActiveTab] = useState<TabType>("personal");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  useModalDismiss(onClose, isOpen && !isSubmitting);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const firstFieldRef = useModalAutoFocus<HTMLInputElement>(isOpen);
 
   const {
@@ -105,7 +113,9 @@ export function AddEmployeeModal({
     birthDate: "",
     gender: "",
     nationality: "",
-    personalImage: "",
+    maritalStatus: "",
+    degreeLevel: "",
+    fieldOfStudy: "",
     departmentId: "",
     role: "Front_end" as WorkRole,
     joiningDate: "",
@@ -138,25 +148,30 @@ export function AddEmployeeModal({
     >,
   ) => {
     const { name, value } = e.target;
+    if (name === "birthDate") {
+      const normalized = normalizeBirthDateValue(value) || value;
+      setFormData((prev) => ({ ...prev, birthDate: normalized }));
+      const issue = getBirthDateIssue(normalized);
+      setErrors((prev) => ({
+        ...prev,
+        birthDate:
+          issue === "invalid"
+            ? t("employees.errors.birthDateInvalid")
+            : issue === "future"
+              ? t("employees.errors.birthDateFuture")
+              : issue === "tooYoung"
+                ? t("employees.errors.birthDateTooYoung")
+                : issue === "tooOld"
+                  ? t("employees.errors.birthDateTooOld")
+                  : "",
+      }));
+      return;
+    }
     const sanitized = sanitizeEmployeeField(name, value);
     setFormData((prev) => ({ ...prev, [name]: sanitized }));
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setFormData((prev) => ({
-        ...prev,
-        personalImage: (event.target?.result as string) || "",
-      }));
-    };
-    reader.readAsDataURL(file);
   };
 
   const validateForm = () => {
@@ -191,19 +206,37 @@ export function AddEmployeeModal({
       nextErrors.contractTypeId = t("employees.errors.contractTypeRequired");
     }
 
+    const birthIssue = getBirthDateIssue(formData.birthDate);
+    if (birthIssue === "invalid") {
+      nextErrors.birthDate = t("employees.errors.birthDateInvalid");
+    } else if (birthIssue === "future") {
+      nextErrors.birthDate = t("employees.errors.birthDateFuture");
+    } else if (birthIssue === "tooYoung") {
+      nextErrors.birthDate = t("employees.errors.birthDateTooYoung");
+    } else if (birthIssue === "tooOld") {
+      nextErrors.birthDate = t("employees.errors.birthDateTooOld");
+    }
+
     setErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
-      if (nextErrors.fullName || nextErrors.email || nextErrors.phone) {
+      if (
+        nextErrors.fullName ||
+        nextErrors.email ||
+        nextErrors.phone ||
+        nextErrors.birthDate
+      ) {
         setActiveTab("personal");
       } else if (nextErrors.departmentId) {
         setActiveTab("work");
       } else if (nextErrors.contractTypeId) {
         setActiveTab("payroll");
       }
+      afterValidationPaint(() => focusAndScrollToFirstError());
+      return false;
     }
 
-    return Object.keys(nextErrors).length === 0;
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -225,10 +258,13 @@ export function AddEmployeeModal({
         password: formData.password,
         role: formData.role,
         address: `${formData.nationality || "-"} - ${selectedDepartment?.name || "-"}`,
-        avatar: formData.personalImage,
+        avatar: "",
         birthDate: formData.birthDate,
         gender: formData.gender as Employee["gender"],
         nationality: formData.nationality,
+        maritalStatus: formData.maritalStatus || undefined,
+        degreeLevel: formData.degreeLevel || undefined,
+        fieldOfStudy: formData.fieldOfStudy || undefined,
         department: selectedDepartment?.name,
         departmentId: formData.departmentId,
         contractTypeId: formData.contractTypeId,
@@ -337,13 +373,31 @@ export function AddEmployeeModal({
                   />
                 </EmployeeField>
 
-                <EmployeeField label={t("employees.modal.fields.birthDate")}>
-                  <input
-                    type="date"
+                <EmployeeField
+                  label={t("employees.modal.fields.birthDate")}
+                  error={errors.birthDate}
+                >
+                  <ManualDateInput
                     name="birthDate"
                     value={formData.birthDate}
-                    onChange={handleChange}
-                    className={inputClass}
+                    onChange={(birthDate) => {
+                      setFormData((prev) => ({ ...prev, birthDate }));
+                      const issue = getBirthDateIssue(birthDate);
+                      setErrors((prev) => ({
+                        ...prev,
+                        birthDate:
+                          issue === "invalid"
+                            ? t("employees.errors.birthDateInvalid")
+                            : issue === "future"
+                              ? t("employees.errors.birthDateFuture")
+                              : issue === "tooYoung"
+                                ? t("employees.errors.birthDateTooYoung")
+                                : issue === "tooOld"
+                                  ? t("employees.errors.birthDateTooOld")
+                                  : "",
+                      }));
+                    }}
+                    aria-invalid={Boolean(errors.birthDate)}
                   />
                 </EmployeeField>
 
@@ -407,15 +461,6 @@ export function AddEmployeeModal({
                   />
                 </EmployeeField>
 
-                <EmployeeField label={t("employees.modal.fields.password")}>
-                  <PasswordInput
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    className={inputClass}
-                  />
-                </EmployeeField>
-
                 <EmployeeField
                   label={t("employees.modal.fields.idNumber")}
                   error={errors.idNumber}
@@ -430,35 +475,86 @@ export function AddEmployeeModal({
                     className={inputClass}
                   />
                 </EmployeeField>
+
+                <EmployeeField label={t("employees.modal.fields.maritalStatus")}>
+                  <select
+                    name="maritalStatus"
+                    value={formData.maritalStatus}
+                    onChange={handleChange}
+                    className={inputClass}
+                  >
+                    <option value="">
+                      {t("employees.modal.placeholders.selectMaritalStatus")}
+                    </option>
+                    <option value="أعزب">
+                      {t("employees.detail.maritalOptions.single")}
+                    </option>
+                    <option value="متزوج">
+                      {t("employees.detail.maritalOptions.married")}
+                    </option>
+                    <option value="مطلق">
+                      {t("employees.detail.maritalOptions.divorced")}
+                    </option>
+                    <option value="أرمل">
+                      {t("employees.detail.maritalOptions.widowed")}
+                    </option>
+                  </select>
+                </EmployeeField>
+
+                <EmployeeField label={t("employees.modal.fields.degreeLevel")}>
+                  <select
+                    name="degreeLevel"
+                    value={formData.degreeLevel}
+                    onChange={handleChange}
+                    className={inputClass}
+                  >
+                    <option value="">
+                      {t("employees.modal.placeholders.selectDegreeLevel")}
+                    </option>
+                    <option value="خريج">
+                      {t("employees.detail.degreeOptions.graduate")}
+                    </option>
+                    <option value="بكالوريوس">
+                      {t("employees.detail.degreeOptions.bachelor")}
+                    </option>
+                    <option value="ماجستير">
+                      {t("employees.detail.degreeOptions.master")}
+                    </option>
+                    <option value="دكتوراه">
+                      {t("employees.detail.degreeOptions.doctorate")}
+                    </option>
+                    <option value="دبلوم">
+                      {t("employees.detail.degreeOptions.diploma")}
+                    </option>
+                    <option value="ثانوية">
+                      {t("employees.detail.degreeOptions.highSchool")}
+                    </option>
+                  </select>
+                </EmployeeField>
+
+                <EmployeeField label={t("employees.modal.fields.fieldOfStudy")}>
+                  <input
+                    name="fieldOfStudy"
+                    value={formData.fieldOfStudy}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder={t("employees.modal.placeholders.fieldOfStudy")}
+                  />
+                </EmployeeField>
+
+                <EmployeeField label={t("employees.modal.fields.password")}>
+                  <PasswordInput
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    className={inputClass}
+                  />
+                </EmployeeField>
               </div>
 
-              <EmployeeField label={t("employees.modal.fields.photo")}>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`flex w-full max-w-[280px] flex-col items-center justify-center rounded-2xl px-4 py-8 ${dashedZoneClass}`}
-                >
-                  {formData.personalImage ? (
-                    <img
-                      src={formData.personalImage}
-                      alt={t("common.preview")}
-                      className="mb-3 size-24 rounded-xl object-cover"
-                    />
-                  ) : (
-                    <Upload className="mb-2 size-8 text-hr-muted" />
-                  )}
-                  <span className="text-sm text-hr-muted">
-                    {t("employees.modal.uploadPhotoHint")}
-                  </span>
-                </button>
-              </EmployeeField>
+              <p className="rounded-xl border border-dashed border-hr-border bg-hr-hover/30 px-4 py-3 text-sm text-hr-muted">
+                {t("employees.modal.photoLaterHint")}
+              </p>
             </div>
           )}
 
@@ -601,12 +697,12 @@ export function AddEmployeeModal({
                   label={t("employees.modal.fields.contractStart")}
                   hint={t("employees.modal.fields.contractStartHint")}
                 >
-                  <input
-                    type="date"
+                  <ManualDateInput
                     name="joiningDate"
                     value={formData.joiningDate}
-                    onChange={handleChange}
-                    className={inputClass}
+                    onChange={(joiningDate) =>
+                      setFormData((prev) => ({ ...prev, joiningDate }))
+                    }
                   />
                 </EmployeeField>
 
@@ -614,12 +710,12 @@ export function AddEmployeeModal({
                   label={t("employees.modal.fields.contractEnd")}
                   hint={t("employees.modal.fields.contractEndHint")}
                 >
-                  <input
-                    type="date"
+                  <ManualDateInput
                     name="contractEndDate"
                     value={formData.contractEndDate}
-                    onChange={handleChange}
-                    className={inputClass}
+                    onChange={(contractEndDate) =>
+                      setFormData((prev) => ({ ...prev, contractEndDate }))
+                    }
                   />
                 </EmployeeField>
               </div>

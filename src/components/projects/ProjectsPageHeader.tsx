@@ -8,6 +8,7 @@ type ProjectsPageHeaderProps = {
   onAddClick: () => void;
   addLabel: string;
   searchPlaceholder: string;
+  showAddButton?: boolean;
 };
 
 export function ProjectsPageHeader({
@@ -17,6 +18,7 @@ export function ProjectsPageHeader({
   onAddClick,
   addLabel,
   searchPlaceholder,
+  showAddButton = true,
 }: ProjectsPageHeaderProps) {
   const { t } = useTranslation();
 
@@ -41,14 +43,16 @@ export function ProjectsPageHeader({
             className="h-[45px] w-full rounded-full border border-hr-border bg-hr-input-bg pe-4 ps-11 text-sm text-hr-text outline-none transition placeholder:text-hr-muted focus:border-hr-primary focus:ring-2 focus:ring-hr-primary/20"
           />
         </div>
-        <button
-          type="button"
-          onClick={onAddClick}
-          className="ms-auto inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-hr-primary px-4 text-sm font-bold text-white transition hover:bg-hr-primary-hover"
-        >
-          <Plus className="size-4" strokeWidth={2.5} />
-          {addLabel}
-        </button>
+        {showAddButton ? (
+          <button
+            type="button"
+            onClick={onAddClick}
+            className="ms-auto inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-hr-primary px-4 text-sm font-bold text-white transition hover:bg-hr-primary-hover"
+          >
+            <Plus className="size-4" strokeWidth={2.5} />
+            {addLabel}
+          </button>
+        ) : null}
       </div>
     </header>
   );

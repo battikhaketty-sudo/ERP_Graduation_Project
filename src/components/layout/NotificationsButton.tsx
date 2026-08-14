@@ -1,15 +1,15 @@
 import { Bell } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { ROUTES } from "../../constants/routes";
-import { getUnreadNotificationCount } from "../../data/notifications";
 import { usePreferences } from "../../context/PreferencesContext";
+import { useNotifications } from "../../hooks/useNotifications";
 import { useTranslation } from "../../i18n";
 
 export function NotificationsButton() {
   const { locale } = usePreferences();
   const { t } = useTranslation();
   const location = useLocation();
-  const count = getUnreadNotificationCount(locale);
+  const { unreadCount: count } = useNotifications(locale);
   const isActive = location.pathname === ROUTES.notifications;
 
   return (

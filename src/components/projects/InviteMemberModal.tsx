@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
 import { useProjectLabels } from "../../hooks/useProjectLabels";
@@ -8,7 +8,14 @@ import type { InvitationFormPayload, Project } from "../../types/project";
 import { mapNamedOptions } from "../../utils/selectOptions";
 import { FormField } from "../ui/FormField";
 import { SearchableSelect } from "../ui/SearchableSelect";
-import { alertErrorClass, cancelBtnClass, ModalCloseButton, ModalTitleBar } from "../ui/modalStyles";
+import { ManualDateInput } from "../ui/ManualDateInput";
+import { readOnlyClass } from "../ui/formStyles";
+import {
+  alertErrorClass,
+  cancelBtnClass,
+  ModalCloseButton,
+  ModalTitleBar,
+} from "../ui/modalStyles";
 import {
   inputClass,
   modalCardClass,
@@ -20,6 +27,8 @@ type InviteMemberModalProps = {
   isOpen: boolean;
   projects: Project[];
   defaultProjectId?: string;
+  /** When true (e.g. opened from project detail), project cannot be changed. */
+  lockProject?: boolean;
   onClose: () => void;
   onSubmit: (payload: InvitationFormPayload) => Promise<void>;
 };
@@ -28,6 +37,7 @@ export function InviteMemberModal({
   isOpen,
   projects,
   defaultProjectId,
+  lockProject = false,
   onClose,
   onSubmit,
 }: InviteMemberModalProps) {
@@ -52,24 +62,52 @@ export function InviteMemberModal({
   const [error, setError] = useState<string | null>(null);
   const [projectOptions, setProjectOptions] = useState<Project[]>(projects);
 
+  const projectLocked = lockProject || Boolean(defaultProjectId && projects.length === 1);
+
   useEffect(() => {
     if (!isOpen) return;
+    if (projectLocked) {
+      setProjectOptions(projects);
+      return;
+    }
     void getAllProjects()
       .then(setProjectOptions)
       .catch(() => setProjectOptions(projects));
-  }, [isOpen, projects]);
+  }, [isOpen, projectLocked, projects]);
 
   useEffect(() => {
     if (!isOpen) return;
     setError(null);
+    const projectId =
+      defaultProjectId ??
+      (projectLocked ? projects[0]?.id : "") ??
+      projectOptions[0]?.id ??
+      "";
     setForm({
-      projectId: defaultProjectId ?? projectOptions[0]?.id ?? "",
+      projectId,
       employeeId: "",
       role: inviteMemberRoleOptions[0]?.apiLabel ?? "",
       message: "",
       expiresAt: "",
     });
-  }, [defaultProjectId, isOpen, inviteMemberRoleOptions, projectOptions]);
+  }, [
+    defaultProjectId,
+    isOpen,
+    inviteMemberRoleOptions,
+    projectLocked,
+    projectOptions,
+    projects,
+  ]);
+
+  const selectedProject = useMemo(
+    () =>
+      projectOptions.find((item) => item.id === form.projectId) ??
+      projects.find((item) => item.id === form.projectId) ??
+      null,
+    [form.projectId, projectOptions, projects],
+  );
+
+  const projectStartDate = selectedProject?.startDate?.slice(0, 10) || "";
 
   if (!isOpen) return null;
 
@@ -77,6 +115,14 @@ export function InviteMemberModal({
     event.preventDefault();
     if (!form.projectId || !form.employeeId || !form.role) {
       setError(t("projects.modals.inviteMember.errors.required"));
+      return;
+    }
+    if (
+      form.expiresAt &&
+      projectStartDate &&
+      form.expiresAt < projectStartDate
+    ) {
+      setError(t("projects.modals.inviteMember.errors.dateBeforeProjectStart"));
       return;
     }
 
@@ -121,25 +167,40 @@ export function InviteMemberModal({
           onSubmit={(event) => void handleSubmit(event)}
           className="space-y-4"
         >
-          <FormField
-            label={t("projects.modals.inviteMember.fields.project")}
-            required
-            hint={t("projects.modals.inviteMember.fields.projectHint")}
-          >
-            <SearchableSelect
-              value={form.projectId}
-              onChange={(value) =>
-                setForm((prev) => ({ ...prev, projectId: value }))
-              }
-              options={mapNamedOptions(
-                projectOptions.map((project) => ({
-                  id: project.id,
-                  name: project.name,
-                })),
-              )}
-              placeholder={t("projects.modals.inviteMember.placeholders.project")}
-            />
-          </FormField>
+          {projectLocked ? (
+            <div>
+              <label className="mb-2 block text-sm text-hr-text">
+                {t("projects.modals.inviteMember.fields.project")}
+              </label>
+              <input
+                value={selectedProject?.name || form.projectId}
+                disabled
+                className={`${readOnlyClass} text-hr-muted`}
+              />
+            </div>
+          ) : (
+            <FormField
+              label={t("projects.modals.inviteMember.fields.project")}
+              required
+              hint={t("projects.modals.inviteMember.fields.projectHint")}
+            >
+              <SearchableSelect
+                value={form.projectId}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, projectId: value }))
+                }
+                options={mapNamedOptions(
+                  projectOptions.map((project) => ({
+                    id: project.id,
+                    name: project.name,
+                  })),
+                )}
+                placeholder={t(
+                  "projects.modals.inviteMember.placeholders.project",
+                )}
+              />
+            </FormField>
+          )}
 
           <FormField
             label={t("projects.modals.inviteMember.fields.employee")}
@@ -154,7 +215,9 @@ export function InviteMemberModal({
               options={mapNamedOptions(employees, {
                 description: (employee) => employee.id,
               })}
-              placeholder={t("projects.modals.inviteMember.placeholders.employee")}
+              placeholder={t(
+                "projects.modals.inviteMember.placeholders.employee",
+              )}
               loading={loading}
             />
           </FormField>
@@ -190,29 +253,33 @@ export function InviteMemberModal({
                 setForm((prev) => ({ ...prev, message: event.target.value }))
               }
               className={textareaClass}
-              placeholder={t("projects.modals.inviteMember.placeholders.message")}
+              placeholder={t(
+                "projects.modals.inviteMember.placeholders.message",
+              )}
             />
           </div>
 
           <div>
             <label className="mb-2 block text-sm text-hr-text">
-              {t("projects.detail.fields.endDate")}
+              {t("projects.modals.inviteMember.fields.expiresAt")}
             </label>
-            <input
-              type="date"
+            <ManualDateInput
               value={form.expiresAt}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, expiresAt: event.target.value }))
+              min={projectStartDate || undefined}
+              onChange={(expiresAt) =>
+                setForm((prev) => ({ ...prev, expiresAt }))
               }
-              className={inputClass}
             />
+            {projectStartDate ? (
+              <p className="mt-1 text-xs text-hr-muted">
+                {t("projects.modals.inviteMember.fields.expiresAtHint", {
+                  date: projectStartDate,
+                })}
+              </p>
+            ) : null}
           </div>
 
-          {error && (
-            <p className={alertErrorClass}>
-              {error}
-            </p>
-          )}
+          {error && <p className={alertErrorClass}>{error}</p>}
 
           <div className="flex flex-wrap justify-center gap-3 pt-2">
             <button

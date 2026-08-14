@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   Background,
   Controls,
@@ -27,9 +27,17 @@ import {
   sectionDependencyEdges,
   type SectionFlowGate,
 } from "../../services/projects/sectionDependencies";
+import {
+  getProjectSectionEdgeLabels,
+  setSectionEdgeLabel,
+} from "../../services/projects/sectionEdgeLabelsStorage";
 import type { Project, ProjectSection } from "../../types/project";
+import {
+  fanInBow,
+  flowDependencyEdgeTypes,
+} from "./FlowDependencyEdge";
 
-export type SectionFlowFilter = "all" | "ready" | "blocked" | "completed";
+export type SectionFlowFilter = "all";
 
 type SectionNodeData = {
   section: ProjectSection;
@@ -53,10 +61,15 @@ type SectionDependencyFlowProps = {
   onDeleteSection: (section: ProjectSection) => void;
 };
 
+type EditingEdge = {
+  id: string;
+  source: string;
+  target: string;
+  label: string;
+};
+
 const gateStyles: Record<SectionFlowGate, string> = {
-  completed: "border-emerald-500/60 bg-emerald-500/10",
   ready: "border-sky-500/60 bg-sky-500/10",
-  blocked: "border-amber-500/60 bg-amber-500/10",
 };
 
 const edgeStyle = {
@@ -180,6 +193,8 @@ const nodeTypes = {
   terminalNode: TerminalFlowNode,
 };
 
+const edgeTypes = flowDependencyEdgeTypes;
+
 function SectionDependencyFlowCanvas({
   project,
   filter,
@@ -188,24 +203,33 @@ function SectionDependencyFlowCanvas({
   onDeleteSection,
 }: SectionDependencyFlowProps) {
   const { t } = useTranslation();
+  const [labelsRevision, setLabelsRevision] = useState(0);
+  const [editingEdge, setEditingEdge] = useState<EditingEdge | null>(null);
+  const [draftLabel, setDraftLabel] = useState("");
+
+  const edgeLabels = useMemo(
+    () => getProjectSectionEdgeLabels(project.id),
+    [labelsRevision, project.id],
+  );
 
   const filteredSections = useMemo(() => {
     const q = search.trim().toLowerCase();
     const byId = new Map(project.sections.map((section) => [section.id, section]));
 
     return project.sections.filter((section) => {
-      const gate = getSectionFlowGate(section, byId, project.tasks);
-      if (filter === "ready" && gate !== "ready") return false;
-      if (filter === "blocked" && gate !== "blocked") return false;
-      if (filter === "completed" && gate !== "completed") return false;
       if (!q) return true;
       return section.name.toLowerCase().includes(q);
     });
-  }, [filter, project.sections, project.tasks, search]);
+  }, [project.sections, search]);
 
   const visibleIds = useMemo(
     () => new Set(filteredSections.map((section) => section.id)),
     [filteredSections],
+  );
+
+  const sectionNameById = useMemo(
+    () => new Map(project.sections.map((section) => [section.id, section.name])),
+    [project.sections],
   );
 
   const initialNodes = useMemo(() => {
@@ -226,8 +250,7 @@ function SectionDependencyFlowCanvas({
           section,
           gate: layout.gate,
           taskCount: sectionTasks.length,
-          completedCount: sectionTasks.filter((task) => task.status === "completed")
-            .length,
+          completedCount: 0,
           onEdit: onEditSection,
           onDelete: onDeleteSection,
         },
@@ -273,19 +296,28 @@ function SectionDependencyFlowCanvas({
   ]);
 
   const initialEdges: Edge[] = useMemo(() => {
+    const emptyHint = t("projects.detail.sectionFlow.edgeLabelEmpty");
     const sectionEdges = sectionDependencyEdges(project.sections)
       .filter(
         (edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target),
       )
-      .map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        animated: false,
-        markerEnd: edgeMarker,
-        style: edgeStyle,
-        interactive: false,
-      }));
+      .map((edge) => {
+        const custom = edgeLabels[edge.id]?.trim() ?? "";
+        return {
+          id: edge.id,
+          type: "flowDep" as const,
+          source: edge.source,
+          target: edge.target,
+          animated: false,
+          markerEnd: edgeMarker,
+          style: edgeStyle,
+          interactionWidth: 28,
+          data: {
+            bow: fanInBow(edge.fanIndex, edge.fanCount, edge.span),
+            label: custom || emptyHint,
+          },
+        };
+      });
 
     const terminalEdges = buildAutoSectionTerminalEdges(
       filteredSections,
@@ -293,16 +325,17 @@ function SectionDependencyFlowCanvas({
       FLOW_END_ID,
     ).map((edge) => ({
       id: edge.id,
+      type: "flowDep" as const,
       source: edge.source,
       target: edge.target,
       animated: false,
       markerEnd: edgeMarker,
-      style: edgeStyle,
-      interactive: false,
+      style: { ...edgeStyle, strokeDasharray: "5 4" },
+      data: { bow: 0, muted: true },
     }));
 
     return [...sectionEdges, ...terminalEdges];
-  }, [filteredSections, project.sections, visibleIds]);
+  }, [edgeLabels, filteredSections, project.sections, t, visibleIds]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -311,6 +344,31 @@ function SectionDependencyFlowCanvas({
     setNodes(initialNodes);
     setEdges(initialEdges);
   }, [initialEdges, initialNodes, setEdges, setNodes]);
+
+  const openEdgeEditor = (edge: Edge) => {
+    if (edge.source === FLOW_START_ID || edge.target === FLOW_END_ID) return;
+    if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) return;
+    setEditingEdge({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      label: edgeLabels[edge.id] ?? "",
+    });
+    setDraftLabel(edgeLabels[edge.id] ?? "");
+  };
+
+  const saveEdgeLabel = () => {
+    if (!editingEdge) return;
+    setSectionEdgeLabel(
+      project.id,
+      editingEdge.source,
+      editingEdge.target,
+      draftLabel,
+    );
+    setEditingEdge(null);
+    setDraftLabel("");
+    setLabelsRevision((value) => value + 1);
+  };
 
   if (!filteredSections.length && project.sections.length > 0) {
     return (
@@ -327,7 +385,9 @@ function SectionDependencyFlowCanvas({
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onEdgeClick={(_, edge) => openEdgeEditor(edge)}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         nodesConnectable={false}
         edgesReconnectable={false}
         elementsSelectable
@@ -350,6 +410,57 @@ function SectionDependencyFlowCanvas({
           nodeColor="rgb(var(--hr-primary))"
         />
       </ReactFlow>
+
+      {editingEdge ? (
+        <div className="absolute inset-x-3 bottom-3 z-20 mx-auto max-w-md rounded-2xl border border-hr-border bg-hr-surface p-4 shadow-xl">
+          <p className="text-sm font-bold text-hr-text">
+            {t("projects.detail.sectionFlow.edgeLabelTitle")}
+          </p>
+          <p className="mt-1 text-xs text-hr-muted">
+            {sectionNameById.get(editingEdge.source) || editingEdge.source}
+            {" → "}
+            {sectionNameById.get(editingEdge.target) || editingEdge.target}
+          </p>
+          <p className="mt-2 text-xs text-hr-muted">
+            {t("projects.detail.sectionFlow.edgeLabelHint")}
+          </p>
+          <input
+            type="text"
+            value={draftLabel}
+            onChange={(event) => setDraftLabel(event.target.value)}
+            maxLength={80}
+            autoFocus
+            placeholder={t("projects.detail.sectionFlow.edgeLabelPlaceholder")}
+            className="mt-3 h-10 w-full rounded-xl border border-hr-border bg-hr-input-bg px-3 text-sm text-hr-text outline-none focus:border-hr-primary"
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                saveEdgeLabel();
+              }
+              if (event.key === "Escape") {
+                setEditingEdge(null);
+              }
+            }}
+          />
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditingEdge(null)}
+              className="h-9 rounded-xl border border-hr-border px-4 text-sm font-medium text-hr-muted transition hover:bg-hr-hover"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={saveEdgeLabel}
+              className="h-9 rounded-xl bg-hr-primary px-4 text-sm font-bold text-white transition hover:bg-hr-primary-hover"
+            >
+              {t("projects.detail.sectionFlow.edgeLabelSave")}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {!project.sections.length ? (
         <p className="pointer-events-none absolute inset-x-0 bottom-3 z-10 px-4 text-center text-xs text-hr-muted">
           {t("projects.detail.sectionFlow.terminalsHint")}
