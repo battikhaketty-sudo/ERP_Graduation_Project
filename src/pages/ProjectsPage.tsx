@@ -86,8 +86,6 @@ export function ProjectsPage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [taskStats, setTaskStats] = useState<TaskStats>({
     total: 0,
-    inProgress: 0,
-    completed: 0,
     late: 0,
   });
   const [stats, setStats] = useState<ProjectStats>(emptyStats);
@@ -209,7 +207,7 @@ export function ProjectsPage() {
   useEffect(() => {
     if (!projectId) {
       setSelectedProject(null);
-      setTaskStats({ total: 0, inProgress: 0, completed: 0, late: 0 });
+      setTaskStats({ total: 0, late: 0 });
       return;
     }
 
@@ -523,7 +521,6 @@ export function ProjectsPage() {
           }}
           onDeleteMember={(member) => void handleDeleteMember(member)}
           invitationsReloadKey={invitationsReloadKey}
-          onRefresh={() => refreshSelectedProject(selectedProject.id)}
         />
 
         <AddProjectModal

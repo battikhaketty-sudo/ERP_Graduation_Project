@@ -72,7 +72,6 @@ export function ProjectFlowPanel({
 }: ProjectFlowPanelProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
-  const [filter] = useState<TaskFlowFilter>("all");
 
   const snapshot = useMemo(
     () => buildProjectProgressSnapshot(project, taskStats),
@@ -139,7 +138,6 @@ export function ProjectFlowPanel({
 
           <TaskDependencyFlow
             project={project}
-            filter={filter}
             search={search}
             onEditTask={(task) => onEditTask?.(task)}
             onDeleteTask={(task) => onDeleteTask?.(task)}

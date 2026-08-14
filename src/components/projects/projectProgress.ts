@@ -4,7 +4,6 @@ import type {
   ProjectTask,
   TaskStats,
 } from "../../types/project";
-import { buildTaskStatsFromTasks } from "../../services/projects/taskStorage";
 
 export type SectionFlowItem = {
   id: string;

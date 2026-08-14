@@ -57,7 +57,6 @@ type ProjectDetailViewProps = {
   onDeleteMember: (member: ProjectMember) => void;
   /** Bump after sending an invite so the invitations tab reloads. */
   invitationsReloadKey?: number;
-  onRefresh?: () => Promise<void> | void;
 };
 
 type DetailTab =
@@ -84,7 +83,6 @@ export function ProjectDetailView({
   onEditMember,
   onDeleteMember,
   invitationsReloadKey = 0,
-  onRefresh,
 }: ProjectDetailViewProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();

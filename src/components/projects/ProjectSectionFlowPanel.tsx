@@ -25,7 +25,6 @@ export function ProjectSectionFlowPanel({
 }: ProjectSectionFlowPanelProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
-  const [filter] = useState<SectionFlowFilter>("all");
 
   return (
     <section className={`mb-5 ${cardSurfaceClass} overflow-hidden`}>
@@ -87,7 +86,6 @@ export function ProjectSectionFlowPanel({
         ) : (
           <SectionDependencyFlow
             project={project}
-            filter={filter}
             search={search}
             onEditSection={onEditSection ?? (() => undefined)}
             onDeleteSection={onDeleteSection ?? (() => undefined)}

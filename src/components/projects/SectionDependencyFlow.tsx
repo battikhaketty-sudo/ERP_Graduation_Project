@@ -20,7 +20,6 @@ import { useTranslation } from "../../i18n";
 import { FLOW_END_ID, FLOW_START_ID } from "../../services/projects/flowAnchors";
 import {
   buildAutoSectionTerminalEdges,
-  getSectionFlowGate,
   getSectionTerminalLayout,
   layoutSectionDependencyGraph,
   SECTION_FLOW_NODE_SIZE,
@@ -55,7 +54,6 @@ type TerminalNodeData = {
 
 type SectionDependencyFlowProps = {
   project: Project;
-  filter: SectionFlowFilter;
   search: string;
   onEditSection: (section: ProjectSection) => void;
   onDeleteSection: (section: ProjectSection) => void;
@@ -197,7 +195,6 @@ const edgeTypes = flowDependencyEdgeTypes;
 
 function SectionDependencyFlowCanvas({
   project,
-  filter,
   search,
   onEditSection,
   onDeleteSection,
@@ -214,7 +211,6 @@ function SectionDependencyFlowCanvas({
 
   const filteredSections = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const byId = new Map(project.sections.map((section) => [section.id, section]));
 
     return project.sections.filter((section) => {
       if (!q) return true;

@@ -15,6 +15,7 @@ import {
 import type {
   Project,
   ProjectMember,
+  ProjectSection,
   ProjectTask,
   TaskFormPayload,
   TaskPriority,

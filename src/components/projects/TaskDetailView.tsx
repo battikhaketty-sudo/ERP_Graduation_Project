@@ -21,7 +21,7 @@ type TaskDetailViewProps = {
 };
 
 const dependencyTypeKey = (type: string) =>
-  `projects.taskDetail.dependencyTypes.${type}` as const;
+  `projects.taskDetail.dependencyTypes.${type}` as any;
 
 export function TaskDetailView({
   project,

@@ -22,7 +22,6 @@ import { FLOW_END_ID, FLOW_START_ID } from "../../services/projects/flowAnchors"
 import {
   buildAutoTerminalEdges,
   dependencyEdges,
-  getTaskGate,
   getTerminalLayout,
   layoutTaskDependencyGraph,
   TASK_FLOW_NODE_SIZE,
@@ -51,7 +50,6 @@ type TerminalNodeData = {
 
 type TaskDependencyFlowProps = {
   project: Project;
-  filter: TaskFlowFilter;
   search: string;
   onEditTask: (task: ProjectTask) => void;
   onDeleteTask: (task: ProjectTask) => void;
@@ -184,7 +182,6 @@ const edgeTypes = flowDependencyEdgeTypes;
 
 function TaskDependencyFlowCanvas({
   project,
-  filter,
   search,
   onEditTask,
   onDeleteTask,
@@ -199,7 +196,6 @@ function TaskDependencyFlowCanvas({
 
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const byId = new Map(project.tasks.map((task) => [task.id, task]));
 
     return project.tasks.filter((task) => {
       if (!q) return true;
