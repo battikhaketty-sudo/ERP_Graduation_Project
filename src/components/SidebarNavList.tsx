@@ -8,7 +8,7 @@ type SidebarNavListProps = {
 
 const navLinkClass = (isActive: boolean) =>
   [
-    "relative flex h-12 w-full items-center gap-2.5 rounded-e-[35px] py-[13px] pe-4 ps-6 text-sm font-medium transition-colors",
+    "relative flex h-12 w-full items-center gap-2.5 rounded-e-[35px] py-[13px] pe-4 ps-6 text-[13px] font-medium leading-none transition-colors",
     isActive
       ? "bg-hr-nav-active text-hr-primary"
       : "text-hr-muted hover:bg-hr-hover hover:text-hr-text",
@@ -29,10 +29,10 @@ export function SidebarNavList({ onNavigate }: SidebarNavListProps) {
               key={item.id}
               type="button"
               disabled
-              className="relative flex h-12 w-full cursor-not-allowed items-center gap-2.5 rounded-e-[35px] py-[13px] pe-4 ps-6 text-sm font-medium text-hr-muted opacity-70"
+              className="relative flex h-12 w-full cursor-not-allowed items-center gap-2.5 rounded-e-[35px] py-[13px] pe-4 ps-6 text-[13px] font-medium leading-none text-hr-muted opacity-70"
             >
               <Icon className="size-[18px] shrink-0" strokeWidth={1.75} />
-              <span>{label}</span>
+              <span className="whitespace-nowrap">{label}</span>
             </button>
           );
         }
@@ -57,7 +57,7 @@ export function SidebarNavList({ onNavigate }: SidebarNavListProps) {
                   className={`size-[18px] shrink-0 ${isActive ? "text-hr-primary" : "text-hr-muted"}`}
                   strokeWidth={1.75}
                 />
-                <span>{label}</span>
+                <span className="whitespace-nowrap">{label}</span>
               </>
             )}
           </NavLink>

@@ -35,7 +35,7 @@ export function MobileNav({ onLogout }: MobileNavProps) {
       )}
 
       <aside
-        className={`theme-transition fixed top-0 z-40 flex h-screen w-[240px] transform flex-col border-hr-border bg-hr-surface transition-transform duration-300 md:hidden ${
+        className={`theme-transition fixed top-0 z-40 flex h-screen min-w-[240px] w-max max-w-[26rem] transform flex-col border-hr-border bg-hr-surface transition-transform duration-300 md:hidden ${
           dir === "rtl"
             ? `right-0 border-s ${isOpen ? "translate-x-0" : "translate-x-full"}`
             : `left-0 border-e ${isOpen ? "translate-x-0" : "-translate-x-full"}`

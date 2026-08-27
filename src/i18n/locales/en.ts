@@ -1239,7 +1239,7 @@ export const en = {
     },
   },
   access: {
-    title: "Identity & Access Management (IAM)",
+    title: "Identity & Access Management",
     statsTitle: "Project statistics",
     stats: {
       membersCount: "Members",
@@ -1408,7 +1408,7 @@ export const en = {
     projects: "Projects",
     employees: "Employees",
     departments: "Departments",
-    access: "Identity & Access Management (IAM)",
+    access: "Identity & Access Management",
     hr: "HR",
     learning: "Learning",
     memo: "Memos",
@@ -1439,7 +1439,7 @@ export const en = {
     navEmployees: "Employees",
     navDepartments: "Departments",
     navProjects: "Projects",
-    navAccess: "Identity & Access Management (IAM)",
+    navAccess: "Identity & Access Management",
     navHr: "HR — Attendance & schedules",
   },
   pages: {
@@ -1470,7 +1470,7 @@ export const en = {
       title: "HR",
     },
     access: {
-      title: "Identity & Access Management (IAM)",
+      title: "Identity & Access Management",
     },
   },
 } as const;

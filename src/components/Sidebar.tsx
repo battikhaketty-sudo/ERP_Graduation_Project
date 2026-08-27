@@ -10,7 +10,7 @@ export function Sidebar({ onLogout }: SidebarProps) {
   const { t } = useTranslation();
 
   return (
-    <aside className="theme-transition hidden h-full w-[200px] shrink-0 flex-col border-s border-hr-border bg-hr-surface md:flex">
+    <aside className="theme-transition hidden h-full min-w-[200px] w-max max-w-[26rem] shrink-0 flex-col border-s border-hr-border bg-hr-surface md:flex">
       <div className="flex flex-col items-center gap-2 px-4 pb-6 pt-8">
         <div
           className="flex size-14 items-center justify-center rounded-full bg-gradient-to-br from-[#EB5757] via-hr-surface to-[#2F80ED] p-[3px]"
