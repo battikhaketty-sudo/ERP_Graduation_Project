@@ -69,11 +69,39 @@ export const wouldCreateSectionCycle = (
   return false;
 };
 
-/** Sections are planning stages only — no task-completion gate. */
+/** Sections marked as final treat their tasks as completed. */
+export const isFinalProjectSection = (section?: ProjectSection | null) =>
+  Boolean(section?.isFinalSection);
+
+/** A task is completed when its section is a final section. */
+export const isTaskCompletedByFinalSection = (
+  task: Pick<ProjectTask, "sectionId">,
+  sections: ProjectSection[],
+) => {
+  const section = sections.find((item) => item.id === task.sectionId);
+  return isFinalProjectSection(section);
+};
+
+/** Keep incomplete tasks only — used for predecessor pickers. */
+export const filterIncompleteTasksForPredecessors = (
+  tasks: ProjectTask[],
+  sections: ProjectSection[],
+  options?: { excludeTaskId?: string },
+) =>
+  tasks.filter((task) => {
+    if (options?.excludeTaskId && task.id === options.excludeTaskId) return false;
+    return !isTaskCompletedByFinalSection(task, sections);
+  });
+
+/** Sections are complete when marked as final (tasks inside are done). */
 export const isSectionWorkComplete = (
-  _sectionId: string,
+  sectionId: string,
   _tasks: ProjectTask[],
-): boolean => false;
+  sections: ProjectSection[] = [],
+): boolean => {
+  const section = sections.find((item) => item.id === sectionId);
+  return isFinalProjectSection(section);
+};
 
 export const areSectionDependenciesSatisfied = (
   _section: Pick<ProjectSection, "dependsOnSectionIds">,

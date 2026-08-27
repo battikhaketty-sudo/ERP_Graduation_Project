@@ -8,7 +8,6 @@ import { DepartmentsPage } from "../pages/DepartmentsPage";
 import { EmployeesPage } from "../pages/EmployeesPage";
 import { HrPage } from "../pages/HrPage";
 import { LoginPage } from "../pages/LoginPage";
-import { NotificationsPage } from "../pages/NotificationsPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { bindAppRouter } from "./navigation";
 
@@ -33,7 +32,6 @@ export const router = createBrowserRouter([
           { path: ROUTES.departments, element: <DepartmentsPage /> },
           { path: ROUTES.access, element: <AccessManagementPage /> },
           { path: ROUTES.hr, element: <HrPage /> },
-          { path: ROUTES.notifications, element: <NotificationsPage /> },
         ],
       },
       { path: "*", element: <Navigate to={ROUTES.dashboard} replace /> },

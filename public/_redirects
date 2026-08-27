@@ -1,5 +1,8 @@
-# Proxy API requests to the backend (avoids CORS in production)
-/api/*  https://mag-erp-system.runasp.net/api/:splat  200!
+# Proxy API to backend (http — backend TLS is unreliable)
+/api/*  http://mag-erp-system.runasp.net/api/:splat  200!
 
-# SPA fallback — all routes serve index.html for React Router
-/*      /index.html  200
+# Proxy uploaded media (avatars, ID cards) — MUST be before SPA fallback
+/media/*  http://mag-erp-system.runasp.net/:splat  200!
+
+# SPA fallback — client-side routes
+/*    /index.html   200

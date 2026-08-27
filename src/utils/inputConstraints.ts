@@ -51,6 +51,7 @@ export const isValidDigits = (value: string, minLength = 1, maxLength = 20) => {
 export const sanitizeEmployeeField = (field: string, value: string) => {
   switch (field) {
     case "phone":
+    case "workPhone":
       return sanitizePhoneInput(value);
     case "salary":
     case "wage":
@@ -60,9 +61,6 @@ export const sanitizeEmployeeField = (field: string, value: string) => {
     case "name":
     case "fullName":
     case "nationality":
-    case "fieldOfStudy":
-    case "maritalStatus":
-    case "degreeLevel":
       return sanitizeLettersAndSpaces(value);
     case "email":
       return sanitizeEmailInput(value);

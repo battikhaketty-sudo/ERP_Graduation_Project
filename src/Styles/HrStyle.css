@@ -16,30 +16,6 @@ body {
   position: relative;
 }
 
-/* TOP LEFT (جرس + صورة) */
-.top-left-bell {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 12px;
-  z-index: 2;
-  
-}
-
-
-.bell-emoji {
-  font-size: 22px;
-}
-
-.bell-small-img {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
-}
-
 /* RIGHT MARGIN (قسم hr) */
 .hr-right-margin {
   position: fixed;
@@ -199,17 +175,6 @@ body {
 .user img {
   width: 38px;
   border-radius: 50%;
-}
-
-.notif {
-  position: absolute;
-  top: -5px;
-  left: -5px;
-  background: red;
-  color: white;
-  border-radius: 50%;
-  font-size: 11px;
-  padding: 2px 6px;
 }
 
 /* STATS */

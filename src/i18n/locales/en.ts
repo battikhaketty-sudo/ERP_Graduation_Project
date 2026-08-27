@@ -1,6 +1,6 @@
 export const en = {
   common: {
-    appName: "HR System",
+    appName: "ERP System",
     appSubtitle: "Human Resources Management",
     search: "Global search",
     searchPlaceholder: "Search…",
@@ -218,8 +218,7 @@ export const en = {
         birthDate: "Date of birth",
         gender: "Gender",
         email: "Email",
-        emailHint:
-          "Sent with the update — if the server does not support email changes, a notice appears after save",
+        emailHint: "Email cannot be changed after the employee is created",
         phone: "Phone number",
         nationality: "Nationality",
         idNumber: "ID number",
@@ -295,6 +294,8 @@ export const en = {
         birthDate: "Date of birth",
         email: "Email",
         phone: "Phone number",
+        workPhone: "Work mobile number",
+        workPhoneHint: "Optional — if empty, personal phone is used",
         gender: "Gender",
         nationality: "Nationality",
         password: "Password",
@@ -599,6 +600,7 @@ export const en = {
         tasksPath: "Work path",
         graphHint:
           "Display only. Add a task and pick what comes before it; the path draws automatically.",
+        loadError: "Failed to load the task path",
         graphStart: "Start",
         graphEnd: "End",
         terminalsHint:
@@ -646,12 +648,13 @@ export const en = {
       sectionFlow: {
         title: "Section workflow",
         subtitle:
-          "Project stages and paths — set previous sections when adding or editing a section",
+          "Project stages — add or edit sections from the form (name, order, final section)",
         graphHint:
-          "Display-only section path. Write an arrow label in the section form or by clicking the arrow.",
+          "Section path view. Server-backed fields only: name, display order, and final section.",
         graphStart: "Start",
         graphEnd: "End",
-        terminalsHint: "Add a section and pick its previous stages to build the workflow",
+        finalSectionBadge: "Final section",
+        terminalsHint: "Add sections to build project stages",
         edgeLabelTitle: "Arrow label",
         edgeLabelHint: "A short phrase that explains the transition between stages",
         edgeLabelPlaceholder: "e.g. After client approval",
@@ -695,6 +698,7 @@ export const en = {
       addSection: "Add new section",
       addTask: "Add new task",
       unassigned: "Unassigned",
+      loadingMore: "Loading more…",
     },
     members: {
       addMember: "Invite new member",
@@ -788,6 +792,9 @@ export const en = {
         saving: "Saving…",
         dependsOnEmpty: "No other sections yet — add sections first, then link the path",
         fields: {
+          isFinalSection: "Final section (completion)",
+          isFinalSectionHint:
+            "Tasks in this section are treated as completed. A project may have more than one final section. Completed tasks are hidden from the prerequisites list.",
           dependsOn: "Previous sections",
           dependsOnHint:
             "Choose sections that should finish before this one — and write an arrow label to clarify the path",
@@ -829,9 +836,10 @@ export const en = {
           assignees: "Assignees",
           dependsOn: "Prerequisite tasks (must finish first)",
           dependsOnHint:
-            "Select tasks that must run before this one — the chart shows that automatically",
+            "Only incomplete tasks are listed. Tasks in a final section are treated as completed and hidden here",
         },
-        dependsOnEmpty: "No other tasks yet — add tasks first, then set prerequisites",
+        dependsOnEmpty:
+          "No prerequisite tasks available — either there are no other tasks, or the others are completed (in a final section)",
         placeholders: {
           title: "e.g. Design the main interface",
           description: "Short task description (optional)",
@@ -1230,26 +1238,8 @@ export const en = {
       },
     },
   },
-  notifications: {
-    title: "Notifications",
-    countLabel: "notification",
-    searchPlaceholder: "Search notifications…",
-    empty: "No notifications match your search",
-    selectItem: "Select {{title}}",
-    selectAllPage: "Select all on this page",
-    selectedCount: "{{count}} selected",
-    markRead: "Mark as read",
-    deleteSelected: "Delete selected",
-    clearSelection: "Clear selection",
-    unreadBadge: "New",
-    confirmDelete: "Delete {{count}} notification(s)?",
-    toasts: {
-      markedRead: "Marked {{count}} notification(s) as read",
-      deleted: "Deleted {{count}} notification(s)",
-    },
-  },
   access: {
-    title: "Identity & Access Management",
+    title: "Identity & Access Management (IAM)",
     statsTitle: "Project statistics",
     stats: {
       membersCount: "Members",
@@ -1281,6 +1271,7 @@ export const en = {
       editRolesTitle: "Edit user roles",
       rolesLabel: "Assigned roles",
       fixedRole: "Fixed",
+      fixedRoleHint: "This role is fixed for this user — it cannot be unchecked or removed",
       saveRoles: "Save roles",
       deleteConfirm: "Delete user «{{email}}»?",
       columns: {
@@ -1318,8 +1309,14 @@ export const en = {
         description: "Description",
         level: "Level",
         isDefault: "Default?",
+        isFixed: "Fixed",
         permissionsCount: "Permissions",
       },
+      fixedPermissionHint:
+        "This permission is fixed on the role — it cannot be checked or unchecked",
+      fixedHint:
+        "System fixed role — only the description can be edited (no delete, and name/level/permissions stay locked)",
+      fixedDescriptionOnly: "Only the description can be edited for this fixed role",
       errors: {
         loadList: "Failed to load roles",
         load: "Failed to load role",
@@ -1336,12 +1333,13 @@ export const en = {
       searchPlaceholder: "Search permissions…",
       empty: "No permissions found",
       deleteConfirm: "Delete permission «{{name}}»?",
-      fixedHint: "System permission — only the description can be edited",
+      fixedHint: "System permission — only description and resource type can be edited",
       columns: {
         select: "Select",
         name: "Name",
         description: "Description",
         resourceType: "Resource type",
+        isFixed: "Fixed",
       },
       fields: {
         number: "Permission ID",
@@ -1357,8 +1355,6 @@ export const en = {
     },
   },
   header: {
-    notifications: "Notifications",
-    unreadNotifications: "{{count}} unread notifications",
     profileMenu: "Profile",
     online: "Online",
   },
@@ -1387,7 +1383,6 @@ export const en = {
       invitations: "My invitations",
       attendance: "Attendance",
       departments: "Departments",
-      notifications: "Notifications",
     },
     progress: {
       title: "Project progress",
@@ -1413,11 +1408,10 @@ export const en = {
     projects: "Projects",
     employees: "Employees",
     departments: "Departments",
-    access: "Permissions",
+    access: "Identity & Access Management (IAM)",
     hr: "HR",
     learning: "Learning",
     memo: "Memos",
-    notifications: "Notifications",
   },
   auth: {
     login: "Sign in",
@@ -1445,7 +1439,7 @@ export const en = {
     navEmployees: "Employees",
     navDepartments: "Departments",
     navProjects: "Projects",
-    navAccess: "Permissions",
+    navAccess: "Identity & Access Management (IAM)",
     navHr: "HR — Attendance & schedules",
   },
   pages: {
@@ -1476,11 +1470,7 @@ export const en = {
       title: "HR",
     },
     access: {
-      title: "Identity & Access Management",
-    },
-    notifications: {
-      title: "Notifications",
-      searchPlaceholder: "Search notifications…",
+      title: "Identity & Access Management (IAM)",
     },
   },
 } as const;

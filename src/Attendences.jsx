@@ -145,11 +145,6 @@ const Attendences = () => {
 
   return (
     <div className="hr-page">
-      <div className="top-left-bell">
-        <span className="bell-emoji">🔔</span>
-        <img className="bell-small-img" src="public/assets/man.png" alt="bell-img" />
-      </div>
-
       <div className="hr-right-margin">
         <div className="hr-right-nav">
           <img src="public/assets/logo.png" alt="logo" />
@@ -160,7 +155,6 @@ const Attendences = () => {
            <button className="hr-right-nav-item">🏢 <span>قسم HR</span></button>
           <button className="hr-right-nav-item">📚 <span>Learning</span></button>
           <button className="hr-right-nav-item">🗒️ <span>Memo</span></button>
-          <button className="hr-right-nav-item">🔔 <span>Notifications</span></button>
         </div>
       </div>
 

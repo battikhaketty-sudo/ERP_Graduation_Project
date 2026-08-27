@@ -1,15 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { useTranslation } from "../../i18n";
-import {
-  sanitizeSectionDependsOn,
-  wouldCreateSectionCycle,
-} from "../../services/projects/sectionDependencies";
-import {
-  getSectionEdgeLabel,
-  sectionEdgeId,
-} from "../../services/projects/sectionEdgeLabelsStorage";
 import type { ProjectSection, SectionFormPayload } from "../../types/project";
 import { sanitizeIntegerInput } from "../../utils/inputConstraints";
 import {
@@ -33,16 +25,17 @@ type AddSectionModalProps = {
 export function AddSectionModal({
   isOpen,
   section,
-  sections = [],
   nextDisplayOrder = 1,
   onClose,
   onSubmit,
 }: AddSectionModalProps) {
   const { t } = useTranslation();
   const { dir } = usePreferences();
-  const [form, setForm] = useState({ name: "", displayOrder: "1" });
-  const [dependsOnSectionIds, setDependsOnSectionIds] = useState<string[]>([]);
-  const [edgeLabels, setEdgeLabels] = useState<Record<string, string>>({});
+  const [form, setForm] = useState({
+    name: "",
+    displayOrder: "1",
+    isFinalSection: false,
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isEditing = Boolean(section);
@@ -53,75 +46,18 @@ export function AddSectionModal({
     setForm({
       name: section?.name ?? "",
       displayOrder: String(section?.displayOrder ?? nextDisplayOrder),
+      isFinalSection: Boolean(section?.isFinalSection),
     });
-    const deps = [...(section?.dependsOnSectionIds ?? [])];
-    setDependsOnSectionIds(deps);
-    const labels: Record<string, string> = {};
-    if (section) {
-      for (const depId of deps) {
-        labels[depId] = getSectionEdgeLabel(section.projectId, depId, section.id);
-      }
-    }
-    setEdgeLabels(labels);
     setError(null);
   }, [isOpen, nextDisplayOrder, section]);
 
-  const dependencyOptions = useMemo(() => {
-    const sectionId = section?.id;
-    return sections.filter((item) => {
-      if (sectionId && item.id === sectionId) return false;
-      if (!sectionId) return true;
-      return !wouldCreateSectionCycle(sections, sectionId, item.id);
-    });
-  }, [section?.id, sections]);
-
   if (!isOpen) return null;
-
-  const toggleDependency = (id: string) => {
-    setDependsOnSectionIds((prev) => {
-      if (prev.includes(id)) {
-        setEdgeLabels((labels) => {
-          const next = { ...labels };
-          delete next[id];
-          return next;
-        });
-        return prev.filter((item) => item !== id);
-      }
-      return [...prev, id];
-    });
-  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.name.trim()) {
       setError(t("projects.modals.addSection.errors.nameRequired"));
       return;
-    }
-
-    const sectionId = section?.id ?? "__new__";
-    const sectionsForSanitize = section
-      ? sections
-      : [
-          ...sections,
-          {
-            id: sectionId,
-            projectId: sections[0]?.projectId ?? "",
-            name: form.name.trim(),
-            displayOrder: nextDisplayOrder,
-            dependsOnSectionIds: [],
-          },
-        ];
-
-    const cleanedDeps = sanitizeSectionDependsOn({
-      sectionId,
-      dependsOnSectionIds,
-      sections: sectionsForSanitize,
-    });
-
-    const dependencyEdgeLabels: Record<string, string> = {};
-    for (const depId of cleanedDeps) {
-      const label = (edgeLabels[depId] ?? "").trim();
-      if (label) dependencyEdgeLabels[depId] = label;
     }
 
     setSaving(true);
@@ -131,8 +67,7 @@ export function AddSectionModal({
         displayOrder: isEditing
           ? Number(form.displayOrder) || 1
           : nextDisplayOrder,
-        dependsOnSectionIds: cleanedDeps,
-        dependencyEdgeLabels,
+        isFinalSection: form.isFinalSection,
       });
       onClose();
     } catch (err) {
@@ -207,68 +142,27 @@ export function AddSectionModal({
             </div>
           ) : null}
 
-          <div>
-            <label className="mb-2 block text-sm font-bold text-hr-text">
-              {t("projects.modals.addSection.fields.dependsOn")}
-            </label>
-            <p className="mb-2 text-xs text-hr-muted">
-              {t("projects.modals.addSection.fields.dependsOnHint")}
-            </p>
-            <div className="max-h-56 overflow-y-auto rounded-xl border border-hr-border">
-              {dependencyOptions.length ? (
-                dependencyOptions.map((item) => {
-                  const checked = dependsOnSectionIds.includes(item.id);
-                  return (
-                    <div
-                      key={item.id}
-                      className="border-b border-hr-border px-4 py-2.5 last:border-b-0"
-                    >
-                      <label className="flex cursor-pointer items-center gap-3 hover:opacity-90">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleDependency(item.id)}
-                          className="size-4 rounded border-hr-border"
-                        />
-                        <span className="text-sm text-hr-text">{item.name}</span>
-                      </label>
-                      {checked ? (
-                        <div className="ms-7 mt-2">
-                          <label className="mb-1 block text-[11px] font-medium text-hr-muted">
-                            {t("projects.modals.addSection.fields.edgeLabel")}
-                          </label>
-                          <input
-                            type="text"
-                            value={edgeLabels[item.id] ?? ""}
-                            onChange={(event) =>
-                              setEdgeLabels((prev) => ({
-                                ...prev,
-                                [item.id]: event.target.value,
-                              }))
-                            }
-                            maxLength={80}
-                            placeholder={t(
-                              "projects.modals.addSection.fields.edgeLabelPlaceholder",
-                            )}
-                            className="h-9 w-full rounded-lg border border-hr-border bg-hr-input-bg px-3 text-sm text-hr-text outline-none focus:border-hr-primary"
-                            aria-label={
-                              section
-                                ? `${t("projects.modals.addSection.fields.edgeLabel")} ${sectionEdgeId(item.id, section.id)}`
-                                : t("projects.modals.addSection.fields.edgeLabel")
-                            }
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="px-4 py-6 text-center text-sm text-hr-muted">
-                  {t("projects.modals.addSection.dependsOnEmpty")}
-                </p>
-              )}
-            </div>
-          </div>
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-hr-border bg-hr-table-alt/50 px-4 py-3">
+            <input
+              type="checkbox"
+              checked={form.isFinalSection}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  isFinalSection: event.target.checked,
+                }))
+              }
+              className="mt-0.5 size-4 rounded border-hr-border"
+            />
+            <span>
+              <span className="block text-sm font-bold text-hr-text">
+                {t("projects.modals.addSection.fields.isFinalSection")}
+              </span>
+              <span className="mt-1 block text-xs text-hr-muted">
+                {t("projects.modals.addSection.fields.isFinalSectionHint")}
+              </span>
+            </span>
+          </label>
 
           {error && <p className={alertErrorClass}>{error}</p>}
 

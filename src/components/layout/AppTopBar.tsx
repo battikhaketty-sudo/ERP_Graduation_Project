@@ -1,7 +1,6 @@
 import { Search } from "lucide-react";
 import { MobileNav } from "../MobileNav";
 import { PreferencesControls } from "../preferences/PreferencesControls";
-import { NotificationsButton } from "./NotificationsButton";
 import { UserProfileButton } from "./UserProfileButton";
 import { useCommandBar } from "../../context/CommandBarContext";
 import { useTranslation } from "../../i18n";
@@ -35,12 +34,11 @@ export function AppTopBar({ user, onLogout }: AppTopBarProps) {
       <PreferencesControls compact className="hidden sm:flex" />
 
       <div
-        className="pointer-events-none ms-auto w-[5.5rem] shrink-0 sm:w-[6rem]"
+        className="pointer-events-none ms-auto w-12 shrink-0 sm:w-14"
         aria-hidden
       />
 
       <div className="absolute inset-y-0 end-0 flex items-center gap-4 px-4 sm:px-6">
-        <NotificationsButton />
         <UserProfileButton user={user} />
       </div>
     </header>

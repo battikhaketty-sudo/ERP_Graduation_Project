@@ -181,6 +181,7 @@ export function EmployeesPage() {
         employee.name.toLowerCase().includes(query) ||
         employee.email.toLowerCase().includes(query) ||
         employee.phone.includes(query) ||
+        (employee.workPhone || "").includes(query) ||
         employee.address.toLowerCase().includes(query),
     );
   }, [employees, search]);
@@ -198,7 +199,7 @@ export function EmployeesPage() {
       filteredEmployees.map((employee) => [
         employee.name,
         employee.email,
-        employee.phone,
+        employee.workPhone || employee.phone,
         employee.department ?? employee.address,
         employee.role,
       ]),

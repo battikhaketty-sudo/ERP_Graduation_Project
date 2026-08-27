@@ -9,6 +9,7 @@ import type {
   ProjectStats,
   ProjectTask,
   ProjectTaskDetail,
+  ProjectTaskGraphEdge,
   SectionFormPayload,
   TaskFormPayload,
   TaskStats,
@@ -24,19 +25,11 @@ import {
 import { sortNewestFirst } from "../../utils/listOrder";
 import { fetchAllPages } from "../../utils/fetchAllPages";
 import {
-  getCurrentActorIds,
-  getCurrentUserEmail,
-  getCurrentUserName,
-} from "../../utils/accessToken";
-import { getEmployees } from "../employees";
-import { REFERENCE_DATA_LIMIT } from "../../constants/defaults";
-import {
   projectStatusToApi,
   roleIdFromLabel,
   sortTasksByPriority,
   taskDependencyTypeToApi,
   taskPriorityToApi,
-  ProjectMemberRoleApi,
 } from "./project.enums";
 import {
   filterProjectSections,
@@ -45,6 +38,8 @@ import {
   normalizeProjectDetail,
   normalizeProjectListItem,
   normalizeSection,
+  mergeProjectTaskGraph,
+  normalizeProjectTaskGraphEdge,
   normalizeTaskDetail,
   normalizeTaskListItem,
 } from "./project.mapper";
@@ -111,11 +106,64 @@ const toIsoDate = (value: string) => {
   return `${value}T00:00:00.000Z`;
 };
 
+const pickDefined = <T,>(next: T | undefined, previous: T | undefined, fallback: T): T =>
+  next !== undefined ? next : previous !== undefined ? previous : fallback;
+
+const toSectionCommandBody = (
+  payload: Partial<SectionFormPayload>,
+  current?: Pick<ProjectSection, "name" | "displayOrder" | "isFinalSection"> | null,
+) => ({
+  name: pickDefined(payload.name, current?.name, "").trim().slice(0, 200),
+  displayOrder: pickDefined(payload.displayOrder, current?.displayOrder, 1),
+  isFinalSection: Boolean(
+    pickDefined(payload.isFinalSection, current?.isFinalSection, false),
+  ),
+});
+
+const toProjectCommandBody = (
+  payload: Partial<ProjectFormPayload>,
+  current?: Pick<
+    Project,
+    "managerId" | "name" | "description" | "startDate" | "endDate" | "status"
+  > | null,
+) => ({
+  managerId: pickDefined(payload.managerId, current?.managerId, ""),
+  name: pickDefined(payload.name, current?.name, "").trim(),
+  description: pickDefined(payload.description, current?.description, "").trim(),
+  startDate: toIsoDate(pickDefined(payload.startDate, current?.startDate, "")),
+  endDate: toIsoDate(pickDefined(payload.endDate, current?.endDate, "")),
+  status: projectStatusToApi(
+    pickDefined(payload.status, current?.status, "not_started"),
+  ),
+});
+
+const mergeTaskFormPayload = (
+  payload: Partial<TaskFormPayload>,
+  current?: ProjectTask | null,
+): TaskFormPayload => ({
+  title: pickDefined(payload.title, current?.title, ""),
+  description: pickDefined(payload.description, current?.description, ""),
+  sectionId: pickDefined(payload.sectionId, current?.sectionId, ""),
+  expectedHours: pickDefined(payload.expectedHours, current?.expectedHours, 0),
+  startDate: pickDefined(payload.startDate, current?.startDate, ""),
+  dueDate: pickDefined(payload.dueDate, current?.dueDate, ""),
+  priority: pickDefined(payload.priority, current?.priority, "medium"),
+  assigneeIds: pickDefined(payload.assigneeIds, current?.assigneeIds, []),
+  assigneeNames: pickDefined(payload.assigneeNames, current?.assigneeNames, []),
+  dependsOnTaskIds: pickDefined(
+    payload.dependsOnTaskIds,
+    current?.dependsOnTaskIds,
+    [],
+  ),
+});
+
 type TasksQuery = {
   projectId?: string;
   projectSectionId?: string;
   page?: number;
   limit?: number;
+  /** When true, GET /project-tasks returns tasks that have no predecessors. */
+  withoutDependencies?: boolean;
 };
 
 const toTaskCommandBody = (payload: TaskFormPayload) => {
@@ -141,12 +189,13 @@ const toTaskCommandBody = (payload: TaskFormPayload) => {
 };
 
 export const listProjectTasks = async (query: TasksQuery = {}) => {
-  const params: Record<string, string | number> = {
+  const params: Record<string, string | number | boolean> = {
     Page: query.page ?? 1,
     Limit: query.limit ?? 50,
   };
   if (query.projectId) params.ProjectId = query.projectId;
   if (query.projectSectionId) params.ProjectSectionId = query.projectSectionId;
+  if (query.withoutDependencies) params.WithoutDependencies = true;
 
   const response = await api.get("/project-tasks", { params });
   const meta = unwrapPagedMeta(response.data);
@@ -180,6 +229,100 @@ export const getProjectTaskById = async (
   return task;
 };
 
+const unwrapTaskDependencyRows = (
+  payload: unknown,
+): Record<string, unknown>[] => {
+  const page = unwrapPage<Record<string, unknown>>(payload);
+  if (page.length) return page;
+
+  const data = unwrapData<unknown>(payload);
+  if (Array.isArray(data)) return data as Record<string, unknown>[];
+  if (!data || typeof data !== "object") return [];
+
+  const obj = data as Record<string, unknown>;
+  for (const key of [
+    "dependencies",
+    "Dependencies",
+    "edges",
+    "Edges",
+    "items",
+    "Items",
+  ]) {
+    const rows = obj[key];
+    if (Array.isArray(rows)) return rows as Record<string, unknown>[];
+  }
+  return [];
+};
+
+export const listProjectTaskDependencies = async (projectId: string) => {
+  const response = await api.get("/project-tasks/dependencies", {
+    params: { ProjectId: projectId },
+  });
+  const records = unwrapTaskDependencyRows(response.data)
+    .map((item) => normalizeProjectTaskGraphEdge(item, projectId))
+    .filter((item): item is ProjectTaskGraphEdge => Boolean(item));
+
+  return { records };
+};
+
+/** Tasks + predecessor edges for the project flow graph. */
+export const getProjectTaskGraph = async (
+  projectId: string,
+  seedTasks: ProjectTask[] = [],
+): Promise<ProjectTask[]> => {
+  const [edgesResult, isolatedResult] = await Promise.allSettled([
+    listProjectTaskDependencies(projectId),
+    fetchAllPages(
+      (page, limit) =>
+        listProjectTasks({
+          projectId,
+          withoutDependencies: true,
+          page,
+          limit,
+        }),
+      100,
+    ),
+  ]);
+
+  if (edgesResult.status === "rejected") {
+    throw edgesResult.reason;
+  }
+
+  const edges = edgesResult.value.records;
+  const isolatedTasks =
+    isolatedResult.status === "fulfilled" ? isolatedResult.value : [];
+
+  const knownIds = new Set([
+    ...seedTasks.map((task) => task.id),
+    ...isolatedTasks.map((task) => task.id),
+  ]);
+  edges.forEach((edge) => {
+    if (edge.task?.id) knownIds.add(edge.task.id);
+    if (edge.predecessor?.id) knownIds.add(edge.predecessor.id);
+  });
+
+  const missingIds = [
+    ...new Set(edges.flatMap((edge) => [edge.taskId, edge.predecessorId])),
+  ].filter((id) => id && !knownIds.has(id));
+
+  let listedTasks = seedTasks;
+  if (missingIds.length) {
+    listedTasks = await fetchAllPages(
+      (page, limit) => listProjectTasks({ projectId, page, limit }),
+      100,
+    );
+  }
+
+  return sortTasksByPriority(
+    mergeProjectTaskGraph({
+      projectId,
+      edges,
+      isolatedTasks,
+      seedTasks: listedTasks,
+    }),
+  );
+};
+
 const enrichTasksWithDetails = async (
   tasks: ProjectTask[],
   projectId: string,
@@ -206,16 +349,15 @@ const enrichTasksWithDetails = async (
 
 const attachApiTasks = async (project: Project): Promise<Project> => {
   try {
-    const { records } = await listProjectTasks({
+    const { records, meta } = await listProjectTasks({
       projectId: project.id,
       page: 1,
-      limit: 100,
+      limit: 20,
     });
-    const enriched = await enrichTasksWithDetails(records, project.id);
     return {
       ...project,
-      tasks: sortTasksByPriority(enriched),
-      tasksCount: Math.max(project.tasksCount ?? 0, enriched.length),
+      tasks: sortTasksByPriority(records),
+      tasksCount: Math.max(project.tasksCount ?? 0, meta.totalItems || records.length),
     };
   } catch {
     return { ...project, tasks: project.tasks ?? [] };
@@ -260,6 +402,7 @@ const persistSectionDependencies = (
           projectId,
           name: "",
           displayOrder: 0,
+          isFinalSection: false,
           dependsOnSectionIds: [],
         },
       ];
@@ -388,26 +531,22 @@ export const getProjectStats = async (): Promise<ProjectStats> => {
 
 export const getTaskStats = async (projectId: string): Promise<TaskStats> => {
   try {
-    const { records } = await listProjectTasks({
-      projectId,
-      page: 1,
-      limit: 100,
-    });
-    return buildTaskStatsFromTasks(records);
+    const [{ records }, sections] = await Promise.all([
+      listProjectTasks({
+        projectId,
+        page: 1,
+        limit: 100,
+      }),
+      getProjectSections(projectId).catch(() => [] as ProjectSection[]),
+    ]);
+    return buildTaskStatsFromTasks(records, sections);
   } catch {
     return { total: 0, late: 0 };
   }
 };
 
 export const addProject = async (payload: ProjectFormPayload) => {
-  const response = await api.post("/projects", {
-    managerId: payload.managerId,
-    name: payload.name.trim(),
-    description: payload.description.trim(),
-    startDate: toIsoDate(payload.startDate),
-    endDate: toIsoDate(payload.endDate),
-    status: projectStatusToApi(payload.status),
-  });
+  const response = await api.post("/projects", toProjectCommandBody(payload));
 
   assertSuccess(response.data);
   const createdId = unwrapData<string>(response.data);
@@ -417,38 +556,12 @@ export const addProject = async (payload: ProjectFormPayload) => {
 
   markOwnershipInitialized(String(createdId), []);
 
-  // Invite the primary assignee so the project has someone to execute the work.
-  if (payload.assignedEmployeeId.trim()) {
-    try {
-      const inviteResponse = await api.post(`/projects/${createdId}/invitations`, {
-        invitedEmployeeId: payload.assignedEmployeeId,
-        role: ProjectMemberRoleApi.Member,
-        message: "",
-        expiresAtUtc: payload.endDate
-          ? toIsoDate(payload.endDate)
-          : new Date(Date.now() + 30 * 86400000).toISOString(),
-      });
-      assertMutationSuccess(
-        inviteResponse.data,
-        "تم إنشاء المشروع لكن فشل إرسال دعوة الموظف المكلّف.",
-      );
-    } catch {
-      // Project remains; invitation can be resent from members tab.
-    }
-  }
-
   return getProjectById(String(createdId));
 };
 
 export const updateProject = async (id: string, payload: Partial<ProjectFormPayload>) => {
-  const response = await api.put(`/projects/${id}`, {
-    managerId: payload.managerId,
-    name: payload.name?.trim(),
-    description: payload.description?.trim(),
-    startDate: payload.startDate ? toIsoDate(payload.startDate) : null,
-    endDate: payload.endDate ? toIsoDate(payload.endDate) : null,
-    status: payload.status ? projectStatusToApi(payload.status) : undefined,
-  });
+  const current = await getProjectById(id);
+  const response = await api.put(`/projects/${id}`, toProjectCommandBody(payload, current));
 
   assertMutationSuccess(response.data, "فشل تحديث المشروع.");
   return getProjectById(id);
@@ -556,11 +669,24 @@ export const getProjectSections = async (projectId: string) => {
   return attachSectionDependencies(projectId, scoped);
 };
 
+export const getSectionById = async (projectId: string, sectionId: string) => {
+  const response = await api.get(`/projects/${projectId}/sections/${sectionId}`);
+  const entity = unwrapEntity<Record<string, unknown>>(response.data);
+  const raw =
+    entity && typeof entity === "object" && !entity.sectionId && !entity.id
+      ? ((entity.section ?? entity.data ?? entity) as Record<string, unknown>)
+      : entity;
+  return normalizeSection(
+    (raw ?? {}) as Record<string, unknown>,
+    projectId,
+  );
+};
+
 export const addSection = async (projectId: string, payload: SectionFormPayload) => {
-  const response = await api.post(`/projects/${projectId}/sections`, {
-    name: payload.name.trim().slice(0, 200),
-    displayOrder: payload.displayOrder,
-  });
+  const response = await api.post(
+    `/projects/${projectId}/sections`,
+    toSectionCommandBody(payload),
+  );
 
   assertMutationSuccess(response.data, "فشل إضافة القسم.");
   let createdSectionId = "";
@@ -594,24 +720,13 @@ export const addSection = async (projectId: string, payload: SectionFormPayload)
     }
   }
 
-  if (createdSectionId) {
-    const sections = await getProjectSections(projectId);
-    persistSectionDependencies(
-      projectId,
-      createdSectionId,
-      payload.dependsOnSectionIds ?? [],
-      sections,
-      payload.dependencyEdgeLabels,
-    );
-  }
-
   return getProjectById(projectId);
 };
 
 export const updateSection = async (
   projectId: string,
   sectionId: string,
-  payload: SectionFormPayload,
+  payload: Partial<SectionFormPayload>,
 ) => {
   if (isOwnershipInitialized(projectId)) {
     const owned = getOwnedSectionIds(projectId);
@@ -620,21 +735,25 @@ export const updateSection = async (
     }
   }
 
-  const response = await api.put(`/projects/${projectId}/sections/${sectionId}`, {
-    name: payload.name.trim().slice(0, 200),
-    displayOrder: payload.displayOrder,
-  });
+  let current: ProjectSection | null = null;
+  const needsCurrent =
+    payload.name === undefined ||
+    payload.displayOrder === undefined ||
+    payload.isFinalSection === undefined;
+  if (needsCurrent) {
+    try {
+      current = await getSectionById(projectId, sectionId);
+    } catch {
+      current = null;
+    }
+  }
+
+  const response = await api.put(
+    `/projects/${projectId}/sections/${sectionId}`,
+    toSectionCommandBody(payload, current),
+  );
 
   assertMutationSuccess(response.data, "فشل تحديث القسم.");
-
-  const sections = await getProjectSections(projectId);
-  persistSectionDependencies(
-    projectId,
-    sectionId,
-    payload.dependsOnSectionIds,
-    sections,
-    payload.dependencyEdgeLabels,
-  );
 
   return getProjectById(projectId);
 };
@@ -770,45 +889,33 @@ export const getAllInvitations = async (query: InvitationsQuery = {}) => {
   return sortNewestFirst(dedupeInvitationsById(merged));
 };
 
-const normalizePersonName = (value: string) =>
-  value.trim().toLowerCase().replace(/\s+/g, " ");
+const listMyInvitationsPage = async (page = 1, limit = 50) => {
+  const response = await api.get("/projects/invitations/my", {
+    params: { Page: page, Limit: limit },
+  });
+  const meta = unwrapPagedMeta(response.data);
+  const records = unwrapPage<Record<string, unknown>>(response.data)
+    .map((item) => normalizeInvitation(item))
+    .filter((item): item is ProjectInvitation => Boolean(item));
 
-const collectCurrentEmployeeIds = async () => {
-  const ids = new Set(getCurrentActorIds());
-  const email = getCurrentUserEmail();
-  if (!email) return ids;
-
-  try {
-    const { data } = await getEmployees(1, REFERENCE_DATA_LIMIT);
-    for (const employee of data) {
-      if (employee.email.trim().toLowerCase() !== email) continue;
-      if (employee.id) ids.add(employee.id);
-      if (employee.userId) ids.add(employee.userId);
-      if (employee.employeeId) ids.add(employee.employeeId);
-    }
-  } catch {
-    // identity enrichment is best-effort
-  }
-
-  return ids;
+  return {
+    records: sortNewestFirst(records),
+    meta: {
+      ...meta,
+      totalPages: meta.totalItems
+        ? Math.max(1, Math.ceil(meta.totalItems / limit))
+        : meta.totalPages,
+    },
+  };
 };
 
+/** Incoming invitations for the signed-in employee. */
 export const getMyInvitations = async () => {
-  const [invitations, employeeIds] = await Promise.all([
-    getAllInvitations(),
-    collectCurrentEmployeeIds(),
-  ]);
-
-  const currentName = normalizePersonName(getCurrentUserName());
-  if (!employeeIds.size && !currentName) return [];
-
-  return invitations.filter((invitation) => {
-    if (invitation.employeeId && employeeIds.has(invitation.employeeId)) {
-      return true;
-    }
-    return Boolean(currentName) &&
-      normalizePersonName(invitation.employeeName) === currentName;
-  });
+  const records = await fetchAllPages(
+    (page, limit) => listMyInvitationsPage(page, limit),
+    50,
+  );
+  return sortNewestFirst(dedupeInvitationsById(records));
 };
 
 export const addInvitation = async (payload: InvitationFormPayload) => {
@@ -869,11 +976,30 @@ export const addTask = async (projectId: string, payload: TaskFormPayload) => {
 export const updateTask = async (
   projectId: string,
   taskId: string,
-  payload: TaskFormPayload,
+  payload: Partial<TaskFormPayload>,
 ) => {
+  let current: ProjectTask | null = null;
+  const needsCurrent =
+    payload.title === undefined ||
+    payload.description === undefined ||
+    payload.sectionId === undefined ||
+    payload.expectedHours === undefined ||
+    payload.startDate === undefined ||
+    payload.dueDate === undefined ||
+    payload.priority === undefined ||
+    payload.assigneeIds === undefined ||
+    payload.dependsOnTaskIds === undefined;
+  if (needsCurrent) {
+    try {
+      current = await getProjectTaskById(taskId, projectId);
+    } catch {
+      current = null;
+    }
+  }
+
   const response = await api.put(
     `/project-tasks/${taskId}`,
-    toTaskCommandBody(payload),
+    toTaskCommandBody(mergeTaskFormPayload(payload, current)),
   );
   assertMutationSuccess(response.data, "فشل تحديث المهمة.");
   return getProjectById(projectId);

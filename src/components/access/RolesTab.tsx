@@ -107,6 +107,9 @@ export function RolesTab({ search, onNotice, onDataChanged }: RolesTabProps) {
                   {t("access.roles.columns.isDefault")}
                 </th>
                 <th className="px-3 py-3 text-center font-medium">
+                  {t("access.roles.columns.isFixed")}
+                </th>
+                <th className="px-3 py-3 text-center font-medium">
                   {t("access.roles.columns.permissionsCount")}
                 </th>
                 <th className="px-3 py-3 text-center font-medium">{t("table.columns.actions")}</th>
@@ -115,13 +118,13 @@ export function RolesTab({ search, onNotice, onDataChanged }: RolesTabProps) {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-hr-muted">
+                  <td colSpan={9} className="px-3 py-10 text-center text-hr-muted">
                     {t("common.loading")}
                   </td>
                 </tr>
               ) : !roles.length ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-hr-muted">
+                  <td colSpan={9} className="px-3 py-10 text-center text-hr-muted">
                     {t("access.roles.empty")}
                   </td>
                 </tr>
@@ -156,6 +159,15 @@ export function RolesTab({ search, onNotice, onDataChanged }: RolesTabProps) {
                         >
                           {role.isDefault ? t("common.yes") : t("common.no")}
                         </span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {role.isFixed ? (
+                          <span className="inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                            {t("access.roles.columns.isFixed")}
+                          </span>
+                        ) : (
+                          <span className="text-hr-muted">{t("common.dash")}</span>
+                        )}
                       </td>
                       <td className="px-3 py-3 text-center text-hr-text">
                         {role.numberOfPermissions}
@@ -199,6 +211,11 @@ export function RolesTab({ search, onNotice, onDataChanged }: RolesTabProps) {
           roleId={modal.mode === "edit" ? modal.roleId : undefined}
           onClose={() => setModal(null)}
           onSaved={() => {
+            onDataChanged();
+            void loadRoles();
+          }}
+          onDeleted={() => {
+            onNotice(null);
             onDataChanged();
             void loadRoles();
           }}

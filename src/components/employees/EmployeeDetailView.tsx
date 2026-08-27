@@ -17,7 +17,6 @@ import type { AppRole } from "../../types/role";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
 import {
   isValidDecimal,
-  isValidEmail,
   isValidPhone,
   sanitizeDecimalInput,
   sanitizeEmployeeField,
@@ -297,6 +296,9 @@ export function EmployeeDetailView({
     if (editData.phone?.trim() && !isValidPhone(editData.phone)) {
       nextErrors.phone = t("employees.errors.phoneInvalid");
     }
+    if (editData.workPhone?.trim() && !isValidPhone(editData.workPhone)) {
+      nextErrors.workPhone = t("employees.errors.phoneInvalid");
+    }
     if (!isValidDecimal(editData.salary)) {
       nextErrors.salary = t("employees.errors.salaryInvalid");
     }
@@ -305,9 +307,6 @@ export function EmployeeDetailView({
     }
     if (editData.idNumber && !/^\d+$/.test(editData.idNumber)) {
       nextErrors.idNumber = t("employees.errors.idNumberInvalid");
-    }
-    if (editData.email?.trim() && !isValidEmail(editData.email)) {
-      nextErrors.email = t("employees.errors.emailInvalid");
     }
     const birthMessage = birthDateErrorMessage(
       getBirthDateIssue(editData.birthDate),
@@ -396,7 +395,6 @@ export function EmployeeDetailView({
     setError(null);
 
     try {
-      const submittedEmail = editData.email.trim();
       const submittedLocalPhoto = editData.avatar?.startsWith("data:")
         ? editData.avatar
         : "";
@@ -427,8 +425,6 @@ export function EmployeeDetailView({
       };
       setResumeHydrationKey((key) => key + 1);
 
-      const emailAccepted =
-        refreshed.email.trim().toLowerCase() === submittedEmail.toLowerCase();
       const userId = refreshed.userId || refreshed.id;
       const nextRoleIds = [...new Set([...selectedRoleIds, ...fixedRoleIds])];
       const previousRoleIds = [
@@ -471,8 +467,6 @@ export function EmployeeDetailView({
         ...refreshed,
         userAccount,
         avatar: keptLocalPhoto,
-        // Keep the typed email visible if the update API ignored it (schema has no Email on PUT).
-        email: emailAccepted ? refreshed.email : submittedEmail,
       };
       setEditData(merged);
       if (userAccount) {
@@ -486,8 +480,6 @@ export function EmployeeDetailView({
       onUpdate(merged);
       if (photoMissingOnServer) {
         setError(t("employees.errors.photoNotPersistedByServer"));
-      } else if (!emailAccepted && submittedEmail) {
-        setError(t("employees.errors.emailNotUpdatedByServer"));
       } else if (roleWarning) {
         setError(roleWarning);
       }
@@ -519,9 +511,6 @@ export function EmployeeDetailView({
       prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
     );
   };
-
-  const roleLabel = (roleId: string) =>
-    availableRoles.find((role) => role.id === roleId)?.name ?? roleId;
 
   const selectedDepartment = departmentOptions.find(
     (department) => department.id === editData.departmentId,
@@ -618,40 +607,15 @@ export function EmployeeDetailView({
                       <option value="female">{t("common.female")}</option>
                     </select>
                   </EmployeeField>
-                  <EmployeeField label={t("employees.detail.fields.maritalStatus")}>
-                    <select
-                      value={editData.maritalStatus || ""}
-                      onChange={(e) => handleChange("maritalStatus", e.target.value)}
-                      className={inputClass}
-                    >
-                      <option value="">
-                        {t("employees.detail.placeholders.selectMaritalStatus")}
-                      </option>
-                      <option value="أعزب">
-                        {t("employees.detail.maritalOptions.single")}
-                      </option>
-                      <option value="متزوج">
-                        {t("employees.detail.maritalOptions.married")}
-                      </option>
-                      <option value="مطلق">
-                        {t("employees.detail.maritalOptions.divorced")}
-                      </option>
-                      <option value="أرمل">
-                        {t("employees.detail.maritalOptions.widowed")}
-                      </option>
-                    </select>
-                  </EmployeeField>
                   <EmployeeField
                     label={t("employees.detail.fields.email")}
-                    error={fieldErrors.email}
                     hint={t("employees.detail.fields.emailHint")}
                   >
                     <input
                       type="email"
-                      inputMode="email"
                       value={editData.email}
-                      onChange={(e) => handleChange("email", e.target.value)}
-                      className={inputClass}
+                      readOnly
+                      className={readOnlyClass}
                     />
                   </EmployeeField>
                   <EmployeeField label={t("employees.detail.fields.phone")} error={fieldErrors.phone}>
@@ -662,43 +626,6 @@ export function EmployeeDetailView({
                       value={editData.phone}
                       onChange={(e) => handleChange("phone", e.target.value)}
                       className={inputClass}
-                    />
-                  </EmployeeField>
-                  <EmployeeField label={t("employees.detail.fields.degreeLevel")}>
-                    <select
-                      value={editData.degreeLevel || ""}
-                      onChange={(e) => handleChange("degreeLevel", e.target.value)}
-                      className={inputClass}
-                    >
-                      <option value="">
-                        {t("employees.detail.placeholders.selectDegreeLevel")}
-                      </option>
-                      <option value="خريج">
-                        {t("employees.detail.degreeOptions.graduate")}
-                      </option>
-                      <option value="بكالوريوس">
-                        {t("employees.detail.degreeOptions.bachelor")}
-                      </option>
-                      <option value="ماجستير">
-                        {t("employees.detail.degreeOptions.master")}
-                      </option>
-                      <option value="دكتوراه">
-                        {t("employees.detail.degreeOptions.doctorate")}
-                      </option>
-                      <option value="دبلوم">
-                        {t("employees.detail.degreeOptions.diploma")}
-                      </option>
-                      <option value="ثانوية">
-                        {t("employees.detail.degreeOptions.highSchool")}
-                      </option>
-                    </select>
-                  </EmployeeField>
-                  <EmployeeField label={t("employees.detail.fields.fieldOfStudy")}>
-                    <input
-                      value={editData.fieldOfStudy || ""}
-                      onChange={(e) => handleChange("fieldOfStudy", e.target.value)}
-                      className={inputClass}
-                      placeholder={t("employees.detail.placeholders.fieldOfStudy")}
                     />
                   </EmployeeField>
                   <EmployeeField
@@ -769,13 +696,13 @@ export function EmployeeDetailView({
                       placeholder={t("employees.detail.placeholders.selectContractType")}
                     />
                   </EmployeeField>
-                  <EmployeeField label={t("employees.detail.fields.workPhone")} error={fieldErrors.phone}>
+                  <EmployeeField label={t("employees.detail.fields.workPhone")} error={fieldErrors.workPhone}>
                     <input
                       type="tel"
                       inputMode="tel"
                       dir="ltr"
-                      value={editData.phone}
-                      onChange={(e) => handleChange("phone", e.target.value)}
+                      value={editData.workPhone || ""}
+                      onChange={(e) => handleChange("workPhone", e.target.value)}
                       className={inputClass}
                     />
                   </EmployeeField>
@@ -856,53 +783,6 @@ export function EmployeeDetailView({
                       )}
                     </EmployeeField>
                   </div>
-
-                  {editData.userAccount && (
-                    <>
-                      <EmployeeField label={t("employees.detail.fields.accountStatus")}>
-                        <input
-                          value={
-                            editData.userAccount.isActive
-                              ? t("employees.detail.accountActive")
-                              : t("employees.detail.accountInactive")
-                          }
-                          readOnly
-                          className={readOnlyClass}
-                        />
-                      </EmployeeField>
-                      <EmployeeField label={t("employees.detail.fields.emailConfirmed")}>
-                        <input
-                          value={
-                            editData.userAccount.emailConfirmed
-                              ? t("common.yes")
-                              : t("common.no")
-                          }
-                          readOnly
-                          className={readOnlyClass}
-                        />
-                      </EmployeeField>
-                      <EmployeeField label={t("employees.detail.fields.userCreatedAt")}>
-                        <input
-                          value={editData.userAccount.createdAtUtc || t("common.dash")}
-                          readOnly
-                          className={readOnlyClass}
-                        />
-                      </EmployeeField>
-                      <EmployeeField label={t("employees.detail.fields.assignedRoles")}>
-                        <input
-                          value={
-                            editData.userAccount.roles.length
-                              ? editData.userAccount.roles
-                                  .map((role) => roleLabel(role.roleId))
-                                  .join("، ")
-                              : t("common.dash")
-                          }
-                          readOnly
-                          className={readOnlyClass}
-                        />
-                      </EmployeeField>
-                    </>
-                  )}
                 </div>
               )}
 

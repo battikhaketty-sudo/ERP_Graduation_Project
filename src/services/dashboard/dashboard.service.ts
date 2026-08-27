@@ -1,5 +1,5 @@
 import type { Project, ProjectInvitation, ProjectTask } from "../../types/project";
-import { getAllInvitations, getAllProjects } from "../projects";
+import { getAllProjects, getMyInvitations } from "../projects";
 import { getProjectTasks } from "../projects/taskStorage";
 import { getCompletionPercent } from "../../components/projects/projectProgress";
 
@@ -154,7 +154,7 @@ const buildActivities = (
       title: invitation.employeeName,
       detail: `${invitation.projectName} · ${invitation.status}`,
       at: invitation.invitedAt || invitation.expiresAt || "",
-      href: "/projects",
+      href: "/projects?tab=invitations",
     });
   }
 
@@ -166,7 +166,7 @@ const buildActivities = (
 export const getDashboardSummary = async (): Promise<DashboardSummary> => {
   const [projects, invitations] = await Promise.all([
     getAllProjects().catch(() => [] as Project[]),
-    getAllInvitations().catch(() => [] as ProjectInvitation[]),
+    getMyInvitations().catch(() => [] as ProjectInvitation[]),
   ]);
 
   const today = todayKey();

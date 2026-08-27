@@ -50,12 +50,17 @@ export function EditUserRolesModal({ userId, onClose, onSaved }: EditUserRolesMo
       setLoading(true);
       setError(null);
       const [userData, allRoles] = await Promise.all([getUserById(userId), getAllRoles()]);
-      const roleIds = userData.roles.map((role) => role.roleId);
+      const fixedIds = userData.roles
+        .filter((role) => role.isFixed)
+        .map((role) => role.roleId);
+      const roleIds = Array.from(
+        new Set([...userData.roles.map((role) => role.roleId), ...fixedIds]),
+      );
       setUser(userData);
       setRoles(allRoles);
       setSelectedRoleIds(roleIds);
       setInitialRoleIds(roleIds);
-      setFixedRoleIds(new Set(userData.roles.filter((role) => role.isFixed).map((r) => r.roleId)));
+      setFixedRoleIds(new Set(fixedIds));
       setRoleSearch("");
       setPage(1);
     } catch (err) {
@@ -109,7 +114,8 @@ export function EditUserRolesModal({ userId, onClose, onSaved }: EditUserRolesMo
     setSaving(true);
     setError(null);
     try {
-      await updateUserRoles(userId, selectedRoleIds);
+      const nextRoleIds = Array.from(new Set([...selectedRoleIds, ...fixedRoleIds]));
+      await updateUserRoles(userId, nextRoleIds);
       onSaved();
       onClose();
     } catch (err) {
@@ -200,6 +206,9 @@ export function EditUserRolesModal({ userId, onClose, onSaved }: EditUserRolesMo
                           {t("access.roles.columns.name")}
                         </th>
                         <th className="px-3 py-3 text-center font-medium">
+                          {t("access.roles.columns.isFixed")}
+                        </th>
+                        <th className="px-3 py-3 text-center font-medium">
                           {t("access.roles.columns.description")}
                         </th>
                         <th className="px-3 py-3 text-center font-medium">
@@ -216,7 +225,7 @@ export function EditUserRolesModal({ userId, onClose, onSaved }: EditUserRolesMo
                     <tbody>
                       {!pagedRoles.length ? (
                         <tr>
-                          <td colSpan={7} className="px-3 py-8 text-center text-hr-muted">
+                          <td colSpan={8} className="px-3 py-8 text-center text-hr-muted">
                             {roleSearch.trim() ? t("common.noResults") : t("access.roles.empty")}
                           </td>
                         </tr>
@@ -227,15 +236,30 @@ export function EditUserRolesModal({ userId, onClose, onSaved }: EditUserRolesMo
                           return (
                             <tr
                               key={role.id}
-                              className={index % 2 ? "bg-hr-table-head" : "bg-hr-surface"}
+                              className={[
+                                index % 2 ? "bg-hr-table-head" : "bg-hr-surface",
+                                isFixed ? "opacity-70" : "",
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
                             >
                               <td className="px-3 py-3 text-center">
                                 <input
                                   type="checkbox"
                                   checked={checked}
                                   disabled={isFixed}
+                                  readOnly={isFixed}
                                   onChange={() => toggleRole(role.id)}
-                                  className="size-4 rounded border-hr-border text-hr-primary disabled:cursor-not-allowed"
+                                  onClick={(event) => {
+                                    if (isFixed) event.preventDefault();
+                                  }}
+                                  className="size-4 rounded border-hr-border text-hr-primary disabled:pointer-events-none disabled:cursor-not-allowed"
+                                  title={
+                                    isFixed ? t("access.users.fixedRoleHint") : undefined
+                                  }
+                                  aria-label={
+                                    isFixed ? t("access.users.fixedRoleHint") : role.name
+                                  }
                                 />
                               </td>
                               <td className="px-3 py-3 text-center text-hr-muted">
@@ -243,6 +267,15 @@ export function EditUserRolesModal({ userId, onClose, onSaved }: EditUserRolesMo
                               </td>
                               <td className="px-3 py-3 text-center font-medium text-hr-text">
                                 {role.name}
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                {isFixed ? (
+                                  <span className="inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                                    {t("access.users.fixedRole")}
+                                  </span>
+                                ) : (
+                                  <span className="text-hr-muted">{t("common.dash")}</span>
+                                )}
                               </td>
                               <td className="max-w-[220px] truncate px-3 py-3 text-center text-hr-muted">
                                 {role.description || t("common.dash")}

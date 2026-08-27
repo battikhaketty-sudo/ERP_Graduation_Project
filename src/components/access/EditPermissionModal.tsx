@@ -11,6 +11,7 @@ import {
   addPermission,
   deletePermission,
   getAllPermissions,
+  getPermissionById,
   updatePermission,
 } from "../../services/permissions";
 import type { AppPermission, PermissionFormPayload } from "../../types/permission";
@@ -60,7 +61,7 @@ export function EditPermissionModal({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameFieldRef = useModalAutoFocus<HTMLInputElement>(true);
-  const isLocked = mode === "edit" && Boolean(permission?.isFixed);
+  const nameLocked = mode === "edit" && Boolean(permission?.isFixed);
   const isBusy = saving || deleting;
 
   const { getError, touch, validateAll, reset, isValid } = useFormValidation(form, {
@@ -84,6 +85,17 @@ export function EditPermissionModal({
         description: permission.description ?? "",
         resourceType: permission.resourceType,
       });
+      void getPermissionById(permission.id)
+        .then((fresh) => {
+          setForm({
+            name: fresh.name,
+            description: fresh.description ?? "",
+            resourceType: fresh.resourceType,
+          });
+        })
+        .catch(() => {
+          // Keep list payload if GET by id fails.
+        });
     } else {
       setForm(emptyForm);
     }
@@ -110,7 +122,11 @@ export function EditPermissionModal({
     setError(null);
     try {
       if (mode === "edit" && permission) {
-        await updatePermission(permission.id, form);
+        await updatePermission(permission.id, {
+          name: form.name,
+          resourceType: form.resourceType,
+          description: form.description,
+        });
       } else {
         await addPermission(form);
       }
@@ -165,7 +181,7 @@ export function EditPermissionModal({
         />
 
         <div className={modalBodyClass}>
-        {isLocked ? (
+        {nameLocked ? (
           <p className="mb-4 rounded-xl border border-hr-border bg-hr-hover px-4 py-3 text-sm text-hr-muted">
             {t("access.permissions.fixedHint")}
           </p>
@@ -192,8 +208,8 @@ export function EditPermissionModal({
             onValueBlur={() => touch("name")}
             error={getError("name")}
             required
-            readOnly={isLocked}
-            disabled={isLocked}
+            readOnly={nameLocked}
+            disabled={nameLocked}
             autoComplete="off"
           />
           <FormTextInput
@@ -203,20 +219,16 @@ export function EditPermissionModal({
             onChange={(value) => setForm((current) => ({ ...current, resourceType: value }))}
             onValueBlur={() => touch("resourceType")}
             error={getError("resourceType")}
-            hint={isLocked ? undefined : t("form.resourceTypeHint")}
+            hint={t("form.resourceTypeHint")}
             required
-            readOnly={isLocked}
-            disabled={isLocked}
-            list={isLocked ? undefined : resourceTypeListId}
+            list={resourceTypeListId}
             autoComplete="off"
           />
-          {!isLocked ? (
-            <datalist id={resourceTypeListId}>
-              {resourceTypes.map((type) => (
-                <option key={type} value={type} />
-              ))}
-            </datalist>
-          ) : null}
+          <datalist id={resourceTypeListId}>
+            {resourceTypes.map((type) => (
+              <option key={type} value={type} />
+            ))}
+          </datalist>
           <FormTextarea
             id="permission-description"
             label={t("access.permissions.columns.description")}
@@ -225,7 +237,7 @@ export function EditPermissionModal({
             rows={4}
             maxLength={DESCRIPTION_MAX}
             showCount
-            hint={t("common.optional")}
+            hint={nameLocked ? t("access.permissions.fixedHint") : t("common.optional")}
           />
         </div>
         </div>

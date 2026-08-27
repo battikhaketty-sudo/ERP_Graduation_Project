@@ -329,7 +329,7 @@ export const deleteAttendence = async (id: string) => {
 };
 
 export const getSkillTypesPage = async (page = 1, limit = 50) => {
-  const res = await api.get("/skill-types", { params: { page, limit } });
+  const res = await api.get("/skill-types", { params: { Page: page, Limit: limit } });
   const meta = unwrapPagedMeta(res.data);
   const records = sortNewestFirst(
     unwrapPage<Record<string, unknown>>(res.data).map(normalizeSkillGroup),

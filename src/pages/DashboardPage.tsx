@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
-  Bell,
   Building2,
   CheckCircle2,
   ClipboardList,
@@ -146,12 +145,6 @@ export function DashboardPage() {
       label: t("dashboard.shortcuts.departments"),
       icon: FolderKanban,
       onClick: () => navigate(ROUTES.departments),
-    },
-    {
-      key: "notifications",
-      label: t("dashboard.shortcuts.notifications"),
-      icon: Bell,
-      onClick: () => navigate(ROUTES.notifications),
     },
   ];
 

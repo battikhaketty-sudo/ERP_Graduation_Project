@@ -1,11 +1,14 @@
 import { Plus } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "../../i18n";
 import { getSectionFlowGate } from "../../services/projects/sectionDependencies";
-import { sortTasksByPriority } from "../../services/projects";
+import { listProjectTasks, sortTasksByPriority } from "../../services/projects";
 import type { Project, ProjectSection, ProjectTask } from "../../types/project";
 import { accentBtnClass } from "../ui/formStyles";
 import { PriorityBadge } from "./ProjectBadges";
+
+const KANBAN_PAGE_SIZE = 8;
+const MAX_COLUMN_HEIGHT = "min(28rem, 60vh)";
 
 type ProjectKanbanBoardProps = {
   project: Project;
@@ -21,9 +24,11 @@ const gateBadgeClass: Record<string, string> = {
 
 function TaskCard({
   task,
+  completed,
   onClick,
 }: {
   task: ProjectTask;
+  completed?: boolean;
   onClick?: (task: ProjectTask) => void;
 }) {
   const { t } = useTranslation();
@@ -37,11 +42,23 @@ function TaskCard({
     <button
       type="button"
       onClick={() => onClick?.(task)}
-      className="w-full rounded-xl border border-hr-border bg-hr-surface p-3 text-start shadow-sm transition hover:border-hr-primary hover:bg-hr-hover"
+      className={[
+        "w-full rounded-xl border p-3 text-start shadow-sm transition hover:border-hr-primary hover:bg-hr-hover",
+        completed
+          ? "border-emerald-500/30 bg-emerald-500/5"
+          : "border-hr-border bg-hr-surface",
+      ].join(" ")}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <h4 className="text-sm font-bold text-hr-text">{task.title}</h4>
-        <PriorityBadge priority={task.priority} />
+        <div className="flex shrink-0 items-center gap-1">
+          {completed ? (
+            <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              {t("common.completed")}
+            </span>
+          ) : null}
+          <PriorityBadge priority={task.priority} />
+        </div>
       </div>
       {task.description && (
         <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-hr-muted">
@@ -79,6 +96,178 @@ function TaskCard({
   );
 }
 
+const mergeTasks = (current: ProjectTask[], incoming: ProjectTask[]) => {
+  const seen = new Set(current.map((task) => task.id));
+  const next = [...current];
+  incoming.forEach((task) => {
+    if (seen.has(task.id)) return;
+    seen.add(task.id);
+    next.push(task);
+  });
+  return sortTasksByPriority(next);
+};
+
+function KanbanColumn({
+  projectId,
+  section,
+  reloadKey,
+  onSectionClick,
+  onTaskClick,
+}: {
+  projectId: string;
+  section: ProjectSection;
+  reloadKey: string;
+  onSectionClick?: (section: ProjectSection) => void;
+  onTaskClick?: (task: ProjectTask) => void;
+}) {
+  const { t } = useTranslation();
+  const [tasks, setTasks] = useState<ProjectTask[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const requestRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+
+  const loadPage = useCallback(
+    async (nextPage: number, append: boolean) => {
+      if (append && loadingMoreRef.current) return;
+      const requestId = ++requestRef.current;
+      if (append) {
+        loadingMoreRef.current = true;
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+
+      try {
+        const result = await listProjectTasks({
+          projectId,
+          projectSectionId: section.id,
+          page: nextPage,
+          limit: KANBAN_PAGE_SIZE,
+        });
+        if (requestId !== requestRef.current) return;
+
+        setTasks((current) =>
+          append ? mergeTasks(current, result.records) : sortTasksByPriority(result.records),
+        );
+        setPage(nextPage);
+        setTotal(result.meta.totalItems || result.records.length);
+        setHasMore(
+          Boolean(result.meta.hasMore) ||
+            (result.meta.totalItems > 0 &&
+              nextPage * KANBAN_PAGE_SIZE < result.meta.totalItems) ||
+            (result.meta.totalItems === 0 &&
+              result.records.length === KANBAN_PAGE_SIZE),
+        );
+      } catch {
+        if (requestId !== requestRef.current) return;
+        if (!append) {
+          setTasks([]);
+          setTotal(0);
+        }
+        setHasMore(false);
+      } finally {
+        if (requestId !== requestRef.current) return;
+        setLoading(false);
+        setLoadingMore(false);
+        loadingMoreRef.current = false;
+      }
+    },
+    [projectId, section.id],
+  );
+
+  useEffect(() => {
+    void loadPage(1, false);
+  }, [loadPage, reloadKey]);
+
+  useEffect(() => {
+    const root = scrollRef.current;
+    const sentinel = sentinelRef.current;
+    if (!root || !sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        if (!hasMore || loading || loadingMoreRef.current) return;
+        void loadPage(page + 1, true);
+      },
+      { root, rootMargin: "48px", threshold: 0.1 },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loadPage, loading, page]);
+
+  const gate = getSectionFlowGate(section, new Map([[section.id, section]]), tasks);
+
+  return (
+    <div className="flex min-h-0 flex-col rounded-xl bg-hr-table-head p-3">
+      <button
+        type="button"
+        onClick={() => onSectionClick?.(section)}
+        className="mb-3 flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-sm font-bold text-hr-text transition hover:bg-hr-hover"
+      >
+        <span>
+          {section.name}
+          <span className="mr-2 text-xs font-normal text-hr-muted">
+            ({total || tasks.length})
+          </span>
+          {section.isFinalSection ? (
+            <span className="mr-2 rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              {t("projects.detail.sectionFlow.finalSectionBadge")}
+            </span>
+          ) : null}
+        </span>
+        <span
+          className={[
+            "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+            gateBadgeClass[gate],
+          ].join(" ")}
+        >
+          {t(`projects.detail.sectionFlow.gate.${gate}`)}
+        </span>
+      </button>
+      <div
+        ref={scrollRef}
+        className="min-h-0 space-y-2 overflow-y-auto pe-1"
+        style={{ maxHeight: MAX_COLUMN_HEIGHT }}
+      >
+        {loading ? (
+          <p className="rounded-lg bg-hr-surface px-3 py-6 text-center text-xs text-hr-muted">
+            {t("common.loading")}
+          </p>
+        ) : tasks.length ? (
+          <>
+            {tasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                completed={section.isFinalSection}
+                onClick={onTaskClick}
+              />
+            ))}
+            <div ref={sentinelRef} className="h-4" />
+            {loadingMore ? (
+              <p className="py-2 text-center text-[11px] text-hr-muted">
+                {t("projects.kanban.loadingMore")}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="rounded-lg bg-hr-surface px-3 py-6 text-center text-xs text-hr-muted">
+            {t("common.noData")}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ProjectKanbanBoard({
   project,
   onAddSection,
@@ -94,10 +283,9 @@ export function ProjectKanbanBoard({
       (task) => !task.sectionId || !sectionIds.has(task.sectionId),
     ),
   );
-  const sectionsById = useMemo(
-    () => new Map(project.sections.map((section) => [section.id, section])),
-    [project.sections],
-  );
+  const reloadKey = `${project.id}:${project.tasksCount}:${project.sections
+    .map((section) => section.id)
+    .join(",")}`;
 
   return (
     <section className="hr-panel">
@@ -123,58 +311,30 @@ export function ProjectKanbanBoard({
       </div>
 
       {columns.length || orphanTasks.length ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {columns.map((section) => {
-            const tasks = sortTasksByPriority(
-              project.tasks.filter((task) => task.sectionId === section.id),
-            );
-            const gate = getSectionFlowGate(section, sectionsById, project.tasks);
-            return (
-              <div key={section.id} className="rounded-xl bg-hr-table-head p-3">
-                <button
-                  type="button"
-                  onClick={() => onSectionClick?.(section)}
-                  className="mb-3 flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-sm font-bold text-hr-text transition hover:bg-hr-hover"
-                >
-                  <span>
-                    {section.name}
-                    <span className="mr-2 text-xs font-normal text-hr-muted">
-                      ({tasks.length})
-                    </span>
-                  </span>
-                  <span
-                    className={[
-                      "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-                      gateBadgeClass[gate],
-                    ].join(" ")}
-                  >
-                    {t(`projects.detail.sectionFlow.gate.${gate}`)}
-                  </span>
-                </button>
-                <div className="space-y-2">
-                  {tasks.length ? (
-                    tasks.map((task) => (
-                      <TaskCard key={task.id} task={task} onClick={onTaskClick} />
-                    ))
-                  ) : (
-                    <p className="rounded-lg bg-hr-surface px-3 py-6 text-center text-xs text-hr-muted">
-                      {t("common.noData")}
-                    </p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+        <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {columns.map((section) => (
+            <KanbanColumn
+              key={section.id}
+              projectId={project.id}
+              section={section}
+              reloadKey={reloadKey}
+              onSectionClick={onSectionClick}
+              onTaskClick={onTaskClick}
+            />
+          ))}
 
           {orphanTasks.length ? (
-            <div className="rounded-xl border border-dashed border-amber-500/40 bg-hr-table-head p-3">
+            <div className="flex min-h-0 flex-col rounded-xl border border-dashed border-amber-500/40 bg-hr-table-head p-3">
               <p className="mb-3 px-2 py-1 text-sm font-bold text-amber-500">
                 {t("projects.kanban.unassigned")}
                 <span className="mr-2 text-xs font-normal text-hr-muted">
                   ({orphanTasks.length})
                 </span>
               </p>
-              <div className="space-y-2">
+              <div
+                className="min-h-0 space-y-2 overflow-y-auto pe-1"
+                style={{ maxHeight: MAX_COLUMN_HEIGHT }}
+              >
                 {orphanTasks.map((task) => (
                   <TaskCard key={task.id} task={task} onClick={onTaskClick} />
                 ))}

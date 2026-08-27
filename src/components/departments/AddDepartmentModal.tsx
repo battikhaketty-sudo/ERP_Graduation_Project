@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { AlertCircle, CheckCircle, Loader, Upload } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertCircle, CheckCircle, Loader } from "lucide-react";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
 import { useModalAutoFocus } from "../../hooks/useModalAutoFocus";
@@ -17,7 +17,6 @@ import {
   alertErrorClass,
   alertSuccessClass,
   cancelBtnLgClass,
-  dashedZoneClass,
   modalBodyClass,
   modalFooterClass,
   ModalCloseButton,
@@ -44,7 +43,6 @@ export function AddDepartmentModal({
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const firstFieldRef = useModalAutoFocus<HTMLInputElement>(isOpen);
 
   const {
@@ -63,7 +61,6 @@ export function AddDepartmentModal({
     parentId: "",
     managerId: "",
     description: "",
-    imagePreview: "",
   });
 
   useEffect(() => {
@@ -77,7 +74,6 @@ export function AddDepartmentModal({
       parentId: "",
       managerId: "",
       description: "",
-      imagePreview: "",
     });
   }, [isOpen]);
 
@@ -95,20 +91,6 @@ export function AddDepartmentModal({
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setFormData((prev) => ({
-        ...prev,
-        imagePreview: (event.target?.result as string) || "",
-      }));
-    };
-    reader.readAsDataURL(file);
   };
 
   const validate = () => {
@@ -235,34 +217,6 @@ export function AddDepartmentModal({
                 loading={optionsLoading}
                 hasError={Boolean(errors.managerId)}
               />
-            </DepartmentField>
-
-            <DepartmentField label={t("departments.modal.fields.image")}>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className={`flex h-[100px] w-full max-w-[280px] flex-col items-center justify-center rounded-2xl ${dashedZoneClass}`}
-              >
-                {formData.imagePreview ? (
-                  <img
-                    src={formData.imagePreview}
-                    alt={t("common.preview")}
-                    className="h-full w-full rounded-2xl object-cover"
-                  />
-                ) : (
-                  <>
-                    <Upload className="mb-1 size-6 text-hr-primary" />
-                    <span className="text-xs text-hr-muted">{t("departments.modal.uploadImage")}</span>
-                  </>
-                )}
-              </button>
             </DepartmentField>
 
             <div className="sm:col-span-2">

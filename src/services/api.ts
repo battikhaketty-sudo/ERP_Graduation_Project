@@ -53,7 +53,10 @@ api.interceptors.request.use(
     }
 
     if (config.data instanceof FormData) {
-      if (typeof config.headers.delete === "function") {
+      // Browser must set multipart/form-data with boundary — never force JSON.
+      if (typeof config.headers.set === "function") {
+        config.headers.set("Content-Type", false);
+      } else if (typeof config.headers.delete === "function") {
         config.headers.delete("Content-Type");
         config.headers.delete("content-type");
       } else {
@@ -133,6 +136,7 @@ api.interceptors.response.use(
         const isLogin = originalRequest?.url?.includes("/auth/login");
 
         throw {
+          status,
           message:
             friendly ||
             (isLogin
@@ -142,6 +146,7 @@ api.interceptors.response.use(
       }
 
       throw {
+        status,
         message: formatApiErrorMessage(
           data as Record<string, unknown> | string | undefined,
           getErrorFallback(status, originalRequest?.url),

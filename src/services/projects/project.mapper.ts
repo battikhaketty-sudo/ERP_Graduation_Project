@@ -7,6 +7,7 @@ import type {
   ProjectStats,
   ProjectTask,
   ProjectTaskDetail,
+  ProjectTaskGraphEdge,
   TaskAssignment,
   TaskDependency,
   TaskStats,
@@ -20,6 +21,7 @@ import {
   taskPriorityFromApi,
 } from "./project.enums";
 import { extractRowNumber } from "../../utils/tableRowNumber";
+import { readApiBoolean } from "../../utils/readIsFixed";
 import { buildTaskStatsFromTasks } from "./taskStorage";
 
 const formatDate = (value?: string | null) => {
@@ -57,6 +59,7 @@ export const normalizeSection = (
     createdAt: formatDate(
       typeof item.createdAtUtc === "string" ? item.createdAtUtc : null,
     ),
+    isFinalSection: readApiBoolean(item, "isFinalSection", "IsFinalSection"),
     dependsOnSectionIds: [],
   };
 };
@@ -339,7 +342,7 @@ export const buildProjectStats = (
 };
 
 export const buildTaskStats = (project: Project): TaskStats =>
-  buildTaskStatsFromTasks(project.tasks);
+  buildTaskStatsFromTasks(project.tasks, project.sections);
 
 export const buildProjectDetailStats = (
   project: Project,
@@ -568,4 +571,229 @@ export const normalizeTaskDetail = (
     dependencies,
     transitions,
   };
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const stubGraphTask = (
+  projectId: string,
+  id: string,
+  title = "",
+): ProjectTask => ({
+  id,
+  projectId,
+  sectionId: "",
+  number: 0,
+  name: title,
+  title: title || id,
+  description: "",
+  priority: "medium",
+  expectedHours: 0,
+  startDate: "",
+  dueDate: "",
+  assigneeIds: [],
+  assigneeNames: [],
+  dependsOnTaskIds: [],
+});
+
+const readNestedTask = (
+  item: Record<string, unknown>,
+  fallbackProjectId: string,
+  ...keys: string[]
+): ProjectTask | null => {
+  for (const key of keys) {
+    const nested = asRecord(item[key]);
+    if (!nested) continue;
+    const task = normalizeTaskListItem(nested, fallbackProjectId);
+    if (task) return task;
+  }
+  return null;
+};
+
+export const normalizeProjectTaskGraphEdge = (
+  item: Record<string, unknown>,
+  fallbackProjectId = "",
+): ProjectTaskGraphEdge | null => {
+  const task = readNestedTask(
+    item,
+    fallbackProjectId,
+    "task",
+    "Task",
+    "dependentTask",
+    "DependentTask",
+    "successor",
+    "Successor",
+    "currentTask",
+    "CurrentTask",
+  );
+  const predecessor = readNestedTask(
+    item,
+    fallbackProjectId,
+    "predecessor",
+    "Predecessor",
+    "previousTask",
+    "PreviousTask",
+    "dependsOnTask",
+    "DependsOnTask",
+    "fromTask",
+    "FromTask",
+  );
+
+  const taskId = readId(
+    item.taskId,
+    item.TaskId,
+    item.dependentTaskId,
+    item.DependentTaskId,
+    item.successorId,
+    item.SuccessorId,
+    item.toTaskId,
+    item.ToTaskId,
+    task?.id,
+  );
+  const predecessorId = readId(
+    item.predecessorTaskId,
+    item.PredecessorTaskId,
+    item.predecessorId,
+    item.PredecessorId,
+    item.dependsOnTaskId,
+    item.DependsOnTaskId,
+    item.fromTaskId,
+    item.FromTaskId,
+    item.previousTaskId,
+    item.PreviousTaskId,
+    predecessor?.id,
+  );
+
+  if (!taskId || !predecessorId || taskId === predecessorId) return null;
+
+  const taskTitle = String(
+    item.taskTitle ??
+      item.TaskTitle ??
+      item.title ??
+      item.Title ??
+      task?.title ??
+      taskId,
+  ).slice(0, 200);
+  const predecessorTitle = String(
+    item.predecessorTitle ??
+      item.PredecessorTitle ??
+      item.predecessorTaskTitle ??
+      item.PredecessorTaskTitle ??
+      item.previousTaskTitle ??
+      item.PreviousTaskTitle ??
+      predecessor?.title ??
+      predecessorId,
+  ).slice(0, 200);
+
+  const taskFromRow =
+    task ??
+    (taskId
+      ? {
+          ...stubGraphTask(fallbackProjectId, taskId, taskTitle),
+          priority: taskPriorityFromApi(
+            item.priority ?? item.Priority ?? item.priorityName ?? item.PriorityName,
+          ),
+        }
+      : null);
+
+  return {
+    id:
+      readId(item.id, item.Id) || `${predecessorId}->${taskId}`,
+    taskId,
+    taskTitle,
+    predecessorId,
+    predecessorTitle,
+    dependencyType: taskDependencyTypeFromApi(
+      item.dependencyType ??
+        item.DependencyType ??
+        item.dependencyTypeName ??
+        item.DependencyTypeName ??
+        item.type ??
+        item.Type,
+    ),
+    task: taskFromRow
+      ? { ...taskFromRow, title: taskFromRow.title || taskTitle, name: taskFromRow.name || taskTitle }
+      : null,
+    predecessor: predecessor
+      ? {
+          ...predecessor,
+          title: predecessor.title || predecessorTitle,
+          name: predecessor.name || predecessorTitle,
+        }
+      : null,
+  };
+};
+
+const upsertGraphTask = (
+  byId: Map<string, ProjectTask>,
+  incoming: ProjectTask | null | undefined,
+) => {
+  if (!incoming?.id) return;
+  const prev = byId.get(incoming.id);
+  if (!prev) {
+    byId.set(incoming.id, incoming);
+    return;
+  }
+  byId.set(incoming.id, {
+    ...incoming,
+    ...prev,
+    title: prev.title || incoming.title,
+    name: prev.name || incoming.name,
+    sectionId: prev.sectionId || incoming.sectionId,
+    sectionName: prev.sectionName || incoming.sectionName,
+    description: prev.description || incoming.description,
+    startDate: prev.startDate || incoming.startDate,
+    dueDate: prev.dueDate || incoming.dueDate,
+    priority: prev.priority || incoming.priority,
+  });
+};
+
+/** Merge dependency edges + isolated tasks into a draw-ready task list. */
+export const mergeProjectTaskGraph = (input: {
+  projectId: string;
+  edges: ProjectTaskGraphEdge[];
+  isolatedTasks: ProjectTask[];
+  seedTasks?: ProjectTask[];
+}): ProjectTask[] => {
+  const byId = new Map<string, ProjectTask>();
+  const depsByTask = new Map<string, string[]>();
+
+  (input.seedTasks ?? []).forEach((task) => upsertGraphTask(byId, task));
+  input.isolatedTasks.forEach((task) =>
+    upsertGraphTask(byId, { ...task, dependsOnTaskIds: [], dependencyCount: 0 }),
+  );
+
+  input.edges.forEach((edge) => {
+    upsertGraphTask(byId, edge.task);
+    upsertGraphTask(byId, edge.predecessor);
+    if (!byId.has(edge.taskId)) {
+      upsertGraphTask(
+        byId,
+        stubGraphTask(input.projectId, edge.taskId, edge.taskTitle),
+      );
+    }
+    if (!byId.has(edge.predecessorId)) {
+      upsertGraphTask(
+        byId,
+        stubGraphTask(input.projectId, edge.predecessorId, edge.predecessorTitle),
+      );
+    }
+
+    const next = depsByTask.get(edge.taskId) ?? [];
+    if (!next.includes(edge.predecessorId)) next.push(edge.predecessorId);
+    depsByTask.set(edge.taskId, next);
+  });
+
+  return [...byId.values()].map((task) => {
+    const dependsOnTaskIds = depsByTask.get(task.id) ?? [];
+    return {
+      ...task,
+      projectId: task.projectId || input.projectId,
+      dependsOnTaskIds,
+      dependencyCount: dependsOnTaskIds.length,
+    };
+  });
 };

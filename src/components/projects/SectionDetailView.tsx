@@ -61,6 +61,11 @@ export function SectionDetailView({
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-hr-primary px-5 py-4 text-white">
         <div>
           <h1 className="text-xl font-bold">{section.name}</h1>
+          {section.isFinalSection ? (
+            <p className="mt-1 text-sm text-white/80">
+              {t("projects.detail.sectionFlow.finalSectionBadge")}
+            </p>
+          ) : null}
         </div>
         <div className="flex gap-2">
           <button
@@ -174,7 +179,12 @@ export function SectionDetailView({
                       {task.id.slice(0, 8)}…
                     </td>
                     <td className="truncate px-1 py-2 text-center font-medium text-hr-primary" title={task.title}>
-                      {task.title}
+                      <span>{task.title}</span>
+                      {section.isFinalSection ? (
+                        <span className="ms-1 rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                          {t("common.completed")}
+                        </span>
+                      ) : null}
                     </td>
                     <td
                       className="truncate px-1 py-2 text-center text-hr-muted"

@@ -356,6 +356,7 @@ export function ProjectsPage() {
           updateSection(selectedProject.id, section.id, {
             name: section.name,
             displayOrder: orderIndex + 1,
+            isFinalSection: Boolean(section.isFinalSection),
           }),
         ),
       );

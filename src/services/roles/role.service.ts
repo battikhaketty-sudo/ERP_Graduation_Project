@@ -63,8 +63,22 @@ export const addRole = async (payload: RoleFormPayload): Promise<AppRole> => {
   throw { message: "فشل إنشاء الدور." };
 };
 
-export const updateRole = async (id: string, payload: RoleFormPayload): Promise<AppRole> => {
-  const response = await api.put(`/roles/${id}`, toRoleBody(payload));
+export const updateRole = async (
+  id: string,
+  payload: Partial<RoleFormPayload>,
+): Promise<AppRole> => {
+  const current = await getRoleById(id);
+  const response = await api.put(
+    `/roles/${id}`,
+    toRoleBody({
+      name: payload.name ?? current.name,
+      description:
+        payload.description !== undefined ? payload.description : current.description,
+      isDefault: payload.isDefault ?? current.isDefault,
+      level: payload.level ?? current.level,
+      permissionIds: payload.permissionIds ?? current.permissionIds ?? [],
+    }),
+  );
   assertMutationSuccess(response.data, "فشل تحديث الدور.");
   return getRoleById(id);
 };

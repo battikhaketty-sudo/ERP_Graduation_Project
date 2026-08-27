@@ -1,5 +1,4 @@
 import {
-  Bell,
   Building2,
   FolderKanban,
   LayoutGrid,
@@ -25,5 +24,4 @@ export const navItems: NavItem[] = [
   { id: "departments", labelKey: "nav.departments", icon: PanelsTopLeft, to: ROUTES.departments },
   { id: "access", labelKey: "nav.access", icon: ShieldCheck, to: ROUTES.access },
   { id: "hr", labelKey: "nav.hr", icon: Building2, to: ROUTES.hr },
-  { id: "notifications", labelKey: "nav.notifications", icon: Bell, to: ROUTES.notifications },
 ];
