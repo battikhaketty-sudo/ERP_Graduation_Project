@@ -28,7 +28,6 @@ import {
 } from "../../services/projects/sectionDependencies";
 import {
   getProjectSectionEdgeLabels,
-  setSectionEdgeLabel,
 } from "../../services/projects/sectionEdgeLabelsStorage";
 import type { Project, ProjectSection } from "../../types/project";
 import {
@@ -57,13 +56,6 @@ type SectionDependencyFlowProps = {
   search: string;
   onEditSection: (section: ProjectSection) => void;
   onDeleteSection: (section: ProjectSection) => void;
-};
-
-type EditingEdge = {
-  id: string;
-  source: string;
-  target: string;
-  label: string;
 };
 
 const gateStyles: Record<SectionFlowGate, string> = {
@@ -102,9 +94,16 @@ function SectionFlowNodeComponent({ data }: NodeProps<Node<SectionNodeData>>) {
         <p className="line-clamp-2 text-sm font-bold text-hr-text" title={data.section.name}>
           {data.section.name}
         </p>
-        <span className="shrink-0 rounded-md bg-hr-table-alt px-1.5 py-0.5 text-[10px] font-medium text-hr-muted">
-          {t(`projects.detail.sectionFlow.gate.${data.gate}`)}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          {data.section.isFinalSection ? (
+            <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              {t("projects.detail.sectionFlow.finalSectionBadge")}
+            </span>
+          ) : null}
+          <span className="rounded-md bg-hr-table-alt px-1.5 py-0.5 text-[10px] font-medium text-hr-muted">
+            {t(`projects.detail.sectionFlow.gate.${data.gate}`)}
+          </span>
+        </div>
       </div>
       <p className="mb-2 truncate text-[11px] text-hr-muted">
         {t("projects.detail.sectionFlow.tasksInSection", {
@@ -200,13 +199,10 @@ function SectionDependencyFlowCanvas({
   onDeleteSection,
 }: SectionDependencyFlowProps) {
   const { t } = useTranslation();
-  const [labelsRevision, setLabelsRevision] = useState(0);
-  const [editingEdge, setEditingEdge] = useState<EditingEdge | null>(null);
-  const [draftLabel, setDraftLabel] = useState("");
 
   const edgeLabels = useMemo(
     () => getProjectSectionEdgeLabels(project.id),
-    [labelsRevision, project.id],
+    [project.id],
   );
 
   const filteredSections = useMemo(() => {
@@ -221,11 +217,6 @@ function SectionDependencyFlowCanvas({
   const visibleIds = useMemo(
     () => new Set(filteredSections.map((section) => section.id)),
     [filteredSections],
-  );
-
-  const sectionNameById = useMemo(
-    () => new Map(project.sections.map((section) => [section.id, section.name])),
-    [project.sections],
   );
 
   const initialNodes = useMemo(() => {
@@ -246,7 +237,7 @@ function SectionDependencyFlowCanvas({
           section,
           gate: layout.gate,
           taskCount: sectionTasks.length,
-          completedCount: 0,
+          completedCount: section.isFinalSection ? sectionTasks.length : 0,
           onEdit: onEditSection,
           onDelete: onDeleteSection,
         },
@@ -341,31 +332,6 @@ function SectionDependencyFlowCanvas({
     setEdges(initialEdges);
   }, [initialEdges, initialNodes, setEdges, setNodes]);
 
-  const openEdgeEditor = (edge: Edge) => {
-    if (edge.source === FLOW_START_ID || edge.target === FLOW_END_ID) return;
-    if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) return;
-    setEditingEdge({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      label: edgeLabels[edge.id] ?? "",
-    });
-    setDraftLabel(edgeLabels[edge.id] ?? "");
-  };
-
-  const saveEdgeLabel = () => {
-    if (!editingEdge) return;
-    setSectionEdgeLabel(
-      project.id,
-      editingEdge.source,
-      editingEdge.target,
-      draftLabel,
-    );
-    setEditingEdge(null);
-    setDraftLabel("");
-    setLabelsRevision((value) => value + 1);
-  };
-
   if (!filteredSections.length && project.sections.length > 0) {
     return (
       <div className="flex h-[420px] items-center justify-center rounded-2xl border border-dashed border-hr-border bg-hr-table-alt px-4 text-center text-sm text-hr-muted">
@@ -381,7 +347,6 @@ function SectionDependencyFlowCanvas({
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onEdgeClick={(_, edge) => openEdgeEditor(edge)}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodesConnectable={false}
@@ -406,56 +371,6 @@ function SectionDependencyFlowCanvas({
           nodeColor="rgb(var(--hr-primary))"
         />
       </ReactFlow>
-
-      {editingEdge ? (
-        <div className="absolute inset-x-3 bottom-3 z-20 mx-auto max-w-md rounded-2xl border border-hr-border bg-hr-surface p-4 shadow-xl">
-          <p className="text-sm font-bold text-hr-text">
-            {t("projects.detail.sectionFlow.edgeLabelTitle")}
-          </p>
-          <p className="mt-1 text-xs text-hr-muted">
-            {sectionNameById.get(editingEdge.source) || editingEdge.source}
-            {" → "}
-            {sectionNameById.get(editingEdge.target) || editingEdge.target}
-          </p>
-          <p className="mt-2 text-xs text-hr-muted">
-            {t("projects.detail.sectionFlow.edgeLabelHint")}
-          </p>
-          <input
-            type="text"
-            value={draftLabel}
-            onChange={(event) => setDraftLabel(event.target.value)}
-            maxLength={80}
-            autoFocus
-            placeholder={t("projects.detail.sectionFlow.edgeLabelPlaceholder")}
-            className="mt-3 h-10 w-full rounded-xl border border-hr-border bg-hr-input-bg px-3 text-sm text-hr-text outline-none focus:border-hr-primary"
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                saveEdgeLabel();
-              }
-              if (event.key === "Escape") {
-                setEditingEdge(null);
-              }
-            }}
-          />
-          <div className="mt-3 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setEditingEdge(null)}
-              className="h-9 rounded-xl border border-hr-border px-4 text-sm font-medium text-hr-muted transition hover:bg-hr-hover"
-            >
-              {t("common.cancel")}
-            </button>
-            <button
-              type="button"
-              onClick={saveEdgeLabel}
-              className="h-9 rounded-xl bg-hr-primary px-4 text-sm font-bold text-white transition hover:bg-hr-primary-hover"
-            >
-              {t("projects.detail.sectionFlow.edgeLabelSave")}
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {!project.sections.length ? (
         <p className="pointer-events-none absolute inset-x-0 bottom-3 z-10 px-4 text-center text-xs text-hr-muted">

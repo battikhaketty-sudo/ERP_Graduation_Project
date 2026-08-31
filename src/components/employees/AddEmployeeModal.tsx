@@ -3,13 +3,14 @@ import {
   AlertCircle,
   CheckCircle,
   Loader,
+  Upload,
 } from "lucide-react";
 import { DEFAULT_EMPLOYEE_PASSWORD } from "../../constants/defaults";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useModalAutoFocus } from "../../hooks/useModalAutoFocus";
 import { useReferenceOptions } from "../../hooks/useReferenceOptions";
 import { useTranslation } from "../../i18n";
-import type { Employee, WorkRole } from "../../types/employee";
+import type { Employee } from "../../types/employee";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
 import {
   isValidDecimal,
@@ -26,18 +27,10 @@ import {
   focusAndScrollToFirstError,
 } from "../../utils/formUx";
 import { mapNamedOptions } from "../../utils/selectOptions";
-import { useSkillCatalog } from "../../hooks/useSkillCatalog";
 import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { PasswordInput } from "../ui/PasswordInput";
 import { ManualDateInput } from "../ui/ManualDateInput";
-import { EmployeeResumeSkillsEditor } from "./EmployeeResumeSkillsEditor";
-import {
-  emptyEmployeeSkillRow,
-  isEmployeeSkillRowComplete,
-  toResumeSkillPayload,
-  type EmployeeSkillRow,
-} from "./employeeSkills";
 import {
   alertErrorClass,
   alertSuccessClass,
@@ -53,6 +46,29 @@ import {
   inputClass,
   readOnlyClass,
 } from "./employee-ui";
+import { EmployeeAvatar } from "./EmployeeAvatar";
+import { EmployeeIdImageField } from "./EmployeeIdImageField";
+
+const emptyAddEmployeeForm = () => ({
+  fullName: "",
+  email: "",
+  phone: "",
+  workPhone: "",
+  password: DEFAULT_EMPLOYEE_PASSWORD,
+  birthDate: "",
+  gender: "",
+  nationality: "",
+  departmentId: "",
+  joiningDate: "",
+  contractEndDate: "",
+  salary: "",
+  wage: "",
+  contractTypeId: "",
+  idNumber: "",
+  avatar: "",
+  idCardFrontImage: "",
+  idCardBackImage: "",
+});
 
 type AddEmployeeModalProps = {
   isOpen: boolean;
@@ -60,9 +76,7 @@ type AddEmployeeModalProps = {
   onSubmit: (employee: Omit<Employee, "id">) => Promise<void>;
 };
 
-type TabType = "personal" | "work" | "resume" | "payroll";
-
-const WORK_ROLES: WorkRole[] = ["Front_end", "Back_end", "UI_UX", "Test"];
+type TabType = "personal" | "work" | "payroll";
 
 export function AddEmployeeModal({
   isOpen,
@@ -75,7 +89,6 @@ export function AddEmployeeModal({
     () => [
       { value: "personal", label: t("employees.modal.tabs.personal") },
       { value: "work", label: t("employees.modal.tabs.work") },
-      { value: "resume", label: t("employees.modal.tabs.resume") },
       { value: "payroll", label: t("employees.modal.tabs.payroll") },
     ],
     [t],
@@ -99,33 +112,7 @@ export function AddEmployeeModal({
     employees: false,
   });
 
-  const {
-    skillGroups,
-    loading: skillsLoading,
-    error: skillsError,
-  } = useSkillCatalog(isOpen);
-
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    password: DEFAULT_EMPLOYEE_PASSWORD,
-    birthDate: "",
-    gender: "",
-    nationality: "",
-    maritalStatus: "",
-    degreeLevel: "",
-    fieldOfStudy: "",
-    departmentId: "",
-    role: "Front_end" as WorkRole,
-    joiningDate: "",
-    contractEndDate: "",
-    salary: "",
-    wage: "",
-    contractTypeId: "",
-    idNumber: "",
-    skills: [emptyEmployeeSkillRow()] as EmployeeSkillRow[],
-  });
+  const [formData, setFormData] = useState(emptyAddEmployeeForm);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -134,6 +121,7 @@ export function AddEmployeeModal({
     setSubmitError(null);
     setSubmitSuccess(false);
     setErrors({});
+    setFormData(emptyAddEmployeeForm());
   }, [isOpen]);
 
   useEffect(() => {
@@ -190,6 +178,9 @@ export function AddEmployeeModal({
     } else if (!isValidPhone(formData.phone)) {
       nextErrors.phone = t("employees.errors.phoneInvalid");
     }
+    if (formData.workPhone.trim() && !isValidPhone(formData.workPhone)) {
+      nextErrors.workPhone = t("employees.errors.phoneInvalid");
+    }
     if (formData.salary && !isValidDecimal(formData.salary)) {
       nextErrors.salary = t("employees.errors.salaryInvalid");
     }
@@ -227,7 +218,7 @@ export function AddEmployeeModal({
         nextErrors.birthDate
       ) {
         setActiveTab("personal");
-      } else if (nextErrors.departmentId) {
+      } else if (nextErrors.departmentId || nextErrors.workPhone) {
         setActiveTab("work");
       } else if (nextErrors.contractTypeId) {
         setActiveTab("payroll");
@@ -255,16 +246,14 @@ export function AddEmployeeModal({
         name: formData.fullName.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim(),
+        workPhone: formData.workPhone.trim() || formData.phone.trim(),
         password: formData.password,
-        role: formData.role,
+        role: "Front_end",
         address: `${formData.nationality || "-"} - ${selectedDepartment?.name || "-"}`,
-        avatar: "",
+        avatar: formData.avatar,
         birthDate: formData.birthDate,
         gender: formData.gender as Employee["gender"],
         nationality: formData.nationality,
-        maritalStatus: formData.maritalStatus || undefined,
-        degreeLevel: formData.degreeLevel || undefined,
-        fieldOfStudy: formData.fieldOfStudy || undefined,
         department: selectedDepartment?.name,
         departmentId: formData.departmentId,
         contractTypeId: formData.contractTypeId,
@@ -275,18 +264,8 @@ export function AddEmployeeModal({
         salary: formData.salary ? Number(formData.salary) : undefined,
         wage: formData.wage ? Number(formData.wage) : undefined,
         idNumber: formData.idNumber,
-        resumeSkills: formData.skills
-          .filter(isEmployeeSkillRowComplete)
-          .filter(
-            (row, index, rows) =>
-              rows.findIndex(
-                (entry) =>
-                  entry.typeId === row.typeId &&
-                  entry.skillId === row.skillId &&
-                  entry.levelId === row.levelId,
-              ) === index,
-          )
-          .map(toResumeSkillPayload),
+        idCardFrontImage: formData.idCardFrontImage || undefined,
+        idCardBackImage: formData.idCardBackImage || undefined,
       });
 
       setSubmitSuccess(true);
@@ -405,6 +384,7 @@ export function AddEmployeeModal({
                   label={t("employees.modal.fields.email")}
                   required
                   error={errors.email}
+                  hint={t("employees.detail.fields.emailHint")}
                   htmlFor="employee-email"
                 >
                   <input
@@ -476,72 +456,6 @@ export function AddEmployeeModal({
                   />
                 </EmployeeField>
 
-                <EmployeeField label={t("employees.modal.fields.maritalStatus")}>
-                  <select
-                    name="maritalStatus"
-                    value={formData.maritalStatus}
-                    onChange={handleChange}
-                    className={inputClass}
-                  >
-                    <option value="">
-                      {t("employees.modal.placeholders.selectMaritalStatus")}
-                    </option>
-                    <option value="أعزب">
-                      {t("employees.detail.maritalOptions.single")}
-                    </option>
-                    <option value="متزوج">
-                      {t("employees.detail.maritalOptions.married")}
-                    </option>
-                    <option value="مطلق">
-                      {t("employees.detail.maritalOptions.divorced")}
-                    </option>
-                    <option value="أرمل">
-                      {t("employees.detail.maritalOptions.widowed")}
-                    </option>
-                  </select>
-                </EmployeeField>
-
-                <EmployeeField label={t("employees.modal.fields.degreeLevel")}>
-                  <select
-                    name="degreeLevel"
-                    value={formData.degreeLevel}
-                    onChange={handleChange}
-                    className={inputClass}
-                  >
-                    <option value="">
-                      {t("employees.modal.placeholders.selectDegreeLevel")}
-                    </option>
-                    <option value="خريج">
-                      {t("employees.detail.degreeOptions.graduate")}
-                    </option>
-                    <option value="بكالوريوس">
-                      {t("employees.detail.degreeOptions.bachelor")}
-                    </option>
-                    <option value="ماجستير">
-                      {t("employees.detail.degreeOptions.master")}
-                    </option>
-                    <option value="دكتوراه">
-                      {t("employees.detail.degreeOptions.doctorate")}
-                    </option>
-                    <option value="دبلوم">
-                      {t("employees.detail.degreeOptions.diploma")}
-                    </option>
-                    <option value="ثانوية">
-                      {t("employees.detail.degreeOptions.highSchool")}
-                    </option>
-                  </select>
-                </EmployeeField>
-
-                <EmployeeField label={t("employees.modal.fields.fieldOfStudy")}>
-                  <input
-                    name="fieldOfStudy"
-                    value={formData.fieldOfStudy}
-                    onChange={handleChange}
-                    className={inputClass}
-                    placeholder={t("employees.modal.placeholders.fieldOfStudy")}
-                  />
-                </EmployeeField>
-
                 <EmployeeField label={t("employees.modal.fields.password")}>
                   <PasswordInput
                     name="password"
@@ -550,11 +464,98 @@ export function AddEmployeeModal({
                     className={inputClass}
                   />
                 </EmployeeField>
+
+                <EmployeeIdImageField
+                  label={t("employees.detail.fields.idFrontImage")}
+                  value={formData.idCardFrontImage}
+                  onChange={(idCardFrontImage) =>
+                    setFormData((prev) => ({ ...prev, idCardFrontImage }))
+                  }
+                />
+                <EmployeeIdImageField
+                  label={t("employees.detail.fields.idBackImage")}
+                  value={formData.idCardBackImage}
+                  onChange={(idCardBackImage) =>
+                    setFormData((prev) => ({ ...prev, idCardBackImage }))
+                  }
+                />
               </div>
 
-              <p className="rounded-xl border border-dashed border-hr-border bg-hr-hover/30 px-4 py-3 text-sm text-hr-muted">
-                {t("employees.modal.photoLaterHint")}
-              </p>
+              <div className="flex flex-col items-center gap-3 sm:items-start">
+                <p className="self-start text-sm font-medium text-hr-text">
+                  {t("employees.modal.fields.photo")}
+                </p>
+                {formData.avatar ? (
+                  <img
+                    src={formData.avatar}
+                    alt=""
+                    className="h-[180px] w-[170px] rounded-2xl border border-hr-border object-cover"
+                  />
+                ) : (
+                  <EmployeeAvatar
+                    src=""
+                    name={formData.fullName}
+                    alt=""
+                    className="h-[180px] w-[170px] rounded-2xl border border-hr-border object-cover text-4xl"
+                  />
+                )}
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-hr-border bg-hr-surface px-4 py-2 text-sm font-medium text-hr-text transition hover:border-hr-primary">
+                  <Upload className="size-4" />
+                  {formData.avatar
+                    ? t("employees.detail.changePhoto")
+                    : t("employees.modal.uploadPhotoHint")}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      if (!file.type.startsWith("image/")) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          photo: t("employees.errors.photoInvalid"),
+                        }));
+                        event.target.value = "";
+                        return;
+                      }
+                      if (file.size > 5 * 1024 * 1024) {
+                        setErrors((prev) => ({
+                          ...prev,
+                          photo: t("employees.errors.photoTooLarge"),
+                        }));
+                        event.target.value = "";
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        const result =
+                          typeof reader.result === "string" ? reader.result : "";
+                        if (!result) {
+                          setErrors((prev) => ({
+                            ...prev,
+                            photo: t("employees.errors.photoInvalid"),
+                          }));
+                          return;
+                        }
+                        setFormData((prev) => ({ ...prev, avatar: result }));
+                        setErrors((prev) => ({ ...prev, photo: "" }));
+                      };
+                      reader.onerror = () => {
+                        setErrors((prev) => ({
+                          ...prev,
+                          photo: t("employees.errors.photoInvalid"),
+                        }));
+                      };
+                      reader.readAsDataURL(file);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+                {errors.photo ? (
+                  <p className="text-sm text-red-500">{errors.photo}</p>
+                ) : null}
+              </div>
             </div>
           )}
 
@@ -595,45 +596,33 @@ export function AddEmployeeModal({
                   />
                 </EmployeeField>
 
-                <EmployeeField label={t("employees.modal.fields.workRole")}>
-                  <select
-                    name="role"
-                    value={formData.role}
+                <EmployeeField
+                  label={t("employees.modal.fields.workPhone")}
+                  error={errors.workPhone}
+                  hint={t("employees.modal.fields.workPhoneHint")}
+                  htmlFor="employee-workPhone"
+                >
+                  <input
+                    id="employee-workPhone"
+                    name="workPhone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    dir="ltr"
+                    value={formData.workPhone}
                     onChange={handleChange}
                     className={inputClass}
-                  >
-                    {WORK_ROLES.map((role) => (
-                      <option key={role} value={role}>
-                        {t(`badges.workRoles.${role}`)}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="05xxxxxxxx"
+                  />
                 </EmployeeField>
               </div>
-            </div>
-          )}
-
-          {activeTab === "resume" && (
-            <div className="space-y-5">
-              <div className="flex items-center gap-2 text-hr-text">
-                <StepBadge step={3} />
-                <h3 className="font-bold">{t("employees.modal.tabs.resume")}</h3>
-              </div>
-
-              <EmployeeResumeSkillsEditor
-                skills={formData.skills}
-                onChange={(skills) => setFormData((prev) => ({ ...prev, skills }))}
-                skillGroups={skillGroups}
-                loading={skillsLoading}
-                error={skillsError}
-              />
             </div>
           )}
 
           {activeTab === "payroll" && (
             <div className="space-y-5">
               <div className="flex items-center gap-2 text-hr-text">
-                <StepBadge step={4} />
+                <StepBadge step={3} />
                 <h3 className="font-bold">{t("employees.modal.tabs.payroll")}</h3>
               </div>
 

@@ -59,7 +59,6 @@ export function AddProjectModal({
   const [form, setForm] = useState({
     name: "",
     managerId: "",
-    assignedEmployeeId: "",
     description: "",
     startDate: "",
     endDate: "",
@@ -77,7 +76,6 @@ export function AddProjectModal({
     setForm({
       name: project?.name ?? "",
       managerId: project?.managerId ?? "",
-      assignedEmployeeId: project?.assignedEmployeeId ?? "",
       description: project?.description ?? "",
       startDate: project?.startDate ?? "",
       endDate: project?.endDate ?? "",
@@ -128,8 +126,7 @@ export function AddProjectModal({
 
     if (
       projectStatusRank(status) > projectStatusRank("not_started") &&
-      membersCount <= 0 &&
-      !form.assignedEmployeeId
+      membersCount <= 0
     ) {
       setError(t("projects.modals.addProject.errors.statusNeedsMembers"));
       return;
@@ -149,10 +146,6 @@ export function AddProjectModal({
       setError(t("projects.modals.addProject.errors.managerRequired"));
       return;
     }
-    if (!isEditing && !form.assignedEmployeeId) {
-      setError(t("projects.modals.addProject.errors.assignedEmployeeRequired"));
-      return;
-    }
     if (isEditing && !canAdvanceProjectStatus(baselineStatus, form.status)) {
       setError(t("projects.modals.addProject.errors.statusNoRegression"));
       return;
@@ -167,9 +160,6 @@ export function AddProjectModal({
     }
 
     const manager = employees.find((item) => item.id === form.managerId);
-    const assignee = employees.find(
-      (item) => item.id === form.assignedEmployeeId,
-    );
 
     setSaving(true);
     setError(null);
@@ -178,15 +168,10 @@ export function AddProjectModal({
         name: form.name,
         managerId: form.managerId,
         managerName: manager?.name ?? "",
-        assignedEmployeeId:
-          form.assignedEmployeeId || project?.assignedEmployeeId || "",
-        assignedEmployeeName:
-          assignee?.name ?? project?.assignedEmployeeName ?? "",
         description: form.description,
         startDate: form.startDate,
         endDate: form.endDate,
         status: form.status,
-        budget: project?.budget ?? 0,
       });
       onClose();
     } catch (err) {
@@ -270,36 +255,6 @@ export function AddProjectModal({
                 />
               </div>
             </div>
-            {!isEditing ? (
-              <div>
-                <label className="mb-2 block text-sm text-hr-text">
-                  {t("projects.modals.addProject.fields.assignedEmployee")}{" "}
-                  <span className="text-red-500">*</span>
-                </label>
-                <SearchableSelect
-                  value={form.assignedEmployeeId}
-                  onChange={(value) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      assignedEmployeeId: value,
-                    }))
-                  }
-                  options={mapNamedOptions(employees, {
-                    description: (employee) => employee.id,
-                  })}
-                  placeholder={t(
-                    "projects.modals.addProject.placeholders.assignedEmployee",
-                  )}
-                  searchPlaceholder={t(
-                    "projects.modals.addProject.placeholders.assignedEmployeeSearch",
-                  )}
-                  loading={loading}
-                />
-                <p className="mt-1 text-xs text-hr-muted">
-                  {t("projects.modals.addProject.assignedEmployeeHint")}
-                </p>
-              </div>
-            ) : null}
             <div>
               <label className="mb-2 block text-sm text-hr-text">
                 {t("projects.modals.addProject.fields.description")}{" "}

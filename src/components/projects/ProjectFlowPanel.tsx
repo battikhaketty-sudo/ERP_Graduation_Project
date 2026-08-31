@@ -1,7 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "../../i18n";
+import { getProjectTaskGraph } from "../../services/projects";
 import type { Project, ProjectTask, TaskStats } from "../../types/project";
+import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { cardSurfaceClass } from "../ui/formStyles";
+import { StatusBanner } from "../ui/StatusBanner";
 import { TableAddButton } from "../ui/TableToolbar";
 import { buildProjectProgressSnapshot } from "./projectProgress";
 import {
@@ -72,6 +75,41 @@ export function ProjectFlowPanel({
 }: ProjectFlowPanelProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
+  const [filter] = useState<TaskFlowFilter>("all");
+  const [graphTasks, setGraphTasks] = useState<ProjectTask[]>(project.tasks);
+  const [graphLoading, setGraphLoading] = useState(true);
+  const [graphError, setGraphError] = useState<string | null>(null);
+
+  const graphReloadKey = `${project.id}:${project.tasksCount ?? project.tasks.length}:${project.tasks
+    .map((task) => `${task.id}:${task.title}:${task.dependencyCount ?? 0}`)
+    .join("|")}`;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      setGraphLoading(true);
+      setGraphError(null);
+      try {
+        const tasks = await getProjectTaskGraph(project.id, project.tasks);
+        if (!cancelled) setGraphTasks(tasks);
+      } catch (err) {
+        if (!cancelled) {
+          setGraphTasks(project.tasks);
+          setGraphError(
+            getThrownErrorMessage(err, t("projects.detail.flow.loadError")),
+          );
+        }
+      } finally {
+        if (!cancelled) setGraphLoading(false);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [graphReloadKey, project.id, project.tasks, t]);
 
   const snapshot = useMemo(
     () => buildProjectProgressSnapshot(project, taskStats),
@@ -110,7 +148,7 @@ export function ProjectFlowPanel({
             </div>
             <p className="text-xs text-hr-muted">
               {t("projects.detail.flow.taskCount", {
-                count: project.tasks.length,
+                count: graphTasks.length,
               })}
             </p>
           </div>
@@ -136,12 +174,28 @@ export function ProjectFlowPanel({
             </div>
           </div>
 
-          <TaskDependencyFlow
-            project={project}
-            search={search}
-            onEditTask={(task) => onEditTask?.(task)}
-            onDeleteTask={(task) => onDeleteTask?.(task)}
-          />
+          {graphError ? (
+            <StatusBanner
+              variant="error"
+              message={graphError}
+              className="mb-4"
+            />
+          ) : null}
+
+          {graphLoading ? (
+            <div className="flex h-[min(70vh,560px)] min-h-[360px] items-center justify-center rounded-2xl border border-dashed border-hr-border bg-hr-table-alt px-4 text-sm text-hr-muted">
+              {t("common.loading")}
+            </div>
+          ) : (
+            <TaskDependencyFlow
+              project={project}
+              tasks={graphTasks}
+              filter={filter}
+              search={search}
+              onEditTask={(task) => onEditTask?.(task)}
+              onDeleteTask={(task) => onDeleteTask?.(task)}
+            />
+          )}
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

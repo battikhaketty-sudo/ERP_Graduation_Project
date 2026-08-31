@@ -49,6 +49,11 @@ export type ProjectSection = {
   name: string;
   displayOrder: number;
   createdAt?: string;
+  /**
+   * When true, tasks in this section are treated as completed.
+   * A project may have more than one final section.
+   */
+  isFinalSection: boolean;
   /** Section ids that should complete before this stage (local workflow graph). */
   dependsOnSectionIds: string[];
 };
@@ -85,6 +90,20 @@ export type ProjectTask = {
   dependencyCount?: number;
   assignmentCount?: number;
   transitionCount?: number;
+};
+
+/** One edge from GET /project-tasks/dependencies (task ← predecessor). */
+export type ProjectTaskGraphEdge = {
+  id: string;
+  /** Dependent task (must wait for the predecessor). */
+  taskId: string;
+  taskTitle: string;
+  /** Previous task that should finish first. */
+  predecessorId: string;
+  predecessorTitle: string;
+  dependencyType: TaskDependencyType;
+  task: ProjectTask | null;
+  predecessor: ProjectTask | null;
 };
 
 /** Full task payload from GET /project-tasks/{id}. */
@@ -144,13 +163,10 @@ export type ProjectFormPayload = {
   name: string;
   managerId: string;
   managerName: string;
-  assignedEmployeeId: string;
-  assignedEmployeeName: string;
   description: string;
   startDate: string;
   endDate: string;
   status: ProjectStatus;
-  budget: number;
 };
 
 export type InvitationFormPayload = {
@@ -165,9 +181,8 @@ export type InvitationFormPayload = {
 export type SectionFormPayload = {
   name: string;
   displayOrder: number;
-  dependsOnSectionIds?: string[];
-  /** Labels on arrows from prerequisite section → this section (keyed by prerequisite id). */
-  dependencyEdgeLabels?: Record<string, string>;
+  /** Marks the section as a final/completion stage (API: IsFinalSection). */
+  isFinalSection: boolean;
 };
 
 export type TaskFormPayload = {

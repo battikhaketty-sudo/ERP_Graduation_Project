@@ -22,6 +22,10 @@ import type {
   TaskTransition,
 } from "../../types/project";
 import { wouldCreateCycle } from "../../services/projects/taskDependencies";
+import {
+  filterIncompleteTasksForPredecessors,
+  isTaskCompletedByFinalSection,
+} from "../../services/projects/sectionDependencies";
 import { getCurrentActorIds } from "../../utils/accessToken";
 import { sanitizeDecimalInput } from "../../utils/inputConstraints";
 import { mapNamedOptions } from "../../utils/selectOptions";
@@ -185,7 +189,15 @@ export function AddTaskModal({
           ),
         priority: task.priority || "medium",
       });
-      setDependsOnTaskIds([...(task.dependsOnTaskIds ?? [])]);
+      setDependsOnTaskIds(
+        (task.dependsOnTaskIds ?? []).filter((id) => {
+          const predecessor = project.tasks.find((item) => item.id === id);
+          return (
+            predecessor &&
+            !isTaskCompletedByFinalSection(predecessor, project.sections)
+          );
+        }),
+      );
     } else {
       const sectionId = defaultSectionId || project.sections[0]?.id || "";
       const startDate = clampToProjectStart(
@@ -222,7 +234,15 @@ export function AddTaskModal({
         if (detail) {
           setTransitions(detail.transitions);
           if (detail.dependsOnTaskIds.length) {
-            setDependsOnTaskIds([...detail.dependsOnTaskIds]);
+            setDependsOnTaskIds(
+              detail.dependsOnTaskIds.filter((id) => {
+                const predecessor = project.tasks.find((item) => item.id === id);
+                return (
+                  predecessor &&
+                  !isTaskCompletedByFinalSection(predecessor, project.sections)
+                );
+              }),
+            );
           }
         } else if (!task) {
           setTransitions([]);
@@ -285,12 +305,16 @@ export function AddTaskModal({
 
   const dependencyOptions = useMemo(() => {
     const currentId = task?.id;
-    return project.tasks.filter((item) => {
-      if (item.id === currentId) return false;
-      if (!currentId) return true;
-      return !wouldCreateCycle(project.tasks, currentId, item.id);
-    });
-  }, [project.tasks, task?.id]);
+    const incomplete = filterIncompleteTasksForPredecessors(
+      project.tasks,
+      project.sections,
+      { excludeTaskId: currentId },
+    );
+    if (!currentId) return incomplete;
+    return incomplete.filter(
+      (item) => !wouldCreateCycle(project.tasks, currentId, item.id),
+    );
+  }, [project.sections, project.tasks, task?.id]);
 
   const handleClose = () => {
     if (saving) return;
@@ -393,7 +417,13 @@ export function AddTaskModal({
         priority: form.priority,
         assigneeIds: validAssignees.map((item) => item.id),
         assigneeNames: validAssignees.map((item) => item.name),
-        dependsOnTaskIds,
+        dependsOnTaskIds: dependsOnTaskIds.filter((id) => {
+          const predecessor = project.tasks.find((item) => item.id === id);
+          return (
+            predecessor &&
+            !isTaskCompletedByFinalSection(predecessor, project.sections)
+          );
+        }),
       });
       onClose();
     } catch (err) {

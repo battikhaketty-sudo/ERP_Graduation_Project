@@ -1,11 +1,12 @@
-import { RefreshCw, Search, Wand2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { RefreshCw, Search, Trash2, Wand2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 import { useFormValidation } from "../../hooks/useFormValidation";
 import { useModalAutoFocus } from "../../hooks/useModalAutoFocus";
 import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { useTranslation } from "../../i18n";
 import { getAllPermissions } from "../../services/permissions";
-import { addRole, getRoleById, updateRole } from "../../services/roles";
+import { addRole, deleteRole, getRoleById, updateRole } from "../../services/roles";
 import type { AppPermission } from "../../types/permission";
 import type { RoleFormPayload } from "../../types/role";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
@@ -22,6 +23,7 @@ import {
   modalBodyClass,
   modalClass,
   modalFooterClass,
+  readOnlyClass,
 } from "../ui/formStyles";
 import { ModalTitleBar } from "../ui/ModalTitleBar";
 import { tablePanelClass, tableScrollClass } from "./access-ui";
@@ -31,6 +33,7 @@ type EditRoleModalProps = {
   roleId?: string;
   onClose: () => void;
   onSaved: () => void;
+  onDeleted?: () => void;
 };
 
 const emptyForm: RoleFormPayload = {
@@ -52,10 +55,14 @@ const sampleForm = (): RoleFormPayload => ({
   permissionIds: [],
 });
 
-export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalProps) {
+export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: EditRoleModalProps) {
   const { t } = useTranslation();
+  const { confirm } = useConfirmDialog();
   const [form, setForm] = useState<RoleFormPayload>(emptyForm);
   const [roleNumber, setRoleNumber] = useState("");
+  const [roleIsFixed, setRoleIsFixed] = useState(false);
+  const [roleNameSnapshot, setRoleNameSnapshot] = useState("");
+  const originalRoleRef = useRef<RoleFormPayload | null>(null);
   const [permissions, setPermissions] = useState<AppPermission[]>([]);
   const [permissionSearch, setPermissionSearch] = useState("");
   const [fixedPermissionIds, setFixedPermissionIds] = useState<Set<string>>(new Set());
@@ -64,8 +71,10 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
   const [permissionsLoading, setPermissionsLoading] = useState(true);
   const [permissionsError, setPermissionsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameFieldRef = useModalAutoFocus<HTMLInputElement>(!formLoading);
+  const isBusy = saving || deleting;
 
   const validators = useMemo(
     () => ({
@@ -83,12 +92,15 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
 
   const { getError, touch, validateAll, reset, clearField } = useFormValidation(form, validators);
 
-  useModalDismiss(onClose, !saving);
+  useModalDismiss(onClose, !isBusy);
 
   const loadRole = useCallback(async () => {
     if (mode !== "edit" || !roleId) {
       setForm(emptyForm);
       setRoleNumber("");
+      setRoleIsFixed(false);
+      setRoleNameSnapshot("");
+      originalRoleRef.current = null;
       setFixedPermissionIds(new Set());
       setFormLoading(false);
       return;
@@ -98,19 +110,30 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
     setError(null);
     try {
       const role = await getRoleById(roleId);
-      setRoleNumber(role.id);
-      setForm({
+      const permissionIds = Array.from(
+        new Set([
+          ...role.permissionIds,
+          ...role.permissions.filter((p) => p.isFixed).map((p) => p.permissionId),
+        ]),
+      );
+      const loadedForm: RoleFormPayload = {
         name: role.name,
         description: role.description ?? "",
         isDefault: role.isDefault,
         level: Number(role.level) || 0,
-        permissionIds: role.permissionIds,
-      });
+        permissionIds,
+      };
+      originalRoleRef.current = loadedForm;
+      setRoleNumber(role.id);
+      setRoleIsFixed(Boolean(role.isFixed));
+      setRoleNameSnapshot(role.name);
+      setForm(loadedForm);
       setFixedPermissionIds(
         new Set(role.permissions.filter((p) => p.isFixed).map((p) => p.permissionId)),
       );
     } catch (err) {
       setRoleNumber(roleId);
+      setRoleIsFixed(false);
       setError(getThrownErrorMessage(err, t("access.roles.errors.load")));
     } finally {
       setFormLoading(false);
@@ -176,7 +199,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
   );
 
   const togglePermission = (permissionId: string) => {
-    if (fixedPermissionIds.has(permissionId)) return;
+    if (roleIsFixed || fixedPermissionIds.has(permissionId)) return;
     setForm((current) => {
       const ids = current.permissionIds ?? [];
       return {
@@ -189,6 +212,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
   };
 
   const selectAllPermissions = () => {
+    if (roleIsFixed) return;
     const targetIds =
       selectableFilteredPermissionIds.length > 0
         ? selectableFilteredPermissionIds
@@ -203,6 +227,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
   };
 
   const clearSelectablePermissions = () => {
+    if (roleIsFixed) return;
     setForm((current) => ({
       ...current,
       permissionIds: Array.from(fixedPermissionIds),
@@ -225,10 +250,30 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
     setSaving(true);
     setError(null);
     try {
+      const original = originalRoleRef.current;
+      const permissionIds = Array.from(
+        new Set([...(form.permissionIds ?? []), ...fixedPermissionIds]),
+      );
+      const payload: RoleFormPayload =
+        roleIsFixed && original
+          ? {
+              name: original.name,
+              isDefault: original.isDefault,
+              level: original.level,
+              permissionIds: original.permissionIds ?? permissionIds,
+              description: form.description,
+            }
+          : {
+              name: form.name,
+              description: form.description,
+              isDefault: form.isDefault,
+              level: form.level,
+              permissionIds,
+            };
       if (mode === "edit" && roleId) {
-        await updateRole(roleId, form);
+        await updateRole(roleId, payload);
       } else {
-        await addRole(form);
+        await addRole(payload);
       }
       onSaved();
       onClose();
@@ -236,6 +281,30 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
       setError(getThrownErrorMessage(err, t("access.roles.errors.save")));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!roleId || roleIsFixed) return;
+
+    const confirmed = await confirm({
+      message: t("access.roles.deleteConfirm", {
+        name: roleNameSnapshot || form.name || roleId,
+      }),
+    });
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteRole(roleId);
+      onDeleted?.();
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(getThrownErrorMessage(err, t("access.roles.errors.delete")));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -248,7 +317,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={(event) => {
-        if (!saving && event.target === event.currentTarget) onClose();
+        if (!isBusy && event.target === event.currentTarget) onClose();
       }}
     >
       <form
@@ -259,7 +328,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
         <ModalTitleBar
           title={title}
           onClose={onClose}
-          disabled={saving}
+          disabled={isBusy}
           variant="bordered"
           trailing={
             import.meta.env.DEV && mode === "add" ? (
@@ -276,6 +345,9 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
         />
 
         <div className={`${modalBodyClass} min-h-0`}>
+          {roleIsFixed ? (
+            <p className={`mb-4 ${infoBannerClass}`}>{t("access.roles.fixedHint")}</p>
+          ) : null}
           {error ? <p className={`mb-4 ${alertErrorClass}`}>{error}</p> : null}
 
           {formLoading ? (
@@ -304,11 +376,13 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
                 error={getError("name")}
                 placeholder={t("access.roles.placeholders.name")}
                 required
+                readOnly={roleIsFixed}
+                disabled={roleIsFixed}
                 autoComplete="off"
               />
               <FormField
                 label={t("access.roles.columns.level")}
-                hint={t("form.levelHint")}
+                hint={roleIsFixed ? undefined : t("form.levelHint")}
                 error={getError("level")}
                 htmlFor="role-level"
               >
@@ -318,6 +392,8 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
                   min={0}
                   step={1}
                   value={form.level}
+                  readOnly={roleIsFixed}
+                  disabled={roleIsFixed}
                   onChange={(event) => {
                     setForm((current) => ({
                       ...current,
@@ -326,18 +402,26 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
                     clearField("level");
                   }}
                   onBlur={() => touch("level")}
-                  className={inputClass}
+                  className={roleIsFixed ? readOnlyClass : inputClass}
                 />
               </FormField>
               <div className="flex items-end pb-1">
-                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-hr-border px-4 py-3 text-sm text-hr-text transition hover:bg-hr-hover">
+                <label
+                  className={[
+                    "flex items-center gap-2 rounded-xl border border-hr-border px-4 py-3 text-sm text-hr-text transition",
+                    roleIsFixed
+                      ? "cursor-not-allowed opacity-70"
+                      : "cursor-pointer hover:bg-hr-hover",
+                  ].join(" ")}
+                >
                   <input
                     type="checkbox"
                     checked={form.isDefault}
+                    disabled={roleIsFixed}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, isDefault: event.target.checked }))
                     }
-                    className="size-4 rounded border-hr-border text-hr-primary"
+                    className="size-4 rounded border-hr-border text-hr-primary disabled:pointer-events-none"
                   />
                   {t("access.roles.columns.isDefault")}
                 </label>
@@ -352,7 +436,11 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
                   rows={3}
                   maxLength={DESCRIPTION_MAX}
                   showCount
-                  hint={t("common.optional")}
+                  hint={
+                    roleIsFixed
+                      ? t("access.roles.fixedDescriptionOnly")
+                      : t("common.optional")
+                  }
                 />
               </div>
             </div>
@@ -396,7 +484,9 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
               <button
                 type="button"
                 onClick={selectAllPermissions}
-                disabled={permissionsLoading || !selectablePermissionIds.length}
+                disabled={
+                  roleIsFixed || permissionsLoading || !selectablePermissionIds.length
+                }
                 className="rounded-lg border border-hr-border px-3 py-2 text-xs font-medium text-hr-text transition hover:bg-hr-hover disabled:opacity-50"
               >
                 {t("common.selectAll")}
@@ -404,7 +494,11 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
               <button
                 type="button"
                 onClick={clearSelectablePermissions}
-                disabled={permissionsLoading || selectedPermissionsCount <= fixedPermissionIds.size}
+                disabled={
+                  roleIsFixed ||
+                  permissionsLoading ||
+                  selectedPermissionsCount <= fixedPermissionIds.size
+                }
                 className="rounded-lg border border-hr-border px-3 py-2 text-xs font-medium text-hr-text transition hover:bg-hr-hover disabled:opacity-50"
               >
                 {t("form.clearSelection")}
@@ -426,6 +520,9 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
                         {t("access.permissions.columns.name")}
                       </th>
                       <th className="px-3 py-3 text-center font-medium">
+                        {t("access.roles.columns.isFixed")}
+                      </th>
+                      <th className="px-3 py-3 text-center font-medium">
                         {t("access.permissions.columns.description")}
                       </th>
                       <th className="px-3 py-3 text-center font-medium">
@@ -436,13 +533,13 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
                   <tbody>
                     {permissionsLoading ? (
                       <tr>
-                        <td colSpan={5} className="px-3 py-8 text-center text-hr-muted">
+                        <td colSpan={6} className="px-3 py-8 text-center text-hr-muted">
                           {t("access.roles.loadingPermissions")}
                         </td>
                       </tr>
                     ) : !pagedPermissions.length ? (
                       <tr>
-                        <td colSpan={5} className="px-3 py-8 text-center text-hr-muted">
+                        <td colSpan={6} className="px-3 py-8 text-center text-hr-muted">
                           {permissionSearch.trim()
                             ? t("common.noResults")
                             : t("access.permissions.empty")}
@@ -450,26 +547,59 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
                       </tr>
                     ) : (
                       pagedPermissions.map((permission, index) => {
-                        const isRoleFixed = fixedPermissionIds.has(permission.id);
+                        const isAssignmentFixed = fixedPermissionIds.has(permission.id);
+                        const isLocked = roleIsFixed || isAssignmentFixed;
                         const checked = (form.permissionIds ?? []).includes(permission.id);
                         const rowIndex = (permPage - 1) * PERM_PAGE_SIZE + index + 1;
                         return (
                           <tr
                             key={permission.id}
-                            className={index % 2 ? "bg-hr-table-head" : "bg-hr-surface"}
+                            className={[
+                              index % 2 ? "bg-hr-table-head" : "bg-hr-surface",
+                              isLocked ? "opacity-70" : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
                           >
                             <td className="px-3 py-3 text-center">
                               <input
                                 type="checkbox"
                                 checked={checked}
-                                disabled={isRoleFixed}
+                                disabled={isLocked}
+                                readOnly={isLocked}
                                 onChange={() => togglePermission(permission.id)}
-                                className="size-4 rounded border-hr-border text-hr-primary disabled:cursor-not-allowed"
+                                onClick={(event) => {
+                                  if (isLocked) event.preventDefault();
+                                }}
+                                className="size-4 rounded border-hr-border text-hr-primary disabled:pointer-events-none disabled:cursor-not-allowed"
+                                title={
+                                  isLocked
+                                    ? roleIsFixed
+                                      ? t("access.roles.fixedHint")
+                                      : t("access.roles.fixedPermissionHint")
+                                    : undefined
+                                }
+                                aria-label={
+                                  isLocked
+                                    ? roleIsFixed
+                                      ? t("access.roles.fixedHint")
+                                      : t("access.roles.fixedPermissionHint")
+                                    : permission.name
+                                }
                               />
                             </td>
                             <td className="px-3 py-3 text-center text-hr-muted">{rowIndex}</td>
                             <td className="px-3 py-3 text-center font-medium text-hr-text">
                               {permission.name}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {isAssignmentFixed ? (
+                                <span className="inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                                  {t("access.roles.columns.isFixed")}
+                                </span>
+                              ) : (
+                                <span className="text-hr-muted">{t("common.dash")}</span>
+                              )}
                             </td>
                             <td className="px-3 py-3 text-center text-hr-muted">
                               {permission.description || t("common.dash")}
@@ -495,17 +625,33 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved }: EditRoleModalP
           </section>
         </div>
 
-        <div className={`${modalFooterClass} shrink-0 border-t border-hr-border`}>
-          <button
-            type="submit"
-            disabled={formLoading || saving}
-            className="rounded-xl bg-hr-primary px-6 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {saving ? t("common.saving") : t("access.roles.saveChanges")}
-          </button>
-          <button type="button" onClick={onClose} disabled={saving} className={cancelBtnClass}>
-            {t("common.cancel")}
-          </button>
+        <div className={`${modalFooterClass} flex-wrap justify-between gap-y-3 shrink-0 border-t border-hr-border`}>
+          {mode === "edit" && roleId && !roleIsFixed ? (
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              disabled={isBusy || formLoading}
+              className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:hover:bg-red-950/30"
+            >
+              <Trash2 className="size-4" />
+              {t("common.delete")}
+            </button>
+          ) : (
+            <span className="hidden sm:block" aria-hidden />
+          )}
+
+          <div className="flex w-full flex-wrap gap-3 sm:ms-auto sm:w-auto">
+            <button
+              type="submit"
+              disabled={formLoading || isBusy}
+              className="rounded-xl bg-hr-primary px-6 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? t("common.saving") : t("access.roles.saveChanges")}
+            </button>
+            <button type="button" onClick={onClose} disabled={isBusy} className={cancelBtnClass}>
+              {t("common.cancel")}
+            </button>
+          </div>
         </div>
       </form>
     </div>

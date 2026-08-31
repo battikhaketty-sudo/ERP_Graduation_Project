@@ -18,7 +18,9 @@ export function AccessPageHeader({
   return (
     <header className="theme-transition mb-5 rounded-2xl bg-hr-surface p-5 shadow-card">
       <div className="mb-4">
-        <h1 className="text-xl font-bold text-hr-primary sm:text-[22px]">{t("access.title")}</h1>
+        <h1 className="whitespace-nowrap text-xl font-bold text-hr-primary sm:text-[22px]">
+          {t("access.title")}
+        </h1>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

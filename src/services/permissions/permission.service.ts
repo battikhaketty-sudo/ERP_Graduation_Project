@@ -75,9 +75,18 @@ export const addPermission = async (
 
 export const updatePermission = async (
   id: string,
-  payload: PermissionFormPayload,
+  payload: Partial<PermissionFormPayload>,
 ): Promise<AppPermission> => {
-  const response = await api.put(`/permissions/${id}`, toPermissionBody(payload));
+  const current = await getPermissionById(id);
+  const response = await api.put(
+    `/permissions/${id}`,
+    toPermissionBody({
+      name: payload.name ?? current.name,
+      description:
+        payload.description !== undefined ? payload.description : current.description,
+      resourceType: payload.resourceType ?? current.resourceType,
+    }),
+  );
   assertMutationSuccess(response.data, "فشل تحديث الصلاحية.");
   return getPermissionById(id);
 };

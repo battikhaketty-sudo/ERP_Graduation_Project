@@ -50,6 +50,8 @@ type TerminalNodeData = {
 
 type TaskDependencyFlowProps = {
   project: Project;
+  tasks?: ProjectTask[];
+  filter: TaskFlowFilter;
   search: string;
   onEditTask: (task: ProjectTask) => void;
   onDeleteTask: (task: ProjectTask) => void;
@@ -182,11 +184,13 @@ const edgeTypes = flowDependencyEdgeTypes;
 
 function TaskDependencyFlowCanvas({
   project,
+  tasks: tasksProp,
   search,
   onEditTask,
   onDeleteTask,
 }: TaskDependencyFlowProps) {
   const { t } = useTranslation();
+  const graphTasks = tasksProp ?? project.tasks;
 
   const sectionNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -197,12 +201,12 @@ function TaskDependencyFlowCanvas({
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    return project.tasks.filter((task) => {
+    return graphTasks.filter((task) => {
       if (!q) return true;
       const hay = `${task.title} ${task.name} ${task.description}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [project.tasks, search]);
+  }, [graphTasks, search]);
 
   const visibleIds = useMemo(
     () => new Set(filteredTasks.map((task) => task.id)),
@@ -210,7 +214,7 @@ function TaskDependencyFlowCanvas({
   );
 
   const initialNodes = useMemo(() => {
-    const byId = new Map(project.tasks.map((task) => [task.id, task]));
+    const byId = new Map(graphTasks.map((task) => [task.id, task]));
     const layouts = layoutTaskDependencyGraph(filteredTasks);
     const terminals = getTerminalLayout(filteredTasks);
 
@@ -263,17 +267,17 @@ function TaskDependencyFlowCanvas({
     filteredTasks,
     onDeleteTask,
     onEditTask,
-    project.tasks,
+    graphTasks,
     sectionNameById,
     t,
   ]);
 
   const initialEdges: Edge[] = useMemo(() => {
     const titleById = new Map(
-      project.tasks.map((task) => [task.id, task.title || task.name]),
+      graphTasks.map((task) => [task.id, task.title || task.name]),
     );
 
-    const taskEdges = dependencyEdges(project.tasks)
+    const taskEdges = dependencyEdges(graphTasks)
       .filter(
         (edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target),
       )
@@ -315,7 +319,7 @@ function TaskDependencyFlowCanvas({
     }));
 
     return [...taskEdges, ...terminalEdges];
-  }, [filteredTasks, project.tasks, visibleIds]);
+  }, [filteredTasks, graphTasks, visibleIds]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -325,7 +329,7 @@ function TaskDependencyFlowCanvas({
     setEdges(initialEdges);
   }, [initialEdges, initialNodes, setEdges, setNodes]);
 
-  if (!filteredTasks.length && project.tasks.length > 0) {
+  if (!filteredTasks.length && graphTasks.length > 0) {
     return (
       <div className="flex h-[420px] items-center justify-center rounded-2xl border border-dashed border-hr-border bg-hr-table-alt px-4 text-center text-sm text-hr-muted">
         {t("projects.detail.flow.noFilterMatch")}
@@ -364,7 +368,7 @@ function TaskDependencyFlowCanvas({
           nodeColor="rgb(var(--hr-primary))"
         />
       </ReactFlow>
-      {!project.tasks.length ? (
+      {!graphTasks.length ? (
         <p className="pointer-events-none absolute inset-x-0 bottom-3 z-10 px-4 text-center text-xs text-hr-muted">
           {t("projects.detail.flow.terminalsHint")}
         </p>

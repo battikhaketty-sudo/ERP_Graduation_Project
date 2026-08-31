@@ -26,7 +26,10 @@ export type EmployeeResumeSkill = {
 export type Employee = {
   id: string;
   name: string;
+  /** PersonalInfo.MobileNumber */
   phone: string;
+  /** WorkInfo.WorkMobileNumber */
+  workPhone?: string;
   email: string;
   role: WorkRole;
   address: string;
@@ -36,12 +39,6 @@ export type Employee = {
   gender?: "male" | "female";
   genderName?: string;
   nationality?: string;
-  /** Marital / social status (e.g. أعزب). */
-  maritalStatus?: string;
-  /** Degree / certificate level (e.g. خريج). */
-  degreeLevel?: string;
-  /** Field of study (e.g. كلية هندسة معلوماتية). */
-  fieldOfStudy?: string;
   employeeId?: string;
   userId?: string;
   department?: string;

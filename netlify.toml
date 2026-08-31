@@ -10,6 +10,7 @@
   force = true
 
 # Proxy uploaded media (avatars, ID cards) through same origin
+# Must stay above the SPA /* rule so images are not served as index.html
 [[redirects]]
   from = "/media/*"
   to = "http://mag-erp-system.runasp.net/:splat"

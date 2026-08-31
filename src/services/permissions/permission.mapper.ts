@@ -1,4 +1,5 @@
 import type { AppPermission } from "../../types/permission";
+import { readIsFixed } from "../../utils/readIsFixed";
 
 export const normalizePermission = (item: Record<string, unknown>): AppPermission => ({
   id: String(item.id ?? item.permissionId ?? ""),
@@ -8,5 +9,5 @@ export const normalizePermission = (item: Record<string, unknown>): AppPermissio
       ? item.description
       : undefined,
   resourceType: String(item.resourceType ?? item.resource ?? ""),
-  isFixed: Boolean(item.isFixed),
+  isFixed: readIsFixed(item),
 });

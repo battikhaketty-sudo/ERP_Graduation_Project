@@ -1,6 +1,6 @@
 export const ar = {
   common: {
-    appName: "HR System",
+    appName: "ERP System",
     appSubtitle: "نظام إدارة الموارد البشرية",
     search: "بحث شامل",
     searchPlaceholder: "بحث…",
@@ -218,8 +218,7 @@ export const ar = {
         birthDate: "تاريخ الميلاد",
         gender: "الجنس",
         email: "البريد الإلكتروني",
-        emailHint:
-          "يُرسل مع التحديث — إن لم يدعم السيرفر تغيير البريد سيظهر تنبيه بعد الحفظ",
+        emailHint: "لا يمكن تعديل البريد بعد إنشاء الموظف",
         phone: "رقم الهاتف",
         nationality: "الجنسية",
         idNumber: "رقم الهوية",
@@ -295,6 +294,8 @@ export const ar = {
         birthDate: "تاريخ الميلاد",
         email: "الإيميل",
         phone: "رقم الهاتف",
+        workPhone: "رقم موبايل العمل",
+        workPhoneHint: "اختياري — إن تُرك فارغاً يُستخدم رقم الهاتف الشخصي",
         gender: "الجنس",
         nationality: "جنسية",
         password: "كلمة المرور",
@@ -598,6 +599,7 @@ export const ar = {
         tasksPath: "مسار العمل",
         graphHint:
           "عرض فقط. أضف المهمة واختر ما يجب إنجازه قبلها؛ المسار يُرسم تلقائياً.",
+        loadError: "تعذر تحميل مسار المهام",
         graphStart: "البداية",
         graphEnd: "النهاية",
         terminalsHint:
@@ -645,12 +647,13 @@ export const ar = {
       sectionFlow: {
         title: "سير عمل الأقسام",
         subtitle:
-          "عرض مراحل المشروع ومساراتها — حدّد الأقسام السابقة عند إضافة أو تعديل القسم",
+          "عرض مراحل المشروع — أضف أو عدّل الأقسام من النموذج (الاسم والترتيب والقسم الأخير)",
         graphHint:
-          "عرض فقط لمسار الأقسام. اكتب تسمية على السهم من نافذة القسم أو بالنقر على السهم مباشرة.",
+          "عرض لمسار الأقسام. الحقول المحفوظة على السيرفر فقط: الاسم، الترتيب، والقسم الأخير.",
         graphStart: "البداية",
         graphEnd: "النهاية",
-        terminalsHint: "أضف قسماً وحدّد الأقسام التي تسبقه لبناء سير العمل",
+        finalSectionBadge: "قسم أخير",
+        terminalsHint: "أضف أقساماً لبناء مراحل المشروع",
         edgeLabelTitle: "تسمية السهم",
         edgeLabelHint: "اكتب جملة قصيرة توضّح الانتقال بين المرحلتين",
         edgeLabelPlaceholder: "مثال: بعد اعتماد العميل",
@@ -694,6 +697,7 @@ export const ar = {
       addSection: "إضافة قسم جديد",
       addTask: "إضافة مهمة جديدة",
       unassigned: "بدون قسم",
+      loadingMore: "جاري تحميل المزيد…",
     },
     members: {
       addMember: "دعوة عضو جديد",
@@ -787,6 +791,9 @@ export const ar = {
         saving: "جاري الحفظ…",
         dependsOnEmpty: "لا أقسام أخرى بعد — أضف أقساماً أولاً ثم اربط المسار",
         fields: {
+          isFinalSection: "قسم أخير (اكتمال)",
+          isFinalSectionHint:
+            "المهام داخل هذا القسم تُعتبر مكتملة، ويمكن وجود أكثر من قسم أخير. المهام المكتملة تُخفى من قائمة المهام السابقة.",
           dependsOn: "الأقسام السابقة",
           dependsOnHint:
             "اختر الأقسام التي يُفضَّل إنجازها قبل هذا القسم — واكتب تسمية على السهم لتوضيح المسار",
@@ -828,9 +835,10 @@ export const ar = {
           assignees: "المكلفون",
           dependsOn: "المهام السابقة (يجب اكتمالها أولاً)",
           dependsOnHint:
-            "اختر المهام التي لازم تتنفَّذ قبل هذه المهمة — المخطط يعرض ذلك تلقائياً",
+            "تظهر فقط المهام غير المكتملة. المهام في قسم أخير تُعتبر مكتملة وتُخفى من هذه القائمة",
         },
-        dependsOnEmpty: "لا مهام أخرى بعد — أضف مهاماً أولاً ثم اختر ما يجب إنجازه قبل المهمة",
+        dependsOnEmpty:
+          "لا مهام سابقة متاحة — إمّا لا توجد مهام أخرى، أو أن المهام الأخرى مكتملة (في قسم أخير)",
         placeholders: {
           title: "مثال: تصميم الواجهة الرئيسية",
           description: "وصف مختصر للمهمة (اختياري)",
@@ -1227,24 +1235,6 @@ export const ar = {
       },
     },
   },
-  notifications: {
-    title: "الإشعارات",
-    countLabel: "إشعار",
-    searchPlaceholder: "ابحث عن إشعار محدد...",
-    empty: "لا توجد إشعارات مطابقة للبحث",
-    selectItem: "تحديد {{title}}",
-    selectAllPage: "تحديد الكل في الصفحة",
-    selectedCount: "تم تحديد {{count}}",
-    markRead: "تعليم كمقروء",
-    deleteSelected: "حذف المحدد",
-    clearSelection: "إلغاء التحديد",
-    unreadBadge: "جديد",
-    confirmDelete: "هل تريد حذف {{count}} إشعار؟",
-    toasts: {
-      markedRead: "تم تعليم {{count}} إشعار كمقروء",
-      deleted: "تم حذف {{count}} إشعار",
-    },
-  },
   access: {
     title: "الهوية وإدارة الوصول",
     statsTitle: "إحصائيات عن المشاريع",
@@ -1278,6 +1268,7 @@ export const ar = {
       editRolesTitle: "تعديل أدوار المستخدم",
       rolesLabel: "الأدوار المعيّنة",
       fixedRole: "ثابت",
+      fixedRoleHint: "هذا الدور ثابت لهذا المستخدم — لا يمكن إلغاؤه أو حذفه",
       saveRoles: "حفظ الأدوار",
       deleteConfirm: "هل أنت متأكد من حذف المستخدم «{{email}}»؟",
       columns: {
@@ -1315,8 +1306,12 @@ export const ar = {
         description: "وصف",
         level: "مستوى",
         isDefault: "هل هو افتراضي؟",
+        isFixed: "ثابت",
         permissionsCount: "عدد الصلاحيات",
       },
+      fixedPermissionHint: "هذه الصلاحية ثابتة على الدور — لا يمكن تحديدها أو إلغاء تحديدها",
+      fixedHint: "دور نظامي ثابت — يمكن تعديل الوصف فقط (لا حذف ولا تغيير الاسم أو المستوى أو الصلاحيات)",
+      fixedDescriptionOnly: "يمكن تعديل الوصف فقط لهذا الدور الثابت",
       errors: {
         loadList: "فشل تحميل الأدوار",
         load: "فشل تحميل بيانات الدور",
@@ -1333,12 +1328,13 @@ export const ar = {
       searchPlaceholder: "ابحث عن صلاحية…",
       empty: "لا توجد صلاحيات",
       deleteConfirm: "هل أنت متأكد من حذف الصلاحية «{{name}}»؟",
-      fixedHint: "صلاحية نظامية — يمكن تعديل الوصف فقط",
+      fixedHint: "صلاحية نظامية — يمكن تعديل الوصف ونوع المورد فقط",
       columns: {
         select: "تحديد",
         name: "اسم",
         description: "وصف",
         resourceType: "نوع المورد",
+        isFixed: "ثابت",
       },
       fields: {
         number: "رقم الصلاحية",
@@ -1354,8 +1350,6 @@ export const ar = {
     },
   },
   header: {
-    notifications: "الإشعارات",
-    unreadNotifications: "{{count}} إشعارات غير مقروءة",
     profileMenu: "الملف الشخصي",
     online: "متصل",
   },
@@ -1384,7 +1378,6 @@ export const ar = {
       invitations: "دعواتي",
       attendance: "الحضور والدوام",
       departments: "الأقسام",
-      notifications: "الإشعارات",
     },
     progress: {
       title: "تقدم المشاريع",
@@ -1410,11 +1403,10 @@ export const ar = {
     projects: "المشاريع",
     employees: "الموظفون",
     departments: "الأقسام",
-    access: "الصلاحيات",
+    access: "الهوية وإدارة الوصول",
     hr: "الموارد البشرية",
     learning: "التعلم",
     memo: "المذكرات",
-    notifications: "الإشعارات",
   },
   auth: {
     login: "تسجيل الدخول",
@@ -1442,7 +1434,7 @@ export const ar = {
     navEmployees: "الموظفين",
     navDepartments: "الأقسام",
     navProjects: "المشاريع",
-    navAccess: "الصلاحيات",
+    navAccess: "الهوية وإدارة الوصول",
     navHr: "الموارد البشرية — الحضور والدوام",
   },
   pages: {
@@ -1474,10 +1466,6 @@ export const ar = {
     },
     access: {
       title: "الهوية وإدارة الوصول",
-    },
-    notifications: {
-      title: "الإشعارات",
-      searchPlaceholder: "ابحث في الإشعارات…",
     },
   },
 } as const;

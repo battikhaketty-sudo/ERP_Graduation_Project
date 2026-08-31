@@ -54,15 +54,10 @@ export const buildEmployeeFormData = async (
 ) => {
   const formData = new FormData();
 
-  formData.append("Email", data.email.trim());
-  // Some binders accept lowercase; UpdateEmployee docs omit Email, but create uses it.
-  if (mode === "update") {
-    formData.append("email", data.email.trim());
-  }
+  // Email + Password are only accepted on create. UpdateEmployee has neither field.
   if (mode === "create") {
+    formData.append("Email", data.email.trim());
     formData.append("Password", data.password || DEFAULT_EMPLOYEE_PASSWORD);
-  } else if (data.password?.trim()) {
-    formData.append("Password", data.password.trim());
   }
   formData.append("PersonalInfo.LegalName", data.name.trim());
   formData.append("PersonalInfo.Gender", toApiGender(data.gender));
@@ -80,7 +75,10 @@ export const buildEmployeeFormData = async (
   formData.append("WorkInfo.DepartmentId", data.departmentId || "");
   formData.append("WorkInfo.ManagerId", data.managerId || "");
   formData.append("WorkInfo.ContractTypeId", data.contractTypeId || "");
-  formData.append("WorkInfo.WorkMobileNumber", data.phone.trim());
+  formData.append(
+    "WorkInfo.WorkMobileNumber",
+    (data.workPhone?.trim() || data.phone.trim()),
+  );
   formData.append("WorkInfo.Wage", String(data.wage ?? 0));
   formData.append("WorkInfo.Salary", String(data.salary ?? 0));
 
@@ -95,28 +93,8 @@ export const buildEmployeeFormData = async (
     }
   }
 
-  if (data.nationality) {
-    formData.append("CitizenshipInfo.Nationality", data.nationality);
-  }
-
-  if (data.idNumber) {
-    formData.append("CitizenshipInfo.IdentificationNo", data.idNumber);
-  }
-
-  // Extra personal fields from the product design. Sent under PersonalInfo;
-  // ignored harmlessly if the current API binder does not map them yet.
-  if (data.maritalStatus?.trim()) {
-    formData.append("PersonalInfo.MaritalStatus", data.maritalStatus.trim());
-    formData.append("CitizenshipInfo.MaritalStatus", data.maritalStatus.trim());
-  }
-  if (data.degreeLevel?.trim()) {
-    formData.append("PersonalInfo.DegreeLevel", data.degreeLevel.trim());
-    formData.append("PersonalInfo.CertificateLevel", data.degreeLevel.trim());
-  }
-  if (data.fieldOfStudy?.trim()) {
-    formData.append("PersonalInfo.FieldOfStudy", data.fieldOfStudy.trim());
-    formData.append("PersonalInfo.StudyField", data.fieldOfStudy.trim());
-  }
+  formData.append("CitizenshipInfo.Nationality", data.nationality?.trim() ?? "");
+  formData.append("CitizenshipInfo.IdentificationNo", data.idNumber?.trim() ?? "");
 
   await appendImageIfDataUrl(
     formData,

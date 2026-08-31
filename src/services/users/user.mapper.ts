@@ -1,20 +1,23 @@
 import type { UserAccount, UserRoleAssignment } from "../../types/user";
+import { readIsFixed } from "../../utils/readIsFixed";
 
 export const normalizeUserRoleAssignment = (
   item: Record<string, unknown>,
 ): UserRoleAssignment => ({
-  roleId: String(item.roleId ?? item.id ?? ""),
-  isFixed: Boolean(item.isFixed),
+  roleId: String(item.roleId ?? item.RoleId ?? item.id ?? item.Id ?? ""),
+  isFixed: readIsFixed(item),
 });
 
 export const normalizeUser = (item: Record<string, unknown>): UserAccount => {
   const roleItems = Array.isArray(item.roles)
     ? item.roles
-    : Array.isArray(item.userRoles)
-      ? item.userRoles
-      : Array.isArray(item.roleAssignments)
-        ? item.roleAssignments
-        : [];
+    : Array.isArray(item.Roles)
+      ? item.Roles
+      : Array.isArray(item.userRoles)
+        ? item.userRoles
+        : Array.isArray(item.roleAssignments)
+          ? item.roleAssignments
+          : [];
 
   const roles = roleItems.map((role) =>
     normalizeUserRoleAssignment(role as Record<string, unknown>),

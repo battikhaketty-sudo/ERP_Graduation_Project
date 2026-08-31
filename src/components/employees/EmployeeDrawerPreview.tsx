@@ -78,7 +78,7 @@ export function EmployeeDrawerPreview({
           <Phone className="size-4 text-hr-muted" />
           <dt className="text-hr-muted">{t("employees.drawer.phone")}</dt>
           <dd className="ms-auto font-medium text-hr-text" dir="ltr">
-            {detail.phone}
+            {detail.workPhone || detail.phone}
           </dd>
         </div>
         <div className="flex items-center gap-2">

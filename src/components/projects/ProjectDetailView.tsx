@@ -8,6 +8,7 @@ import { buildProjectDetailStats } from "../../services/projects/project.mapper"
 import {
   getProjectInvitations,
   getProjectMembers,
+  getSectionById,
   updateInvitationStatus,
 } from "../../services/projects";
 import type {
@@ -32,7 +33,6 @@ import {
 import { ProjectStatusBadge } from "./ProjectBadges";
 import { ProjectDetailStatsCards } from "./ProjectStatsCards";
 import { ProjectFlowPanel } from "./ProjectFlowPanel";
-import { ProjectSectionFlowPanel } from "./ProjectSectionFlowPanel";
 import { ProjectTasksChartPanel } from "./ProjectTasksChartPanel";
 import { SectionDetailView } from "./SectionDetailView";
 import { TaskDetailView } from "./TaskDetailView";
@@ -64,7 +64,6 @@ type DetailTab =
   | "members"
   | "invitations"
   | "flow"
-  | "sectionFlow"
   | "kanban";
 
 export function ProjectDetailView({
@@ -190,8 +189,30 @@ export function ProjectDetailView({
     setSelectedSection(match);
     if (!match) {
       clearSectionFromUrl();
+      return;
     }
-  }, [clearSectionFromUrl, project.sections, sectionId]);
+
+    let cancelled = false;
+    void getSectionById(project.id, sectionId)
+      .then((fresh) => {
+        if (cancelled || !fresh) return;
+        setSelectedSection({
+          ...match,
+          ...fresh,
+          dependsOnSectionIds:
+            fresh.dependsOnSectionIds.length > 0
+              ? fresh.dependsOnSectionIds
+              : match.dependsOnSectionIds,
+        });
+      })
+      .catch(() => {
+        // Keep the list payload if GET by id is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clearSectionFromUrl, project.id, project.sections, sectionId]);
 
   const invitationsTotalPages = Math.max(
     1,
@@ -229,7 +250,6 @@ export function ProjectDetailView({
     { key: "members", label: t("projects.detail.tabs.members") },
     { key: "invitations", label: t("projects.detail.tabs.invitations") },
     { key: "flow", label: t("projects.detail.tabs.flow") },
-    { key: "sectionFlow", label: t("projects.detail.tabs.sectionFlow") },
   ];
 
   if (taskId) {
@@ -273,7 +293,6 @@ export function ProjectDetailView({
   const showKanban = activeTab === "kanban";
   const showGeneral = activeTab === "general";
   const showFlow = activeTab === "flow";
-  const showSectionFlow = activeTab === "sectionFlow";
 
   return (
     <main className="min-w-0 flex-1 bg-hr-bg px-4 py-4 sm:px-6 sm:py-6">
@@ -331,8 +350,7 @@ export function ProjectDetailView({
       {(showGeneral ||
         showMembersTable ||
         showInvitations ||
-        showFlow ||
-        showSectionFlow) && (
+        showFlow) && (
         <ProjectDetailStatsCards stats={detailStats} />
       )}
 
@@ -350,15 +368,6 @@ export function ProjectDetailView({
             onAddTask={(sectionId) => onAddTask(sectionId)}
           />
         </>
-      )}
-
-      {showSectionFlow && (
-        <ProjectSectionFlowPanel
-          project={project}
-          onAddSection={onAddSection}
-          onEditSection={onEditSection}
-          onDeleteSection={onDeleteSection}
-        />
       )}
 
       {showGeneral && (

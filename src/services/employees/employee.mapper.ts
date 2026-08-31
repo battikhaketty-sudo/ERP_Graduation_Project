@@ -154,7 +154,9 @@ export const normalizeEmployee = (
       resumeId: item.resumeId ? String(item.resumeId) : undefined,
       name: String(item.legalName || item.name || "بدون اسم"),
       email: String(item.email || "-"),
+      // List payload only exposes WorkMobileNumber (no personal mobile).
       phone: String(item.workMobileNumber || item.phone || "-"),
+      workPhone: String(item.workMobileNumber || item.phone || "-"),
       genderName: item.genderName ? String(item.genderName) : undefined,
       nationality: item.nationality ? String(item.nationality) : undefined,
       department: String(item.departmentName || "غير محدد"),
@@ -186,9 +188,11 @@ export const normalizeEmployee = (
     resumeId: resume.id ? String(resume.id) : item.resumeId ? String(item.resumeId) : undefined,
     name: String(personal.legalName || item.name || "بدون اسم"),
     email: String(item.email || "-"),
-    phone: String(
-      work.workMobileNumber || personal.mobileNumber || item.phone || "-",
-    ),
+    phone: String(personal.mobileNumber || item.phone || "-"),
+    workPhone: (() => {
+      const value = String(work.workMobileNumber || "").trim();
+      return value && value !== "-" ? value : "";
+    })(),
     role: "Front_end",
     address:
       `${citizenship.nationality || ""} - ${work.departmentName || ""}`.trim() || "-",
@@ -198,30 +202,6 @@ export const normalizeEmployee = (
     gender: personal.gender === 2 || personal.gender === "2" ? "female" : "male",
     genderName: personal.genderName ? String(personal.genderName) : undefined,
     nationality: String(citizenship.nationality || "غير محدد"),
-    maritalStatus: String(
-      personal.maritalStatus ||
-        personal.MaritalStatus ||
-        personal.socialStatus ||
-        personal.SocialStatus ||
-        citizenship.maritalStatus ||
-        citizenship.MaritalStatus ||
-        "",
-    ),
-    degreeLevel: String(
-      personal.degreeLevel ||
-        personal.DegreeLevel ||
-        personal.certificateLevel ||
-        personal.CertificateLevel ||
-        personal.educationLevel ||
-        "",
-    ),
-    fieldOfStudy: String(
-      personal.fieldOfStudy ||
-        personal.FieldOfStudy ||
-        personal.studyField ||
-        personal.StudyField ||
-        "",
-    ),
     department: String(work.departmentName || "غير محدد"),
     departmentId: String(work.departmentId || item.departmentId || ""),
     managerId: String(work.managerId || item.managerId || ""),

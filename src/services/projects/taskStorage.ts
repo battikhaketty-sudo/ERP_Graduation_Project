@@ -1,4 +1,9 @@
-import type { ProjectTask, TaskFormPayload, TaskStats } from "../../types/project";
+import type {
+  ProjectSection,
+  ProjectTask,
+  TaskFormPayload,
+  TaskStats,
+} from "../../types/project";
 import { PROJECT_TASKS_KEY } from "./localProjectData";
 import { sanitizeDependsOn } from "./taskDependencies";
 
@@ -256,11 +261,18 @@ export const removeTaskDependency = (
 export const countAllLocalTasks = (projectIds: string[]): number =>
   projectIds.reduce((sum, id) => sum + (readStore()[id]?.length ?? 0), 0);
 
-export const buildTaskStatsFromTasks = (tasks: ProjectTask[]): TaskStats => {
+export const buildTaskStatsFromTasks = (
+  tasks: ProjectTask[],
+  sections: Array<Pick<ProjectSection, "id" | "isFinalSection">> = [],
+): TaskStats => {
   const today = new Date().toISOString().slice(0, 10);
+  const completedSectionIds = new Set(
+    sections.filter((section) => section.isFinalSection).map((section) => section.id),
+  );
   let late = 0;
 
   tasks.forEach((task) => {
+    if (completedSectionIds.has(task.sectionId)) return;
     if (task.dueDate && task.dueDate < today) late += 1;
   });
 

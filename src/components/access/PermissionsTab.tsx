@@ -1,12 +1,15 @@
+import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 import { useTranslation } from "../../i18n";
-import { getPermissions } from "../../services/permissions";
+import { deletePermission, getPermissions } from "../../services/permissions";
 import type { AppPermission } from "../../types/permission";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { Pagination } from "../Pagination";
 import { TablePanelHeader } from "../ui/TablePanelHeader";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
 import { TableRowIndex } from "../ui/TableRowIndex";
+import { iconBtnClass } from "../ui/formStyles";
 import { EditPermissionModal } from "./EditPermissionModal";
 import { tablePanelClass, tableScrollClass } from "./access-ui";
 
@@ -29,6 +32,7 @@ export function PermissionsTab({
   onDataChanged,
 }: PermissionsTabProps) {
   const { t } = useTranslation();
+  const { confirm } = useConfirmDialog();
   const [permissions, setPermissions] = useState<AppPermission[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -66,6 +70,24 @@ export function PermissionsTab({
 
   const openAddModal = () => setModal({ mode: "add" });
 
+  const handleDelete = async (permission: AppPermission) => {
+    if (permission.isFixed) return;
+
+    const confirmed = await confirm({
+      message: t("access.permissions.deleteConfirm", { name: permission.name }),
+    });
+    if (!confirmed) return;
+
+    try {
+      await deletePermission(permission.id);
+      onNotice(null);
+      onDataChanged();
+      await loadPermissions();
+    } catch (err) {
+      onNotice(getThrownErrorMessage(err, t("access.permissions.errors.delete")));
+    }
+  };
+
   return (
     <>
       <section className={tablePanelClass}>
@@ -76,7 +98,7 @@ export function PermissionsTab({
         />
 
         <div className={tableScrollClass}>
-          <table className="w-full min-w-[720px] border-collapse text-sm">
+          <table className="w-full min-w-[820px] border-collapse text-sm">
             <thead className="bg-hr-table-head text-hr-muted">
               <tr>
                 <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>
@@ -90,18 +112,22 @@ export function PermissionsTab({
                 <th className="px-3 py-3 text-center font-medium">
                   {t("access.permissions.columns.resourceType")}
                 </th>
+                <th className="px-3 py-3 text-center font-medium">
+                  {t("access.permissions.columns.isFixed")}
+                </th>
+                <th className="px-3 py-3 text-center font-medium">{t("table.columns.actions")}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-10 text-center text-hr-muted">
+                  <td colSpan={7} className="px-3 py-10 text-center text-hr-muted">
                     {t("common.loading")}
                   </td>
                 </tr>
               ) : !permissions.length ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-10 text-center text-hr-muted">
+                  <td colSpan={7} className="px-3 py-10 text-center text-hr-muted">
                     {t("access.permissions.empty")}
                   </td>
                 </tr>
@@ -109,25 +135,12 @@ export function PermissionsTab({
                 permissions.map((permission, index) => (
                   <tr
                     key={permission.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setModal({ mode: "edit", permission })}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setModal({ mode: "edit", permission });
-                      }
-                    }}
-                    className={[
-                      "cursor-pointer transition-colors hover:bg-hr-table-hover",
-                      index % 2 ? "bg-hr-table-head" : "bg-hr-surface",
-                    ].join(" ")}
-                    aria-label={t("access.permissions.editLabel")}
+                    className={index % 2 ? "bg-hr-table-head" : "bg-hr-surface"}
                   >
                     <td className="px-3 py-3 text-center text-hr-muted">
                       <TableRowIndex page={page} index={index} pageSize={PAGE_SIZE} />
                     </td>
-                    <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-3 text-center">
                       <CopyableIdCell value={permission.id} />
                     </td>
                     <td className="px-3 py-3 text-center font-medium text-hr-text">
@@ -138,6 +151,37 @@ export function PermissionsTab({
                     </td>
                     <td className="px-3 py-3 text-center text-hr-text">
                       {permission.resourceType || t("common.dash")}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {permission.isFixed ? (
+                        <span className="inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                          {t("access.permissions.columns.isFixed")}
+                        </span>
+                      ) : (
+                        <span className="text-hr-muted">{t("common.dash")}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setModal({ mode: "edit", permission })}
+                          className={iconBtnClass}
+                          aria-label={t("access.permissions.editLabel")}
+                        >
+                          <Pencil className="size-4 text-amber-500" />
+                        </button>
+                        {!permission.isFixed ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleDelete(permission)}
+                            className={iconBtnClass}
+                            aria-label={t("common.delete")}
+                          >
+                            <Trash2 className="size-4 text-red-500" />
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))

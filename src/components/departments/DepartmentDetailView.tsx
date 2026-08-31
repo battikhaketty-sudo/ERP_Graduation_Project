@@ -1,5 +1,5 @@
-import { ImagePlus, Loader, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Loader } from "lucide-react";
+import { useEffect, useState } from "react";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 import { useTranslation } from "../../i18n";
@@ -40,8 +40,6 @@ export function DepartmentDetailView({
   const [employeeOptions, setEmployeeOptions] = useState<
     Array<{ id: string; name: string }>
   >([]);
-  const [imagePreview, setImagePreview] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -113,16 +111,6 @@ export function DepartmentDetailView({
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setImagePreview((event.target?.result as string) || "");
-    };
-    reader.readAsDataURL(file);
-  };
-
   return (
     <main
       className="min-w-0 flex-1 bg-hr-bg px-4 py-4 sm:px-6 sm:py-6"
@@ -149,8 +137,7 @@ export function DepartmentDetailView({
             {t("common.loading")}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DepartmentField label={t("departments.detail.fields.departmentId")}>
                 <input
                   value={editData.id}
@@ -166,14 +153,6 @@ export function DepartmentDetailView({
                     setEditData((prev) => ({ ...prev, name: e.target.value }))
                   }
                   className={inputClass}
-                />
-              </DepartmentField>
-
-              <DepartmentField label={t("departments.detail.fields.code")}>
-                <input
-                  value={editData.name}
-                  readOnly
-                  className={readOnlyClass}
                 />
               </DepartmentField>
 
@@ -240,50 +219,6 @@ export function DepartmentDetailView({
                   />
                 </DepartmentField>
               </div>
-            </div>
-
-            <div>
-              <DepartmentField label={t("departments.detail.fields.image")}>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
-                <div className="overflow-hidden rounded-2xl border border-hr-border">
-                  <div className="flex h-[100px] w-full max-w-[280px] items-center justify-center bg-hr-hover">
-                    {imagePreview ? (
-                      <img
-                        src={imagePreview}
-                        alt={t("departments.detail.imageAlt")}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <ImagePlus className="size-8 text-hr-muted" />
-                    )}
-                  </div>
-                  <div className="flex border-t border-hr-border">
-                    <button
-                      type="button"
-                      onClick={() => setImagePreview("")}
-                      className="flex flex-1 items-center justify-center gap-1 py-2 text-xs text-red-500"
-                    >
-                      <Trash2 className="size-3.5" />
-                      {t("departments.detail.deleteImage")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex flex-1 items-center justify-center gap-1 border-s border-hr-border py-2 text-xs text-hr-primary"
-                    >
-                      <ImagePlus className="size-3.5" />
-                      {t("departments.detail.editImage")}
-                    </button>
-                  </div>
-                </div>
-              </DepartmentField>
-            </div>
           </div>
         )}
       </section>

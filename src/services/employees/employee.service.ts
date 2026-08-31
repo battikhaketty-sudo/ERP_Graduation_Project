@@ -68,7 +68,10 @@ export const getEmployeeById = async (id: string) => {
 
 export const addEmployee = async (data: Omit<Employee, "id">) => {
   const formData = await buildEmployeeFormData(data);
-  const response = await api.post("/employees", formData);
+  // API: POST /employees — multipart/form-data (not JSON)
+  const response = await api.post("/employees", formData, {
+    headers: { "Content-Type": false },
+  });
   assertSuccess(response.data);
 
   const created = unwrapData<Record<string, unknown> | string>(response.data);
@@ -85,7 +88,7 @@ export const addEmployee = async (data: Omit<Employee, "id">) => {
         id: created,
         legalName: data.name,
         email: data.email,
-        workMobileNumber: data.phone,
+        workMobileNumber: data.workPhone || data.phone,
       });
     }
   }
@@ -94,16 +97,18 @@ export const addEmployee = async (data: Omit<Employee, "id">) => {
     id: crypto.randomUUID(),
     legalName: data.name,
     email: data.email,
-    workMobileNumber: data.phone,
+    workMobileNumber: data.workPhone || data.phone,
   });
 };
 
 export const updateEmployee = async (id: string, data: Partial<Employee>) => {
-  const formData = await buildEmployeeFormData({ ...data, id } as Omit<
-    Employee,
-    "id"
-  >, "update");
-  const response = await api.put(`/employees/${id}`, formData);
+  const current = await getEmployeeById(id);
+  const merged = { ...current, ...data, id };
+  const formData = await buildEmployeeFormData(merged, "update");
+  // API: PUT /employees/{id} — multipart/form-data (PersonalInfo.ProfileImage as file)
+  const response = await api.put(`/employees/${id}`, formData, {
+    headers: { "Content-Type": false },
+  });
   assertSuccess(response.data);
   return getEmployeeById(id);
 };

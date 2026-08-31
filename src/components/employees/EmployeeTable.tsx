@@ -216,10 +216,10 @@ export function EmployeeTable({
                   </td>
                   <td
                     className="px-3 py-3 text-center align-middle text-hr-muted"
-                    title={employee.phone}
+                    title={employee.workPhone || employee.phone}
                   >
                     <span dir="ltr" className="inline-block max-w-[120px] truncate align-middle">
-                      {employee.phone}
+                      {employee.workPhone || employee.phone}
                     </span>
                   </td>
                   <td
