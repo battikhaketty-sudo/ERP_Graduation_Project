@@ -9,6 +9,7 @@ import { DepartmentsPage } from "./pages/DepartmentsPage";
 import { HrPage } from "./pages/HrPage";
 import { LoginPage } from "./pages/LoginPage";
 import { AccessManagementPage } from "./pages/AccessManagementPage";
+import { ProfilePage } from "./pages/ProfilePage";
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
         <Route path={ROUTES.departments} element={<DepartmentsPage />} />
         <Route path={ROUTES.access} element={<AccessManagementPage />} />
         <Route path={ROUTES.hr} element={<HrPage />} />
+        <Route path={ROUTES.profile} element={<ProfilePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to={ROUTES.dashboard} replace />} />

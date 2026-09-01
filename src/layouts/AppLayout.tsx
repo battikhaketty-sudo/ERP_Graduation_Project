@@ -30,9 +30,11 @@ function AppShell() {
 
         <div
           data-app-scroll
-          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+          className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
         >
-          <Outlet />
+          <div className="flex min-h-full flex-1 flex-col">
+            <Outlet />
+          </div>
         </div>
       </div>
 

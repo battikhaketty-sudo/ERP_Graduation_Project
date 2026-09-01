@@ -6,7 +6,6 @@ import {
   unwrapPage,
   unwrapPagedMeta,
 } from "../../utils/apiResponse";
-import { sortNewestFirst } from "../../utils/listOrder";
 import { normalizeUser } from "./user.mapper";
 
 export const getUsers = async ({
@@ -26,9 +25,7 @@ export const getUsers = async ({
 
   const response = await api.get("/users", { params });
   const meta = unwrapPagedMeta(response.data);
-  const records = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(response.data).map(normalizeUser),
-  );
+  const records = unwrapPage<Record<string, unknown>>(response.data).map(normalizeUser);
 
   return {
     records,

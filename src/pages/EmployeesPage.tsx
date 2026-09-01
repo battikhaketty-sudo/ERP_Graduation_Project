@@ -52,7 +52,9 @@ export function EmployeesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [drawerEmployee, setDrawerEmployee] = useState<Employee | null>(null);
-  const [fullPageEmployee, setFullPageEmployee] = useState<Employee | null>(null);
+  const [fullPageEmployee, setFullPageEmployee] = useState<Employee | null>(
+    null,
+  );
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +104,7 @@ export function EmployeesPage() {
         const archivedIds = getArchivedEmployeeIds();
         const result = await getEmployees(currentPage, DEFAULT_PAGE_SIZE, {
           archived: false,
+          legalName: search.trim() || undefined,
         });
 
         const data = (result.data || []).filter(
@@ -127,12 +130,18 @@ export function EmployeesPage() {
         }
       }
     },
-    [archiveView, currentPage],
+    [archiveView, currentPage, search],
   );
 
   useEffect(() => {
-    fetchEmployees();
-  }, [fetchEmployees]);
+    const timer = window.setTimeout(
+      () => {
+        void fetchEmployees();
+      },
+      search ? 300 : 0,
+    );
+    return () => window.clearTimeout(timer);
+  }, [fetchEmployees, search]);
 
   useEffect(() => {
     if (!employeeId) {
@@ -144,7 +153,9 @@ export function EmployeesPage() {
     // on every employees refresh (that wipes local photo previews).
     setFullPageEmployee((current) => {
       if (current?.id === employeeId) return current;
-      return employees.find((employee) => employee.id === employeeId) ?? current;
+      return (
+        employees.find((employee) => employee.id === employeeId) ?? current
+      );
     });
 
     const fromList = employees.some((employee) => employee.id === employeeId);
@@ -175,14 +186,8 @@ export function EmployeesPage() {
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return employees;
-
-    return employees.filter(
-      (employee) =>
-        employee.name.toLowerCase().includes(query) ||
-        employee.email.toLowerCase().includes(query) ||
-        employee.phone.includes(query) ||
-        (employee.workPhone || "").includes(query) ||
-        employee.address.toLowerCase().includes(query),
+    return employees.filter((employee) =>
+      employee.name.toLowerCase().includes(query),
     );
   }, [employees, search]);
 
@@ -218,7 +223,9 @@ export function EmployeesPage() {
 
   const toggleSelectAll = (checked: boolean) => {
     setSelectedIds(
-      checked ? new Set(filteredEmployees.map((employee) => employee.id)) : new Set(),
+      checked
+        ? new Set(filteredEmployees.map((employee) => employee.id))
+        : new Set(),
     );
   };
 
@@ -239,7 +246,8 @@ export function EmployeesPage() {
   };
 
   const handleToggleArchive = async (employee: Employee) => {
-    const isArchived = archiveView === "archived" || Boolean(employee.isArchived);
+    const isArchived =
+      archiveView === "archived" || Boolean(employee.isArchived);
     const confirmed = await confirm({
       title: isArchived
         ? t("employees.archive.unarchiveTitle")
@@ -257,20 +265,32 @@ export function EmployeesPage() {
       if (isArchived) {
         await unarchiveEmployee(employee.id);
         removeArchivedEmployee(employee.id);
-        showToast(t("employees.toasts.unarchiveSuccess", { name: employee.name }), "success");
+        showToast(
+          t("employees.toasts.unarchiveSuccess", { name: employee.name }),
+          "success",
+        );
 
         if (archiveView === "archived") {
-          setEmployees((prev) => prev.filter((item) => item.id !== employee.id));
+          setEmployees((prev) =>
+            prev.filter((item) => item.id !== employee.id),
+          );
           setTotalCount((count) => Math.max(0, count - 1));
         }
       } else {
         await archiveEmployee(employee.id);
         addArchivedEmployee(employee);
-        showToast(t("employees.toasts.archiveSuccess", { name: employee.name }), "success");
+        showToast(
+          t("employees.toasts.archiveSuccess", { name: employee.name }),
+          "success",
+        );
 
         setEmployees((prev) => {
           const remaining = prev.filter((item) => item.id !== employee.id);
-          if (archiveView === "active" && remaining.length === 0 && currentPage > 1) {
+          if (
+            archiveView === "active" &&
+            remaining.length === 0 &&
+            currentPage > 1
+          ) {
             setCurrentPage((page) => page - 1);
           }
           return remaining;
@@ -289,7 +309,9 @@ export function EmployeesPage() {
     } catch (err) {
       const message = getThrownErrorMessage(
         err,
-        isArchived ? t("employees.errors.unarchive") : t("employees.errors.archive"),
+        isArchived
+          ? t("employees.errors.unarchive")
+          : t("employees.errors.archive"),
       );
       setError(message);
       showToast(message, "error");
@@ -326,7 +348,9 @@ export function EmployeesPage() {
         ? t("employees.bulk.unarchiveTitle")
         : t("employees.bulk.archiveTitle"),
       message: isArchived
-        ? t("employees.bulk.unarchiveMessage", { count: String(targets.length) })
+        ? t("employees.bulk.unarchiveMessage", {
+            count: String(targets.length),
+          })
         : t("employees.bulk.archiveMessage", { count: String(targets.length) }),
       confirmLabel: isArchived
         ? t("employees.bulk.unarchive")
@@ -361,7 +385,9 @@ export function EmployeesPage() {
     } catch (err) {
       const message = getThrownErrorMessage(
         err,
-        isArchived ? t("employees.errors.unarchive") : t("employees.errors.archive"),
+        isArchived
+          ? t("employees.errors.unarchive")
+          : t("employees.errors.archive"),
       );
       setError(message);
       showToast(message, "error");
@@ -390,12 +416,17 @@ export function EmployeesPage() {
   return (
     <>
       <main className="min-w-0 flex-1 overflow-y-auto bg-hr-bg px-4 py-4 sm:px-6 sm:py-6">
-        {error && <StatusBanner variant="error" message={error} className="mb-4" />}
+        {error && (
+          <StatusBanner variant="error" message={error} className="mb-4" />
+        )}
 
         <EmployeePageHeader
           totalCount={totalCount}
           search={search}
-          onSearchChange={setSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setCurrentPage(1);
+          }}
           onExport={handleExport}
           archiveView={archiveView}
           onArchiveViewChange={handleArchiveViewChange}

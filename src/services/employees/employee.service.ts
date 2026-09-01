@@ -9,7 +9,6 @@ import {
   unwrapPagedMeta,
 } from "../../utils/apiResponse";
 import { extractRowNumber } from "../../utils/tableRowNumber";
-import { sortNewestFirst } from "../../utils/listOrder";
 import { buildEmployeeFormData } from "./employee.form";
 import { normalizeEmployee } from "./employee.mapper";
 import {
@@ -20,21 +19,20 @@ import {
 export const getEmployees = async (
   page = 1,
   limit = 10,
-  options?: { archived?: boolean },
+  options?: { archived?: boolean; legalName?: string },
 ) => {
-  const response = await api.get("/employees", {
-    params: { Page: page, Limit: limit },
-  });
+  const params: Record<string, string | number> = { Page: page, Limit: limit };
+  if (options?.legalName?.trim()) params.LegalName = options.legalName.trim();
+
+  const response = await api.get("/employees", { params });
   const meta = unwrapPagedMeta(response.data);
-  let data = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(response.data).map((item) => {
-      const employee = normalizeEmployee(item);
-      return {
-        ...employee,
-        rowNumber: extractRowNumber(item),
-      };
-    }),
-  );
+  let data = unwrapPage<Record<string, unknown>>(response.data).map((item) => {
+    const employee = normalizeEmployee(item);
+    return {
+      ...employee,
+      rowNumber: extractRowNumber(item),
+    };
+  });
 
   if (options?.archived === true) {
     data = data.filter(

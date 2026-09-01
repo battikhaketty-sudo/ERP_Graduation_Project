@@ -1,5 +1,4 @@
 import api from "./api";
-import { sortNewestFirst } from "../utils/listOrder";
 import {
   assertSuccess,
   unwrapData,
@@ -82,9 +81,7 @@ export const getWorkingSchedules = async (
   if (name?.trim()) params.Name = name.trim();
 
   const res = await api.get("/working-schedules", { params });
-  const records = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(res.data).map(normalizeSchedule),
-  );
+  const records = unwrapPage<Record<string, unknown>>(res.data).map(normalizeSchedule);
   const meta = unwrapPagedMeta(res.data);
 
   return { records, meta };

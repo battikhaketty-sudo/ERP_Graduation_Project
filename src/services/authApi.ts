@@ -1,5 +1,5 @@
 import api from "./api";
-import { clearSession, setRefreshToken, setToken } from "./tokenStorage";
+import { clearSession, getRefreshToken, getStoredUser, setRefreshToken, setToken } from "./tokenStorage";
 import type { AuthUser, LoginCredentials, LoginResult } from "../types/auth";
 import { assertSuccess, unwrapData } from "../utils/apiResponse";
 
@@ -50,12 +50,27 @@ export const login = async (credentials: LoginCredentials): Promise<LoginResult>
   return { token, user };
 };
 
+export const changePassword = async (payload: {
+  oldPassword: string;
+  newPassword: string;
+}) => {
+  const res = await api.post("/auth/change-password", {
+    oldPassword: payload.oldPassword,
+    newPassword: payload.newPassword,
+  });
+  assertSuccess(res.data);
+  return res.data;
+};
+
 export const logout = async () => {
   try {
-    await api.post("/auth/logout");
+    await api.post("/auth/logout", {
+      refreshToken: getRefreshToken(),
+      email: getStoredUser()?.email,
+    });
   } catch {
     // ignore logout API errors and clear local session anyway
   }
 };
 
-export default { login, logout };
+export default { login, logout, changePassword };

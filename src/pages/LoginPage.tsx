@@ -149,17 +149,6 @@ export function LoginPage() {
               {loading ? t("auth.signingIn") : t("auth.signIn")}
             </button>
           </form>
-
-          <p className="mt-6 text-center text-sm text-hr-muted">
-            {t("auth.noAccount")}{" "}
-            <a
-              href="#"
-              className="font-semibold text-hr-primary hover:text-hr-primary-hover"
-              onClick={(e) => e.preventDefault()}
-            >
-              {t("auth.contactAdmin")}
-            </a>
-          </p>
         </div>
       </div>
     </div>

@@ -22,7 +22,6 @@ import {
   unwrapPage,
   unwrapPagedMeta,
 } from "../../utils/apiResponse";
-import { sortNewestFirst } from "../../utils/listOrder";
 import { fetchAllPages } from "../../utils/fetchAllPages";
 import {
   projectStatusToApi,
@@ -427,11 +426,9 @@ export const getProjects = async ({ page = 1, limit = 10, name }: ProjectsQuery 
 
   const response = await api.get("/projects", { params });
   const meta = unwrapPagedMeta(response.data);
-  const records = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(response.data)
-      .map((item) => normalizeProjectListItem(item))
-      .filter((item): item is Project => Boolean(item)),
-  );
+  const records = unwrapPage<Record<string, unknown>>(response.data)
+    .map((item) => normalizeProjectListItem(item))
+    .filter((item): item is Project => Boolean(item));
 
   return {
     records,
@@ -799,11 +796,9 @@ export const getProjectMembers = async (projectId: string, query: MembersQuery =
 
   const response = await api.get(`/projects/${projectId}/members`, { params });
   const meta = unwrapPagedMeta(response.data);
-  const records = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(response.data)
-      .map((item) => normalizeMember(item))
-      .filter((item): item is NonNullable<typeof item> => Boolean(item)),
-  );
+  const records = unwrapPage<Record<string, unknown>>(response.data)
+    .map((item) => normalizeMember(item))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   return {
     records,
@@ -848,11 +843,9 @@ export const getProjectInvitations = async (
   if (query.projectName?.trim()) params.ProjectName = query.projectName.trim();
 
   const response = await api.get(`/projects/${projectId}/invitations`, { params });
-  return sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(response.data)
-      .map((item) => normalizeInvitation(item, projectId))
-      .filter((item): item is ProjectInvitation => Boolean(item)),
-  );
+  return unwrapPage<Record<string, unknown>>(response.data)
+    .map((item) => normalizeInvitation(item, projectId))
+    .filter((item): item is ProjectInvitation => Boolean(item));
 };
 
 const dedupeInvitationsById = (invitations: ProjectInvitation[]) => {
@@ -886,7 +879,7 @@ export const getAllInvitations = async (query: InvitationsQuery = {}) => {
     );
   });
 
-  return sortNewestFirst(dedupeInvitationsById(merged));
+  return dedupeInvitationsById(merged);
 };
 
 const listMyInvitationsPage = async (page = 1, limit = 50) => {
@@ -899,7 +892,7 @@ const listMyInvitationsPage = async (page = 1, limit = 50) => {
     .filter((item): item is ProjectInvitation => Boolean(item));
 
   return {
-    records: sortNewestFirst(records),
+    records,
     meta: {
       ...meta,
       totalPages: meta.totalItems
@@ -915,7 +908,7 @@ export const getMyInvitations = async () => {
     (page, limit) => listMyInvitationsPage(page, limit),
     50,
   );
-  return sortNewestFirst(dedupeInvitationsById(records));
+  return dedupeInvitationsById(records);
 };
 
 export const addInvitation = async (payload: InvitationFormPayload) => {

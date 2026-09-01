@@ -1,9 +1,4 @@
-import {
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import hrEmployeeStatsIllustration from "../assets/images/hr-employee-stats.png";
@@ -153,12 +148,17 @@ const createSkillLevelDraftRow = (
 
 const getSkillTypeClass = (name: string, index: number) => {
   const map: Record<string, string> = {
-    Marketing: "bg-pink-100 text-pink-700 dark:bg-pink-950/50 dark:text-pink-300",
-    "Programming languages": "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
-    "Programming Lanuages": "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
-    "Soft skills": "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
+    Marketing:
+      "bg-pink-100 text-pink-700 dark:bg-pink-950/50 dark:text-pink-300",
+    "Programming languages":
+      "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
+    "Programming Lanuages":
+      "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300",
+    "Soft skills":
+      "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
     IT: "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300",
-    Languages: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
+    Languages:
+      "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
   };
   return map[name] || skillTypePillClasses[index % skillTypePillClasses.length];
 };
@@ -237,9 +237,8 @@ export function HrPage() {
   const [searchParams] = useSearchParams();
   const scheduleDetailParam = searchParams.get("schedule");
   const showEmployeeStats = !scheduleDetailParam;
-  const [scheduleHeader, setScheduleHeader] = useState<WorkScheduleHeaderState | null>(
-    null,
-  );
+  const [scheduleHeader, setScheduleHeader] =
+    useState<WorkScheduleHeaderState | null>(null);
 
   const sectionButtons = useMemo(
     (): { key: HrSection; label: string }[] => [
@@ -266,9 +265,7 @@ export function HrPage() {
   const getAttendanceStatusLabel = useCallback(
     (status: string) => {
       const badgeKey = attendanceStatusLabelKeys[status.trim()];
-      return badgeKey
-        ? t(`badges.attendanceStatus.${badgeKey}`)
-        : status;
+      return badgeKey ? t(`badges.attendanceStatus.${badgeKey}`) : status;
     },
     [t],
   );
@@ -368,7 +365,9 @@ export function HrPage() {
         setDepartmentTotalPages(meta.totalPages || 1);
         setApiNotice(null);
       } catch (err) {
-        setApiNotice(getThrownErrorMessage(err, t("hr.page.loadDepartmentsError")));
+        setApiNotice(
+          getThrownErrorMessage(err, t("hr.page.loadDepartmentsError")),
+        );
       }
     },
     [departmentSearch, t],
@@ -396,10 +395,18 @@ export function HrPage() {
         setAttendanceTotalPages(meta.totalPages || 1);
         setApiNotice(null);
       } catch (err) {
-        setApiNotice(getThrownErrorMessage(err, t("hr.page.loadAttendanceError")));
+        setApiNotice(
+          getThrownErrorMessage(err, t("hr.page.loadAttendanceError")),
+        );
       }
     },
-    [attendanceDateFrom, attendanceDateTo, attendanceSearch, attendanceStatusFilter, t],
+    [
+      attendanceDateFrom,
+      attendanceDateTo,
+      attendanceSearch,
+      attendanceStatusFilter,
+      t,
+    ],
   );
 
   const loadEmployeeStats = useCallback(async () => {
@@ -594,19 +601,29 @@ export function HrPage() {
     }
   };
 
+  const visibleSkillGroups = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return skillGroups;
+    return skillGroups.filter((group) =>
+      group.name.toLowerCase().includes(query),
+    );
+  }, [skillGroups, search]);
+
   useEffect(() => {
-    if (!skillGroups.length) {
-      setSelectedSkillTypeId(null);
+    if (!visibleSkillGroups.length) {
+      if (!search.trim()) {
+        setSelectedSkillTypeId(null);
+      }
       return;
     }
 
     if (
       !selectedSkillTypeId ||
-      !skillGroups.some((group) => group.id === selectedSkillTypeId)
+      !visibleSkillGroups.some((group) => group.id === selectedSkillTypeId)
     ) {
-      setSelectedSkillTypeId(skillGroups[0].id);
+      setSelectedSkillTypeId(visibleSkillGroups[0].id);
     }
-  }, [skillGroups, selectedSkillTypeId]);
+  }, [visibleSkillGroups, selectedSkillTypeId, search]);
 
   const selectedSkillGroup = useMemo(
     () => skillGroups.find((group) => group.id === selectedSkillTypeId) ?? null,
@@ -781,7 +798,10 @@ export function HrPage() {
       setContracts((prev) => prependUniqueRecord(prev, created));
       setInlineContractName("");
       setApiNotice(null);
-      showToast(t("hr.contracts.toasts.quickAddSuccess", { name: created.name }), "success");
+      showToast(
+        t("hr.contracts.toasts.quickAddSuccess", { name: created.name }),
+        "success",
+      );
     } catch (err) {
       const message = getThrownErrorMessage(err, t("hr.contracts.errors.add"));
       setApiNotice(message);
@@ -886,7 +906,9 @@ export function HrPage() {
       message:
         ids.length === 1
           ? t("hr.departmentsSection.confirms.delete")
-          : t("hr.departmentsSection.confirms.deleteMany", { count: ids.length }),
+          : t("hr.departmentsSection.confirms.deleteMany", {
+              count: ids.length,
+            }),
     });
     if (!confirmed) return;
 
@@ -898,7 +920,9 @@ export function HrPage() {
       setApiNotice(null);
       await loadDepartments(departmentPage);
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, t("hr.departmentsSection.errors.delete")));
+      setApiNotice(
+        getThrownErrorMessage(err, t("hr.departmentsSection.errors.delete")),
+      );
     }
   };
 
@@ -984,7 +1008,9 @@ export function HrPage() {
       setApiNotice(null);
       await refreshAttendanceAfterMutation();
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.checkIn")));
+      setApiNotice(
+        getThrownErrorMessage(err, t("hr.attendance.errors.checkIn")),
+      );
     } finally {
       setCheckInSaving(false);
     }
@@ -1001,7 +1027,9 @@ export function HrPage() {
       await loadAttendance(attendancePage);
       await loadEmployeeStats();
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.checkOut")));
+      setApiNotice(
+        getThrownErrorMessage(err, t("hr.attendance.errors.checkOut")),
+      );
     } finally {
       setCheckOutSavingId(null);
     }
@@ -1025,7 +1053,9 @@ export function HrPage() {
       await loadAttendance(attendancePage);
       await loadEmployeeStats();
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.delete")));
+      setApiNotice(
+        getThrownErrorMessage(err, t("hr.attendance.errors.delete")),
+      );
     }
   };
 
@@ -1037,7 +1067,9 @@ export function HrPage() {
       await loadAttendance(attendancePage);
       await loadEmployeeStats();
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.approve")));
+      setApiNotice(
+        getThrownErrorMessage(err, t("hr.attendance.errors.approve")),
+      );
     }
   };
 
@@ -1049,7 +1081,9 @@ export function HrPage() {
       await loadAttendance(attendancePage);
       await loadEmployeeStats();
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.refuse")));
+      setApiNotice(
+        getThrownErrorMessage(err, t("hr.attendance.errors.refuse")),
+      );
     }
   };
 
@@ -1079,7 +1113,9 @@ export function HrPage() {
       await loadAttendance(attendancePage);
       await loadEmployeeStats();
     } catch (err) {
-      setApiNotice(getThrownErrorMessage(err, t("hr.attendance.errors.update")));
+      setApiNotice(
+        getThrownErrorMessage(err, t("hr.attendance.errors.update")),
+      );
       return;
     }
 
@@ -1122,10 +1158,18 @@ export function HrPage() {
         <table className="w-full table-fixed text-sm">
           <thead className="bg-hr-table-head text-hr-muted">
             <tr>
-              <th className="px-3 py-3 text-center font-medium">{t("table.columns.select")}</th>
-              <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>
-              <th className="px-3 py-3 text-center font-medium">{t("table.columns.id")}</th>
-              <th className="px-3 py-3 text-start font-medium">{t("hr.contracts.columns.name")}</th>
+              <th className="px-3 py-3 text-center font-medium">
+                {t("table.columns.select")}
+              </th>
+              <th className="px-3 py-3 text-center font-medium">
+                {t("table.columns.index")}
+              </th>
+              <th className="px-3 py-3 text-center font-medium">
+                {t("table.columns.id")}
+              </th>
+              <th className="px-3 py-3 text-start font-medium">
+                {t("hr.contracts.columns.name")}
+              </th>
               <th className="px-3 py-3 text-center font-medium">
                 <button
                   type="button"
@@ -1147,7 +1191,9 @@ export function HrPage() {
               <td className="px-3 py-2">
                 <input
                   value={inlineContractName}
-                  onChange={(event) => setInlineContractName(event.target.value)}
+                  onChange={(event) =>
+                    setInlineContractName(event.target.value)
+                  }
                   placeholder={t("hr.contracts.quickAddPlaceholder")}
                   className="h-9 w-full rounded-lg border border-amber-200 bg-hr-surface px-3 text-sm outline-none focus:border-hr-primary"
                   onKeyDown={(event) => {
@@ -1218,51 +1264,51 @@ export function HrPage() {
   const renderAttendance = () => (
     <>
       <div className="mb-3 flex flex-wrap items-center gap-2 sm:gap-3">
-          <select
-            value={attendanceStatusFilter}
-            onChange={(e) => setAttendanceStatusFilter(e.target.value)}
-            aria-label={t("hr.attendance.filterLabel")}
-            className="h-9 min-w-[190px] rounded-lg border border-hr-border bg-hr-surface px-3 text-sm text-hr-text outline-none focus:border-hr-primary"
-          >
-            {attendanceStatusFilterOptions.map((option) => (
-              <option key={option.value || "all"} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+        <select
+          value={attendanceStatusFilter}
+          onChange={(e) => setAttendanceStatusFilter(e.target.value)}
+          aria-label={t("hr.attendance.filterLabel")}
+          className="h-9 min-w-[190px] rounded-lg border border-hr-border bg-hr-surface px-3 text-sm text-hr-text outline-none focus:border-hr-primary"
+        >
+          {attendanceStatusFilterOptions.map((option) => (
+            <option key={option.value || "all"} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
 
-          <div className="relative w-52 min-w-[180px]">
-            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-hr-muted" />
-            <input
-              value={attendanceSearch}
-              onChange={(e) => setAttendanceSearch(e.target.value)}
-              placeholder={t("hr.attendance.searchPlaceholder")}
-              className="h-9 w-full rounded-lg border border-hr-border bg-hr-surface pe-3 ps-9 text-sm outline-none focus:border-hr-primary"
-            />
-          </div>
+        <div className="relative w-52 min-w-[180px]">
+          <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-hr-muted" />
+          <input
+            value={attendanceSearch}
+            onChange={(e) => setAttendanceSearch(e.target.value)}
+            placeholder={t("hr.attendance.searchPlaceholder")}
+            className="h-9 w-full rounded-lg border border-hr-border bg-hr-surface pe-3 ps-9 text-sm outline-none focus:border-hr-primary"
+          />
+        </div>
 
-          <div className="flex min-w-[150px] items-center gap-1.5">
-            <span className="text-sm text-hr-muted">{t("common.from")}</span>
-            <ManualDateInput
-              value={attendanceDateFrom}
-              onChange={setAttendanceDateFrom}
-              className="!h-9"
-              aria-label={t("common.from")}
-            />
-          </div>
+        <div className="flex min-w-[150px] items-center gap-1.5">
+          <span className="text-sm text-hr-muted">{t("common.from")}</span>
+          <ManualDateInput
+            value={attendanceDateFrom}
+            onChange={setAttendanceDateFrom}
+            className="!h-9"
+            aria-label={t("common.from")}
+          />
+        </div>
 
-          <div className="flex min-w-[150px] items-center gap-1.5">
-            <span className="text-sm text-hr-muted">{t("common.to")}</span>
-            <ManualDateInput
-              value={attendanceDateTo}
-              onChange={setAttendanceDateTo}
-              className="!h-9"
-              aria-label={t("common.to")}
-            />
-          </div>
+        <div className="flex min-w-[150px] items-center gap-1.5">
+          <span className="text-sm text-hr-muted">{t("common.to")}</span>
+          <ManualDateInput
+            value={attendanceDateTo}
+            onChange={setAttendanceDateTo}
+            className="!h-9"
+            aria-label={t("common.to")}
+          />
+        </div>
       </div>
 
-    <section className="overflow-hidden rounded-xl border border-hr-border bg-hr-surface shadow-card">
+      <section className="overflow-hidden rounded-xl border border-hr-border bg-hr-surface shadow-card">
         <div className="flex w-full flex-wrap items-center justify-end gap-2 border-b border-hr-border px-4 py-3 sm:px-5">
           <button
             type="button"
@@ -1278,142 +1324,147 @@ export function HrPage() {
             disabled={checkInSaving}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#FF7A0036] px-4 text-sm font-medium text-[#FF7A00] transition hover:bg-[#FF7A004D] disabled:opacity-60"
           >
-            {checkInSaving ? t("hr.attendance.checkInSaving") : t("hr.attendance.checkIn")}
+            {checkInSaving
+              ? t("hr.attendance.checkInSaving")
+              : t("hr.attendance.checkIn")}
           </button>
         </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full table-auto text-sm">
-          <thead className="bg-hr-table-head text-[11px] leading-tight text-hr-muted">
-            <tr>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                {t("hr.attendance.checkOut")}
-              </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                {t("hr.attendance.columns.recordNumber")}
-              </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                {t("hr.attendance.columns.employeeNumber")}
-              </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-start font-medium">
-                {t("hr.attendance.columns.employeeName")}
-              </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                {t("hr.attendance.columns.checkIn")}
-              </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                {t("hr.attendance.columns.checkOut")}
-              </th>
-              <th className="whitespace-nowrap px-1 py-2.5 text-center font-medium">
-                {t("hr.attendance.columns.totalWorkHours")}
-              </th>
-              <th className="whitespace-nowrap px-1 py-2.5 text-center font-medium">
-                {t("hr.attendance.columns.requiredWorkHours")}
-              </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                {t("hr.attendance.columns.status")}
-              </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                {t("table.columns.actions")}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {attendance.map((item, idx) => (
-              <tr
-                key={item.id}
-                className={idx % 2 ? "bg-hr-table-head" : "bg-hr-surface"}
-              >
-                <td className="px-2 py-2.5 text-center">
-                  {item.checkOutRaw ? (
-                    <span className="text-xs font-medium text-green-500" aria-hidden>
-                      ✓
-                    </span>
-                  ) : item.checkInRaw ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleCheckOutRecord(item)}
-                      disabled={checkOutSavingId === item.id}
-                      className="inline-flex h-8 items-center rounded-lg bg-hr-primary/15 px-2.5 text-xs font-bold text-hr-primary transition hover:bg-hr-primary/25 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {checkOutSavingId === item.id
-                        ? t("hr.attendance.checkOutSaving")
-                        : t("hr.attendance.checkOut")}
-                    </button>
-                  ) : (
-                    <span className="text-hr-muted">-</span>
-                  )}
-                </td>
-                <td className="px-2 py-2.5 text-center text-hr-text">
-                  <TableRowIndex
-                    index={idx}
-                    page={attendancePage}
-                    pageSize={10}
-                  />
-                </td>
-                <td className="px-1 py-2.5 text-center">
-                  <CopyableIdCell value={item.employeeId} />
-                </td>
-                <td
-                  className="max-w-[160px] truncate whitespace-nowrap px-2 py-2.5 text-hr-text"
-                  title={item.employeeName}
-                >
-                  {item.employeeName}
-                </td>
-                <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
-                  {displayHour(item.checkInRaw)}
-                </td>
-                <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
-                  {displayHour(item.checkOutRaw)}
-                </td>
-                <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
-                  {item.totalWorkHours ?? "-"}
-                </td>
-                <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
-                  {item.requiredWorkHours ?? 8}
-                </td>
-                <td className="px-2 py-2.5 text-center">
-                  <span
-                    className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                      attendanceStatusClasses[item.status] ??
-                      STATUS_BADGE_CLASS.neutral
-                    }`}
-                  >
-                    {getAttendanceStatusLabel(item.status)}
-                  </span>
-                </td>
-                <td className="px-1 py-2.5">
-                  <AttendanceRowActions
-                    record={item}
-                    onApprove={(id) => void handleApproveAttendance(id)}
-                    onRefuse={(id) => void handleRefuseAttendance(id)}
-                    onEdit={openEditAttendance}
-                    onDelete={(id) => void handleDeleteAttendance([id])}
-                  />
-                </td>
-              </tr>
-            ))}
-            {!attendance.length && (
+        <div className="overflow-x-auto">
+          <table className="w-full table-auto text-sm">
+            <thead className="bg-hr-table-head text-[11px] leading-tight text-hr-muted">
               <tr>
-                <td
-                  colSpan={10}
-                  className="px-3 py-8 text-center text-hr-muted"
-                >
-                  {t("hr.attendance.empty")}
-                </td>
+                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                  {t("hr.attendance.checkOut")}
+                </th>
+                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                  {t("hr.attendance.columns.recordNumber")}
+                </th>
+                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                  {t("hr.attendance.columns.employeeNumber")}
+                </th>
+                <th className="whitespace-nowrap px-2 py-2.5 text-start font-medium">
+                  {t("hr.attendance.columns.employeeName")}
+                </th>
+                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                  {t("hr.attendance.columns.checkIn")}
+                </th>
+                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                  {t("hr.attendance.columns.checkOut")}
+                </th>
+                <th className="whitespace-nowrap px-1 py-2.5 text-center font-medium">
+                  {t("hr.attendance.columns.totalWorkHours")}
+                </th>
+                <th className="whitespace-nowrap px-1 py-2.5 text-center font-medium">
+                  {t("hr.attendance.columns.requiredWorkHours")}
+                </th>
+                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                  {t("hr.attendance.columns.status")}
+                </th>
+                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                  {t("table.columns.actions")}
+                </th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {attendance.map((item, idx) => (
+                <tr
+                  key={item.id}
+                  className={idx % 2 ? "bg-hr-table-head" : "bg-hr-surface"}
+                >
+                  <td className="px-2 py-2.5 text-center">
+                    {item.checkOutRaw ? (
+                      <span
+                        className="text-xs font-medium text-green-500"
+                        aria-hidden
+                      >
+                        ✓
+                      </span>
+                    ) : item.checkInRaw ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleCheckOutRecord(item)}
+                        disabled={checkOutSavingId === item.id}
+                        className="inline-flex h-8 items-center rounded-lg bg-hr-primary/15 px-2.5 text-xs font-bold text-hr-primary transition hover:bg-hr-primary/25 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {checkOutSavingId === item.id
+                          ? t("hr.attendance.checkOutSaving")
+                          : t("hr.attendance.checkOut")}
+                      </button>
+                    ) : (
+                      <span className="text-hr-muted">-</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2.5 text-center text-hr-text">
+                    <TableRowIndex
+                      index={idx}
+                      page={attendancePage}
+                      pageSize={10}
+                    />
+                  </td>
+                  <td className="px-1 py-2.5 text-center">
+                    <CopyableIdCell value={item.employeeId} />
+                  </td>
+                  <td
+                    className="max-w-[160px] truncate whitespace-nowrap px-2 py-2.5 text-hr-text"
+                    title={item.employeeName}
+                  >
+                    {item.employeeName}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
+                    {displayHour(item.checkInRaw)}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
+                    {displayHour(item.checkOutRaw)}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
+                    {item.totalWorkHours ?? "-"}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
+                    {item.requiredWorkHours ?? 8}
+                  </td>
+                  <td className="px-2 py-2.5 text-center">
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                        attendanceStatusClasses[item.status] ??
+                        STATUS_BADGE_CLASS.neutral
+                      }`}
+                    >
+                      {getAttendanceStatusLabel(item.status)}
+                    </span>
+                  </td>
+                  <td className="px-1 py-2.5">
+                    <AttendanceRowActions
+                      record={item}
+                      onApprove={(id) => void handleApproveAttendance(id)}
+                      onRefuse={(id) => void handleRefuseAttendance(id)}
+                      onEdit={openEditAttendance}
+                      onDelete={(id) => void handleDeleteAttendance([id])}
+                    />
+                  </td>
+                </tr>
+              ))}
+              {!attendance.length && (
+                <tr>
+                  <td
+                    colSpan={10}
+                    className="px-3 py-8 text-center text-hr-muted"
+                  >
+                    {t("hr.attendance.empty")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      <Pagination
-        currentPage={attendancePage}
-        totalPages={attendanceTotalPages}
-        onPageChange={(page) => void loadAttendance(page)}
-        className="border-t border-hr-border"
-      />
-    </section>
+        <Pagination
+          currentPage={attendancePage}
+          totalPages={attendanceTotalPages}
+          onPageChange={(page) => void loadAttendance(page)}
+          className="border-t border-hr-border"
+        />
+      </section>
     </>
   );
 
@@ -1452,11 +1503,21 @@ export function HrPage() {
           </colgroup>
           <thead className="bg-hr-table-head text-xs text-hr-muted">
             <tr>
-              <th className="px-2 py-3 text-center font-medium">{t("table.columns.select")}</th>
-              <th className="px-2 py-3 text-center font-medium">{t("table.columns.index")}</th>
-              <th className="px-2 py-3 text-center font-medium">{t("table.columns.id")}</th>
-              <th className="px-2 py-3 text-start font-medium">{t("hr.departmentsSection.columns.name")}</th>
-              <th className="px-2 py-3 text-start font-medium">{t("hr.departmentsSection.columns.parentName")}</th>
+              <th className="px-2 py-3 text-center font-medium">
+                {t("table.columns.select")}
+              </th>
+              <th className="px-2 py-3 text-center font-medium">
+                {t("table.columns.index")}
+              </th>
+              <th className="px-2 py-3 text-center font-medium">
+                {t("table.columns.id")}
+              </th>
+              <th className="px-2 py-3 text-start font-medium">
+                {t("hr.departmentsSection.columns.name")}
+              </th>
+              <th className="px-2 py-3 text-start font-medium">
+                {t("hr.departmentsSection.columns.parentName")}
+              </th>
               <th className="px-2 py-3 text-center font-medium">
                 {t("hr.departmentsSection.columns.managerId")}
               </th>
@@ -1590,10 +1651,13 @@ export function HrPage() {
         <div className="space-y-10">
           <div className="flex items-start gap-4">
             <div className="min-w-0 flex-1">
-              <p className="mb-3 text-sm font-bold text-hr-text">{t("hr.skills.skillType")}</p>
+              <p className="mb-3 text-sm font-bold text-hr-text">
+                {t("hr.skills.skillType")}
+              </p>
               <div className="flex flex-wrap gap-2">
-                {skillGroups.length ? (
-                  skillGroups.map((group, index) => {
+                {visibleSkillGroups.length ? (
+                  visibleSkillGroups.map((group) => {
+                    const index = skillGroups.findIndex((item) => item.id === group.id);
                     const selected = group.id === selectedSkillTypeId;
                     return (
                       <span
@@ -1609,7 +1673,9 @@ export function HrPage() {
                         </button>
                         <button
                           type="button"
-                          aria-label={t("common.editItem", { name: group.name })}
+                          aria-label={t("common.editItem", {
+                            name: group.name,
+                          })}
                           onClick={() => openEditSkillType(group)}
                           className="rounded p-0.5 text-amber-600 transition hover:bg-hr-surface/60"
                         >
@@ -1617,7 +1683,9 @@ export function HrPage() {
                         </button>
                         <button
                           type="button"
-                          aria-label={t("common.deleteItem", { name: group.name })}
+                          aria-label={t("common.deleteItem", {
+                            name: group.name,
+                          })}
                           onClick={() => handleDeleteSkillType(group.id)}
                           className="rounded p-0.5 text-red-500 transition hover:bg-hr-surface/60 hover:text-red-600"
                         >
@@ -1784,7 +1852,9 @@ export function HrPage() {
                         ? "…"
                         : (presentTodayCount ?? 0)}
                     </div>
-                    <p className="mt-2 text-xs text-hr-muted">{t("hr.page.presentToday")}</p>
+                    <p className="mt-2 text-xs text-hr-muted">
+                      {t("hr.page.presentToday")}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1801,11 +1871,7 @@ export function HrPage() {
           )
         )}
 
-        {apiNotice && (
-          <p className={`mb-4 ${alertErrorClass}`}>
-            {apiNotice}
-          </p>
-        )}
+        {apiNotice && <p className={`mb-4 ${alertErrorClass}`}>{apiNotice}</p>}
 
         <div className="flex flex-wrap gap-2">
           {sectionButtons.map((section) => (
@@ -1850,7 +1916,9 @@ export function HrPage() {
               title={t("hr.contracts.addLabel")}
               onClose={closeContractModal}
             />
-            <label className="mb-2 block text-sm text-hr-text">{t("hr.contracts.columns.name")}</label>
+            <label className="mb-2 block text-sm text-hr-text">
+              {t("hr.contracts.columns.name")}
+            </label>
             <input
               value={newContractName}
               onChange={(e) => setNewContractName(e.target.value)}
@@ -1887,7 +1955,9 @@ export function HrPage() {
               title={t("hr.contracts.modals.editTitle")}
               onClose={closeContractModal}
             />
-            <label className="mb-2 block text-sm text-hr-text">{t("hr.contracts.columns.name")}</label>
+            <label className="mb-2 block text-sm text-hr-text">
+              {t("hr.contracts.columns.name")}
+            </label>
             <input
               value={editContractName}
               onChange={(e) => setEditContractName(e.target.value)}
@@ -1998,7 +2068,9 @@ export function HrPage() {
               title={t("hr.attendance.modals.editTitle")}
               onClose={closeTo("attendance")}
             />
-            <label className="mb-2 block text-sm text-hr-text">{t("hr.attendance.modals.recordId")}</label>
+            <label className="mb-2 block text-sm text-hr-text">
+              {t("hr.attendance.modals.recordId")}
+            </label>
             <input
               value={editAttendanceForm.recordId}
               readOnly
@@ -2065,9 +2137,7 @@ export function HrPage() {
               onClose={closeTo("departments")}
             />
             {apiNotice && (
-              <p className={`mb-4 ${alertErrorClass}`}>
-                {apiNotice}
-              </p>
+              <p className={`mb-4 ${alertErrorClass}`}>{apiNotice}</p>
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
@@ -2095,7 +2165,10 @@ export function HrPage() {
                   className="h-11 w-full rounded-lg border border-hr-border px-3 outline-none focus:border-hr-primary"
                 />
               </div>
-              <FormField label={t("hr.departmentsSection.modals.parent")} hint={t("common.optional")}>
+              <FormField
+                label={t("hr.departmentsSection.modals.parent")}
+                hint={t("common.optional")}
+              >
                 <SearchableSelect
                   value={departmentForm.parentId}
                   onChange={(value) =>
@@ -2106,13 +2179,17 @@ export function HrPage() {
                   }
                   options={mapNamedOptions(
                     departmentOptions.filter(
-                      (department) => department.id !== departmentForm.departmentId,
+                      (department) =>
+                        department.id !== departmentForm.departmentId,
                     ),
                   )}
                   placeholder={t("hr.departmentsSection.modals.noParent")}
                 />
               </FormField>
-              <FormField label={t("hr.departmentsSection.modals.manager")} hint={t("hr.departmentsSection.modals.managerHint")}>
+              <FormField
+                label={t("hr.departmentsSection.modals.manager")}
+                hint={t("hr.departmentsSection.modals.managerHint")}
+              >
                 <SearchableSelect
                   value={departmentForm.managerId}
                   onChange={(value) =>
@@ -2151,7 +2228,9 @@ export function HrPage() {
                 disabled={departmentSaving}
                 className="rounded-lg bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
               >
-                {departmentSaving ? t("common.saving") : t("hr.departmentsSection.modals.editSubmit")}
+                {departmentSaving
+                  ? t("common.saving")
+                  : t("hr.departmentsSection.modals.editSubmit")}
               </button>
               <button
                 type="button"
@@ -2176,9 +2255,7 @@ export function HrPage() {
               onClose={closeTo("departments")}
             />
             {apiNotice && (
-              <p className={`mb-4 ${alertErrorClass}`}>
-                {apiNotice}
-              </p>
+              <p className={`mb-4 ${alertErrorClass}`}>{apiNotice}</p>
             )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
@@ -2196,7 +2273,10 @@ export function HrPage() {
                   className="h-11 w-full rounded-lg border border-hr-border px-3 outline-none focus:border-hr-primary"
                 />
               </div>
-              <FormField label={t("hr.departmentsSection.modals.parent")} hint={t("common.optional")}>
+              <FormField
+                label={t("hr.departmentsSection.modals.parent")}
+                hint={t("common.optional")}
+              >
                 <SearchableSelect
                   value={addDepartmentForm.parentId}
                   onChange={(value) =>
@@ -2209,7 +2289,10 @@ export function HrPage() {
                   placeholder={t("hr.departmentsSection.modals.noParent")}
                 />
               </FormField>
-              <FormField label={t("hr.departmentsSection.modals.manager")} hint={t("hr.departmentsSection.modals.managerHint")}>
+              <FormField
+                label={t("hr.departmentsSection.modals.manager")}
+                hint={t("hr.departmentsSection.modals.managerHint")}
+              >
                 <SearchableSelect
                   value={addDepartmentForm.managerId}
                   onChange={(value) =>
@@ -2248,7 +2331,9 @@ export function HrPage() {
                 disabled={departmentSaving}
                 className="rounded-lg bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
               >
-                {departmentSaving ? t("common.adding") : t("hr.departmentsSection.modals.addSubmit")}
+                {departmentSaving
+                  ? t("common.adding")
+                  : t("hr.departmentsSection.modals.addSubmit")}
               </button>
               <button
                 type="button"

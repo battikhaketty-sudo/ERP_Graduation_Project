@@ -12,7 +12,6 @@ import {
   unwrapPage,
   unwrapPagedMeta,
 } from "../../utils/apiResponse";
-import { sortNewestFirst } from "../../utils/listOrder";
 import { fetchAllPages } from "../../utils/fetchAllPages";
 import { normalizePermission } from "./permission.mapper";
 
@@ -34,8 +33,8 @@ export const getPermissions = async ({
 
   const response = await api.get("/permissions", { params });
   const meta = unwrapPagedMeta(response.data);
-  const records = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(response.data).map(normalizePermission),
+  const records = unwrapPage<Record<string, unknown>>(response.data).map(
+    normalizePermission,
   );
 
   return {
@@ -57,6 +56,28 @@ export const getPermissionById = async (id: string): Promise<AppPermission> => {
   return normalizePermission(unwrapEntity(response.data) as Record<string, unknown>);
 };
 
+const permissionFromPayload = (
+  id: string,
+  payload: PermissionFormPayload,
+): AppPermission => ({
+  id,
+  name: payload.name.trim(),
+  description: payload.description?.trim() || null,
+  resourceType: payload.resourceType.trim(),
+  isFixed: false,
+});
+
+const tryGetPermissionById = async (
+  id: string,
+  fallback: AppPermission,
+): Promise<AppPermission> => {
+  try {
+    return await getPermissionById(id);
+  } catch {
+    return fallback;
+  }
+};
+
 export const addPermission = async (
   payload: PermissionFormPayload,
 ): Promise<AppPermission> => {
@@ -64,31 +85,23 @@ export const addPermission = async (
   assertSuccess(response.data);
 
   const createdId = unwrapData<string>(response.data);
-  if (typeof createdId === "string" && createdId.trim()) {
-    return getPermissionById(createdId);
+  const id = typeof createdId === "string" ? createdId.trim() : "";
+  const fallback = permissionFromPayload(id, payload);
+
+  if (id) {
+    return tryGetPermissionById(id, fallback);
   }
 
-  const { records } = await getPermissions({ page: 1, limit: 1, name: payload.name });
-  if (records[0]) return records[0];
-  throw { message: "فشل إنشاء الصلاحية." };
+  return fallback;
 };
 
 export const updatePermission = async (
   id: string,
-  payload: Partial<PermissionFormPayload>,
+  payload: PermissionFormPayload,
 ): Promise<AppPermission> => {
-  const current = await getPermissionById(id);
-  const response = await api.put(
-    `/permissions/${id}`,
-    toPermissionBody({
-      name: payload.name ?? current.name,
-      description:
-        payload.description !== undefined ? payload.description : current.description,
-      resourceType: payload.resourceType ?? current.resourceType,
-    }),
-  );
+  const response = await api.put(`/permissions/${id}`, toPermissionBody(payload));
   assertMutationSuccess(response.data, "فشل تحديث الصلاحية.");
-  return getPermissionById(id);
+  return tryGetPermissionById(id, permissionFromPayload(id, payload));
 };
 
 export const deletePermission = async (id: string) => {

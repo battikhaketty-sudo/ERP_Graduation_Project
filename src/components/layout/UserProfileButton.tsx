@@ -1,5 +1,7 @@
-import type { AuthUser } from "../../types/auth";
+import { Link, useLocation } from "react-router-dom";
+import { ROUTES } from "../../constants/routes";
 import { useTranslation } from "../../i18n";
+import type { AuthUser } from "../../types/auth";
 
 type UserProfileButtonProps = {
   user: AuthUser | null;
@@ -14,14 +16,21 @@ function getInitials(name: string): string {
 
 export function UserProfileButton({ user }: UserProfileButtonProps) {
   const { t } = useTranslation();
+  const location = useLocation();
   const displayName = user?.name?.trim() || t("header.profileMenu");
   const initials = getInitials(displayName);
+  const isActive = location.pathname === ROUTES.profile;
 
   return (
-    <div
-      className="relative flex size-[38px] shrink-0 items-center justify-center rounded-full bg-[#D6EBFA] text-sm font-semibold text-[#2F80ED]"
-      title={displayName}
-      aria-label={displayName}
+    <Link
+      to={ROUTES.profile}
+      className={[
+        "relative flex size-[38px] shrink-0 items-center justify-center rounded-full bg-[#D6EBFA] text-sm font-semibold text-[#2F80ED] transition hover:ring-2 hover:ring-hr-primary/40",
+        isActive ? "ring-2 ring-hr-primary" : "",
+      ].join(" ")}
+      title={t("header.profileMenu")}
+      aria-label={t("header.profileMenu")}
+      aria-current={isActive ? "page" : undefined}
     >
       <span aria-hidden>{initials}</span>
       <span
@@ -29,6 +38,6 @@ export function UserProfileButton({ user }: UserProfileButtonProps) {
         title={t("header.online")}
         aria-label={t("header.online")}
       />
-    </div>
+    </Link>
   );
 }

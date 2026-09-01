@@ -163,11 +163,8 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
   const filteredPermissions = useMemo(() => {
     const query = permissionSearch.trim().toLowerCase();
     if (!query) return permissions;
-    return permissions.filter(
-      (permission) =>
-        permission.name.toLowerCase().includes(query) ||
-        permission.resourceType.toLowerCase().includes(query) ||
-        (permission.description ?? "").toLowerCase().includes(query),
+    return permissions.filter((permission) =>
+      permission.name.toLowerCase().includes(query),
     );
   }, [permissionSearch, permissions]);
 
@@ -199,7 +196,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
   );
 
   const togglePermission = (permissionId: string) => {
-    if (roleIsFixed || fixedPermissionIds.has(permissionId)) return;
+    if (fixedPermissionIds.has(permissionId)) return;
     setForm((current) => {
       const ids = current.permissionIds ?? [];
       return {
@@ -212,7 +209,6 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
   };
 
   const selectAllPermissions = () => {
-    if (roleIsFixed) return;
     const targetIds =
       selectableFilteredPermissionIds.length > 0
         ? selectableFilteredPermissionIds
@@ -227,7 +223,6 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
   };
 
   const clearSelectablePermissions = () => {
-    if (roleIsFixed) return;
     setForm((current) => ({
       ...current,
       permissionIds: Array.from(fixedPermissionIds),
@@ -258,10 +253,10 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
         roleIsFixed && original
           ? {
               name: original.name,
+              description: original.description,
               isDefault: original.isDefault,
               level: original.level,
-              permissionIds: original.permissionIds ?? permissionIds,
-              description: form.description,
+              permissionIds,
             }
           : {
               name: form.name,
@@ -435,12 +430,11 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
                   placeholder={t("access.roles.placeholders.description")}
                   rows={3}
                   maxLength={DESCRIPTION_MAX}
-                  showCount
-                  hint={
-                    roleIsFixed
-                      ? t("access.roles.fixedDescriptionOnly")
-                      : t("common.optional")
-                  }
+                  showCount={!roleIsFixed}
+                  readOnly={roleIsFixed}
+                  disabled={roleIsFixed}
+                  className={roleIsFixed ? "cursor-not-allowed opacity-70" : undefined}
+                  hint={roleIsFixed ? undefined : t("common.optional")}
                 />
               </div>
             </div>
@@ -484,9 +478,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
               <button
                 type="button"
                 onClick={selectAllPermissions}
-                disabled={
-                  roleIsFixed || permissionsLoading || !selectablePermissionIds.length
-                }
+                disabled={permissionsLoading || !selectablePermissionIds.length}
                 className="rounded-lg border border-hr-border px-3 py-2 text-xs font-medium text-hr-text transition hover:bg-hr-hover disabled:opacity-50"
               >
                 {t("common.selectAll")}
@@ -495,9 +487,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
                 type="button"
                 onClick={clearSelectablePermissions}
                 disabled={
-                  roleIsFixed ||
-                  permissionsLoading ||
-                  selectedPermissionsCount <= fixedPermissionIds.size
+                  permissionsLoading || selectedPermissionsCount <= fixedPermissionIds.size
                 }
                 className="rounded-lg border border-hr-border px-3 py-2 text-xs font-medium text-hr-text transition hover:bg-hr-hover disabled:opacity-50"
               >
@@ -548,7 +538,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
                     ) : (
                       pagedPermissions.map((permission, index) => {
                         const isAssignmentFixed = fixedPermissionIds.has(permission.id);
-                        const isLocked = roleIsFixed || isAssignmentFixed;
+                        const isLocked = isAssignmentFixed;
                         const checked = (form.permissionIds ?? []).includes(permission.id);
                         const rowIndex = (permPage - 1) * PERM_PAGE_SIZE + index + 1;
                         return (
@@ -573,17 +563,11 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
                                 }}
                                 className="size-4 rounded border-hr-border text-hr-primary disabled:pointer-events-none disabled:cursor-not-allowed"
                                 title={
-                                  isLocked
-                                    ? roleIsFixed
-                                      ? t("access.roles.fixedHint")
-                                      : t("access.roles.fixedPermissionHint")
-                                    : undefined
+                                  isLocked ? t("access.roles.fixedPermissionHint") : undefined
                                 }
                                 aria-label={
                                   isLocked
-                                    ? roleIsFixed
-                                      ? t("access.roles.fixedHint")
-                                      : t("access.roles.fixedPermissionHint")
+                                    ? t("access.roles.fixedPermissionHint")
                                     : permission.name
                                 }
                               />

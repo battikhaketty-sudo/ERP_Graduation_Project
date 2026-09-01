@@ -15,6 +15,10 @@ import {
   setStoredUser,
   setToken,
 } from "../services/tokenStorage";
+import {
+  startAccessTokenRefreshLoop,
+  stopAccessTokenRefreshLoop,
+} from "../services/tokenRefresh";
 import type { AuthUser, LoginCredentials } from "../types/auth";
 
 type AuthContextValue = {
@@ -27,19 +31,23 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() =>
-    hasActiveSession() ? getStoredUser() : null,
-  );
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    if (!hasActiveSession()) return null;
+    startAccessTokenRefreshLoop();
+    return getStoredUser();
+  });
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     const result = await loginRequest(credentials);
     setToken(result.token);
     setStoredUser(result.user);
     setUser(result.user);
+    startAccessTokenRefreshLoop();
   }, []);
 
   const logout = useCallback(() => {
     void logoutRequest();
+    stopAccessTokenRefreshLoop();
     clearSession();
     setUser(null);
   }, []);

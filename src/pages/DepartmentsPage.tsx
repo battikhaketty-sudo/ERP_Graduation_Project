@@ -124,11 +124,8 @@ export function DepartmentsPage() {
   const filteredDepartments = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return departments;
-    return departments.filter(
-      (department) =>
-        department.name.toLowerCase().includes(query) ||
-        (department.managerName || "").toLowerCase().includes(query) ||
-        (department.parentName || "").toLowerCase().includes(query),
+    return departments.filter((department) =>
+      department.name.toLowerCase().includes(query),
     );
   }, [departments, search]);
 
@@ -173,14 +170,15 @@ export function DepartmentsPage() {
   const handleDeleteDepartment = async (id: string) => {
     try {
       await deleteDepartment(id);
+      setFullPageDepartment(null);
       clearDepartmentFromUrl();
       setDrawerDepartment(null);
       await fetchDepartments();
       showToast(t("departments.toasts.deleteSuccess"), "success");
     } catch (err) {
       const message = getThrownErrorMessage(err, t("departments.errors.delete"));
-      setError(message);
       showToast(message, "error");
+      throw err;
     }
   };
 

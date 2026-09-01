@@ -1282,6 +1282,7 @@ export const en = {
       errors: {
         loadList: "Failed to load users",
         load: "Failed to load user",
+        loadRoles: "Failed to load roles",
         save: "Failed to update user roles",
         delete: "Failed to delete user",
       },
@@ -1315,8 +1316,8 @@ export const en = {
       fixedPermissionHint:
         "This permission is fixed on the role — it cannot be checked or unchecked",
       fixedHint:
-        "System fixed role — only the description can be edited (no delete, and name/level/permissions stay locked)",
-      fixedDescriptionOnly: "Only the description can be edited for this fixed role",
+        "System fixed role — only permissions can be edited (name, description, level, and delete stay locked)",
+      fixedDescriptionOnly: "Only permissions can be edited for this fixed role",
       errors: {
         loadList: "Failed to load roles",
         load: "Failed to load role",
@@ -1357,6 +1358,30 @@ export const en = {
   header: {
     profileMenu: "Profile",
     online: "Online",
+  },
+  profile: {
+    title: "Profile",
+    loadError: "Failed to load profile",
+    active: "Active",
+    inactive: "Inactive",
+    noEmployee: "No employee record is linked to this account.",
+    openEmployee: "View employee record",
+    editPassword: "Change password",
+    passwordHint: "Enter your current password, then choose a new one.",
+    savePassword: "Save password",
+    passwordUpdated: "Password updated.",
+    passwordMismatch: "The new passwords do not match.",
+    passwordRequired: "Enter the current and new password.",
+    fields: {
+      email: "Email",
+      department: "Department",
+      phone: "Phone",
+      rolesCount: "Roles",
+      shortInfo: "Short employee information",
+      currentPassword: "Current password",
+      newPassword: "New password",
+      confirmPassword: "Confirm new password",
+    },
   },
   dashboard: {
     title: "Status board",
@@ -1422,8 +1447,6 @@ export const en = {
     rememberMe: "Remember me on this device",
     signIn: "Sign in",
     signingIn: "Signing in…",
-    noAccount: "Don't have an account?",
-    contactAdmin: "Contact admin",
     credentialsRequired: "Please enter your email and password.",
     loginFailed: "Sign in failed. Check your credentials.",
   },

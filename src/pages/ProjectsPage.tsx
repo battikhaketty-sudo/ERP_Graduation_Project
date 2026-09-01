@@ -136,44 +136,22 @@ export function ProjectsPage() {
   }, [searchParams, setSearchParams]);
 
   const loadListData = useCallback(async () => {
-    const query = search.trim().toLowerCase();
-
     try {
       setLoading(true);
       setError(null);
 
       const [projectsResult, statsResult, invitationsResult] = await Promise.all([
           getProjects({
-            page: query ? 1 : projectsPage,
-            limit: query ? 100 : PROJECTS_PAGE_SIZE,
+            page: projectsPage,
+            limit: PROJECTS_PAGE_SIZE,
+            name: search.trim() || undefined,
           }),
           getProjectStats(),
           getMyInvitations(),
         ]);
 
-      let projectRecords = projectsResult.records;
-      if (query) {
-        projectRecords = projectRecords.filter((project) =>
-          [
-            project.name,
-            project.number,
-            project.managerName,
-            project.assignedEmployeeName,
-            project.description,
-          ].some((field) => field.toLowerCase().includes(query)),
-        );
-        const totalPages = Math.max(
-          1,
-          Math.ceil(projectRecords.length / PROJECTS_PAGE_SIZE),
-        );
-        const page = Math.min(projectsPage, totalPages);
-        const start = (page - 1) * PROJECTS_PAGE_SIZE;
-        setProjects(projectRecords.slice(start, start + PROJECTS_PAGE_SIZE));
-        setProjectsTotalPages(totalPages);
-      } else {
-        setProjects(projectRecords);
-        setProjectsTotalPages(projectsResult.meta.totalPages || 1);
-      }
+      setProjects(projectsResult.records);
+      setProjectsTotalPages(projectsResult.meta.totalPages || 1);
 
       setStats(statsResult);
       setMyInvitations(invitationsResult);
@@ -413,10 +391,10 @@ export function ProjectsPage() {
   const filteredMyInvitations = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return myInvitations;
-    return myInvitations.filter((invitation) =>
-      [invitation.projectName, invitation.employeeName, invitation.projectId].some(
-        (field) => field.toLowerCase().includes(query),
-      ),
+    return myInvitations.filter(
+      (invitation) =>
+        invitation.projectName.toLowerCase().includes(query) ||
+        invitation.employeeName.toLowerCase().includes(query),
     );
   }, [myInvitations, search]);
 

@@ -77,9 +77,29 @@ const humanizeErrorCode = (code: string) => {
   return `خطأ من السيرفر: ${code}`;
 };
 
+const API_UNAVAILABLE_MESSAGE =
+  "خدمة الـ API غير متاحة حالياً (السيرفر قيد النشر أو تحت الإنشاء). انتظر قليلاً ثم أعد المحاولة.";
+
+const looksLikeMarkup = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  return (
+    trimmed.startsWith("<") ||
+    lower.includes("<!doctype") ||
+    lower.includes("<html") ||
+    lower.includes("<?xml") ||
+    lower.includes("site under construction") ||
+    lower.includes("msdeploy")
+  );
+};
+
 const parseErrorPayload = (payload: unknown): Record<string, unknown> | null => {
   if (!payload) return null;
   if (typeof payload === "string") {
+    if (looksLikeMarkup(payload)) {
+      return { message: API_UNAVAILABLE_MESSAGE };
+    }
     try {
       const parsed = JSON.parse(payload) as unknown;
       if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
@@ -159,10 +179,14 @@ export const formatApiErrorMessage = (payload: unknown, fallback = "فشل تن�
 };
 
 export const getThrownErrorMessage = (err: unknown, fallback = "فشل تنفيذ العملية.") => {
-  if (err instanceof Error) return err.message;
+  if (err instanceof Error) {
+    return looksLikeMarkup(err.message) ? API_UNAVAILABLE_MESSAGE : err.message;
+  }
   if (err && typeof err === "object" && "message" in err) {
     const message = (err as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
+    if (typeof message === "string" && message.trim()) {
+      return looksLikeMarkup(message) ? API_UNAVAILABLE_MESSAGE : message;
+    }
   }
   return fallback;
 };

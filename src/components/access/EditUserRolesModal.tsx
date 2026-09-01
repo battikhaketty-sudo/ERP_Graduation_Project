@@ -1,8 +1,8 @@
 import { Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { useTranslation } from "../../i18n";
-import { getAllRoles } from "../../services/roles";
+import { getRoles } from "../../services/roles";
 import { getUserById, updateUserRoles } from "../../services/users";
 import type { AppRole } from "../../types/role";
 import type { UserAccount } from "../../types/user";
@@ -45,43 +45,70 @@ export function EditUserRolesModal({ userId, onClose, onSaved }: EditUserRolesMo
 
   useModalDismiss(onClose, !saving);
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [userData, allRoles] = await Promise.all([getUserById(userId), getAllRoles()]);
-      const fixedIds = userData.roles
-        .filter((role) => role.isFixed)
-        .map((role) => role.roleId);
-      const roleIds = Array.from(
-        new Set([...userData.roles.map((role) => role.roleId), ...fixedIds]),
-      );
-      setUser(userData);
-      setRoles(allRoles);
-      setSelectedRoleIds(roleIds);
-      setInitialRoleIds(roleIds);
-      setFixedRoleIds(new Set(fixedIds));
-      setRoleSearch("");
-      setPage(1);
-    } catch (err) {
-      setError(getThrownErrorMessage(err, t("access.users.errors.load")));
-    } finally {
-      setLoading(false);
-    }
-  }, [t, userId]);
+  const applyUser = (userData: UserAccount) => {
+    const fixedIds = userData.roles
+      .filter((role) => role.isFixed)
+      .map((role) => role.roleId);
+    const roleIds = Array.from(
+      new Set([...userData.roles.map((role) => role.roleId), ...fixedIds]),
+    );
+    setUser(userData);
+    setSelectedRoleIds(roleIds);
+    setInitialRoleIds(roleIds);
+    setFixedRoleIds(new Set(fixedIds));
+    setRoleSearch("");
+    setPage(1);
+  };
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadData = async () => {
+      setLoading(true);
+      setError(null);
+
+      const [userResult, rolesResult] = await Promise.allSettled([
+        getUserById(userId),
+        getRoles({ page: 1, limit: 100 }),
+      ]);
+
+      if (cancelled) return;
+
+      if (userResult.status === "fulfilled") {
+        applyUser(userResult.value);
+      } else {
+        setUser(null);
+        setSelectedRoleIds([]);
+        setInitialRoleIds([]);
+        setFixedRoleIds(new Set());
+      }
+
+      if (rolesResult.status === "fulfilled") {
+        setRoles(rolesResult.value.records);
+      } else {
+        setRoles([]);
+      }
+
+      // Load errors stay generic. Authorization is decided by the API on save, not here.
+      if (userResult.status === "rejected" && rolesResult.status === "rejected") {
+        setError(t("access.users.errors.load"));
+      } else {
+        setError(null);
+      }
+
+      setLoading(false);
+    };
+
     void loadData();
-  }, [loadData]);
+    return () => {
+      cancelled = true;
+    };
+  }, [t, userId]);
 
   const filteredRoles = useMemo(() => {
     const query = roleSearch.trim().toLowerCase();
     if (!query) return roles;
-    return roles.filter(
-      (role) =>
-        role.name.toLowerCase().includes(query) ||
-        (role.description ?? "").toLowerCase().includes(query),
-    );
+    return roles.filter((role) => role.name.toLowerCase().includes(query));
   }, [roleSearch, roles]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRoles.length / PAGE_SIZE));

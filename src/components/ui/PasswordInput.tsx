@@ -9,7 +9,6 @@ type PasswordInputProps = {
   readOnly?: boolean;
   className?: string;
   placeholder?: string;
-  maskedPlaceholder?: string;
 };
 
 export function PasswordInput({
@@ -19,18 +18,16 @@ export function PasswordInput({
   readOnly = false,
   className = "",
   placeholder,
-  maskedPlaceholder = "********",
 }: PasswordInputProps) {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
-  const displayValue = value || (readOnly ? maskedPlaceholder : "");
 
   return (
     <div className="relative">
       <input
         type={visible ? "text" : "password"}
         name={name}
-        value={displayValue}
+        value={value}
         onChange={onChange}
         readOnly={readOnly}
         placeholder={placeholder}
