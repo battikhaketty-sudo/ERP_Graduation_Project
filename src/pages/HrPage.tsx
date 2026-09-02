@@ -20,7 +20,6 @@ import { CopyableIdCell } from "../components/ui/CopyableIdCell";
 import { TableRowIndex } from "../components/ui/TableRowIndex";
 import { useToast } from "../context/ToastContext";
 import { useConfirmDialog } from "../context/ConfirmDialogContext";
-import { prependUniqueRecord } from "../utils/listOrder";
 import {
   dateTimeInputToIso,
   defaultDateTimeInput,
@@ -55,6 +54,7 @@ import {
 } from "../services/hrApi";
 import { getEmployees, getEmployeeCount } from "../services/employeeApi";
 import { getThrownErrorMessage } from "../utils/apiResponse";
+import { sortSkillLevelsByRank } from "../utils/skillLevels";
 import { mapNamedOptions } from "../utils/selectOptions";
 import {
   WorkSchedulePanel,
@@ -114,7 +114,6 @@ const skillTypePillClasses = [
   "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
 ];
 
-const skillLevelOrder = ["C2", "C1", "B2", "B1", "A2", "A1"];
 
 type SkillDraftRow = {
   id: string;
@@ -632,18 +631,10 @@ export function HrPage() {
 
   const displayedSkills = selectedSkillGroup?.skills ?? [];
 
-  const displayedSkillLevels = useMemo(() => {
-    const levels = selectedSkillGroup?.levels ?? [];
-
-    return [...levels].sort((a, b) => {
-      const aIndex = skillLevelOrder.indexOf(a.name);
-      const bIndex = skillLevelOrder.indexOf(b.name);
-      if (aIndex === -1 && bIndex === -1) return a.name.localeCompare(b.name);
-      if (aIndex === -1) return 1;
-      if (bIndex === -1) return -1;
-      return aIndex - bIndex;
-    });
-  }, [selectedSkillGroup]);
+  const displayedSkillLevels = useMemo(
+    () => sortSkillLevelsByRank(selectedSkillGroup?.levels ?? []),
+    [selectedSkillGroup],
+  );
 
   const resetSkillForm = () => {
     const defaults = defaultSkillForm();
@@ -665,8 +656,10 @@ export function HrPage() {
       group.skills.map((skill) => createSkillDraftRow(skill.name, skill.id)),
     );
     setSkillLevels(
-      group.levels.map((level) =>
-        createSkillLevelDraftRow(level.name, level.progress, level.id),
+      sortSkillLevelsByRank(
+        group.levels.map((level) =>
+          createSkillLevelDraftRow(level.name, level.progress, level.id),
+        ),
       ),
     );
     setSkillModal("edit");
@@ -775,7 +768,7 @@ export function HrPage() {
 
     try {
       const created = await addContractType(name);
-      setContracts((prev) => prependUniqueRecord(prev, created));
+      setContracts(await getContractTypes());
       setApiNotice(null);
       showToast(t("hr.contracts.toasts.addSuccess"), "success");
     } catch (err) {
@@ -795,7 +788,7 @@ export function HrPage() {
 
     try {
       const created = await addContractType(name);
-      setContracts((prev) => prependUniqueRecord(prev, created));
+      setContracts(await getContractTypes());
       setInlineContractName("");
       setApiNotice(null);
       showToast(
@@ -871,8 +864,7 @@ export function HrPage() {
         await loadDepartments(departmentPage);
       } else {
         await addDepartment(payload);
-        setDepartmentPage(1);
-        await loadDepartments(1);
+        await loadDepartments(departmentPage);
       }
 
       setApiNotice(null);

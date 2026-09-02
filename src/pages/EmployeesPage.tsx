@@ -86,7 +86,8 @@ export function EmployeesPage() {
   useRegisterCommandActions(commandActions);
 
   const fetchEmployees = useCallback(
-    async (options?: { silent?: boolean }) => {
+    async (options?: { silent?: boolean; page?: number }) => {
+      const page = options?.page ?? currentPage;
       try {
         if (!options?.silent) {
           setLoading(true);
@@ -102,7 +103,7 @@ export function EmployeesPage() {
         }
 
         const archivedIds = getArchivedEmployeeIds();
-        const result = await getEmployees(currentPage, DEFAULT_PAGE_SIZE, {
+        const result = await getEmployees(page, DEFAULT_PAGE_SIZE, {
           archived: false,
           legalName: search.trim() || undefined,
         });
@@ -116,7 +117,7 @@ export function EmployeesPage() {
 
         setEmployees(data);
         setTotalPages(result.totalPages || 1);
-        setTotalCount(data.length);
+        setTotalCount(result.totalCount || data.length);
 
         return data;
       } catch (err) {
@@ -130,7 +131,7 @@ export function EmployeesPage() {
         }
       }
     },
-    [archiveView, currentPage, search],
+    [archiveView, currentPage, search, t],
   );
 
   useEffect(() => {
@@ -234,7 +235,6 @@ export function EmployeesPage() {
       await addEmployee(newEmployee);
       setError(null);
       setIsAddModalOpen(false);
-      setCurrentPage(1);
       await fetchEmployees();
       showToast(t("employees.toasts.addSuccess"), "success");
     } catch (err) {

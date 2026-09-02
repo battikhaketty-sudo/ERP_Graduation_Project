@@ -26,7 +26,7 @@ export function ToastStack() {
 
   return (
     <div
-      className="pointer-events-none fixed bottom-4 start-4 z-[100] flex max-w-sm flex-col gap-2"
+      className="pointer-events-none fixed bottom-4 start-4 z-[100] flex max-w-md flex-col gap-2"
       dir={dir}
       aria-live="polite"
     >

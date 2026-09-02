@@ -206,6 +206,7 @@ export function PermissionsTab({
           onClose={() => setModal(null)}
           onSaved={() => {
             onDataChanged();
+            if (modal.mode === "add") setPage(1);
             void loadPermissions();
           }}
           onDeleted={() => {

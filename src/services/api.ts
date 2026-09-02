@@ -2,7 +2,7 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { isAuthRoute } from "../auth/config";
 import { env } from "../config/env";
 import { redirectToLogin } from "../router/navigation";
-import { formatApiErrorMessage } from "../utils/apiResponse";
+import { extractApiErrorCode, extractApiRawText, formatApiErrorMessage } from "../utils/apiResponse";
 import { ensureAccessTokenFresh, refreshAccessToken, stopAccessTokenRefreshLoop } from "./tokenRefresh";
 import { clearSession, getToken } from "./tokenStorage";
 
@@ -17,12 +17,18 @@ type RetriableRequestConfig = InternalAxiosRequestConfig & {
 const getErrorFallback = (status: number, url?: string) => {
   if (isAuthRoute(url)) {
     if (status >= 500) {
-      return "خطأ في السيرفر أثناء تسجيل الدخول. حاول مجدداً أو تواصل مع الإدارة.";
+      return "خطأ في السيرفر. حاول مجدداً أو تواصل مع الإدارة.";
+    }
+    if (url?.includes("/auth/login")) {
+      if (status === 400) {
+        return "بيانات الدخول غير صحيحة. تحقق من البريد وكلمة المرور.";
+      }
+      return `تعذر تسجيل الدخول (${status}).`;
     }
     if (status === 400) {
-      return "بيانات الدخول غير صحيحة. تحقق من البريد وكلمة المرور.";
+      return "تعذر إكمال العملية. تحقق من البيانات ثم أعد المحاولة.";
     }
-    return `تعذر تسجيل الدخول (${status}).`;
+    return `تعذر إكمال العملية (${status}).`;
   }
 
   if (status >= 500) {
@@ -106,11 +112,15 @@ api.interceptors.response.use(
       }
 
       if (status === 401) {
-        if (originalRequest?.url?.includes("/auth/login")) {
+        if (isAuthRoute(originalRequest?.url)) {
           throw {
+            code: extractApiErrorCode(data),
+            rawApi: extractApiRawText(data),
             message: formatApiErrorMessage(
               data as Record<string, unknown> | string | undefined,
-              "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+              originalRequest?.url?.includes("/auth/login")
+                ? "البريد الإلكتروني أو كلمة المرور غير صحيحة."
+                : "تعذر إكمال العملية. تحقق من البيانات ثم أعد المحاولة.",
             ),
           };
         }
@@ -129,6 +139,8 @@ api.interceptors.response.use(
 
         throw {
           status,
+          code: extractApiErrorCode(data),
+          rawApi: extractApiRawText(data),
           message:
             isHtml
               ? "خدمة الـ API غير متاحة حالياً (السيرفر قيد النشر أو تحت الإنشاء). انتظر قليلاً ثم أعد المحاولة."
@@ -141,6 +153,8 @@ api.interceptors.response.use(
 
       throw {
         status,
+        code: extractApiErrorCode(data),
+        rawApi: extractApiRawText(data),
         message: formatApiErrorMessage(
           data as Record<string, unknown> | string | undefined,
           getErrorFallback(status, originalRequest?.url),

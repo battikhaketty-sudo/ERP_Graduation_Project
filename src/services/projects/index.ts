@@ -16,6 +16,7 @@ export {
   getProjectInvitations,
   getProjectMembers,
   getAllProjectMembers,
+  findProjectsForEmployee,
   getProjectSections,
   getSectionById,
   getProjectStats,

@@ -62,6 +62,43 @@ export const changePassword = async (payload: {
   return res.data;
 };
 
+export const forgotPassword = async (email: string) => {
+  const res = await api.post("/auth/forgot-password", { email: email.trim() });
+  assertSuccess(res.data);
+  return res.data;
+};
+
+export const resetPassword = async (payload: {
+  email: string;
+  otpCode: string;
+  newPassword: string;
+}) => {
+  const res = await api.post("/auth/reset-password", {
+    email: payload.email.trim(),
+    otpCode: payload.otpCode.trim(),
+    newPassword: payload.newPassword,
+  });
+  assertSuccess(res.data);
+  return res.data;
+};
+
+export const confirmEmail = async (payload: { email: string; code: string }) => {
+  const res = await api.post("/auth/confirm-email", {
+    email: payload.email.trim(),
+    code: payload.code.trim(),
+  });
+  assertSuccess(res.data);
+  return res.data;
+};
+
+export const resendEmailConfirmCode = async (email: string) => {
+  const res = await api.post("/auth/resend-email-confirm-code", {
+    email: email.trim(),
+  });
+  assertSuccess(res.data);
+  return res.data;
+};
+
 export const logout = async () => {
   try {
     await api.post("/auth/logout", {
@@ -73,4 +110,12 @@ export const logout = async () => {
   }
 };
 
-export default { login, logout, changePassword };
+export default {
+  login,
+  logout,
+  changePassword,
+  forgotPassword,
+  resetPassword,
+  confirmEmail,
+  resendEmailConfirmCode,
+};

@@ -57,7 +57,7 @@ import type {
   TaskStats,
 } from "../types/project";
 
-import { getThrownErrorMessage } from "../utils/apiResponse";
+import { getThrownApiDisplay, getThrownErrorMessage } from "../utils/apiResponse";
 
 type ActiveTab = "projects" | "invitations";
 
@@ -135,14 +135,14 @@ export function ProjectsPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const loadListData = useCallback(async () => {
+  const loadListData = useCallback(async (page = projectsPage) => {
     try {
       setLoading(true);
       setError(null);
 
       const [projectsResult, statsResult, invitationsResult] = await Promise.all([
           getProjects({
-            page: projectsPage,
+            page,
             limit: PROJECTS_PAGE_SIZE,
             name: search.trim() || undefined,
           }),
@@ -278,7 +278,7 @@ export function ProjectsPage() {
       setError(null);
       showToast(t("projects.toasts.memberRemoved"), "success");
     } catch (err) {
-      const message = getThrownErrorMessage(
+      const message = getThrownApiDisplay(
         err,
         t("projects.page.deleteMemberError"),
       );
@@ -492,7 +492,7 @@ export function ProjectsPage() {
               await refreshSelectedProject(selectedProject.id);
               showToast(t("projects.toasts.memberUpdated"), "success");
             } catch (err) {
-              const message = getThrownErrorMessage(
+              const message = getThrownApiDisplay(
                 err,
                 t("projects.page.loadError"),
               );
@@ -678,12 +678,12 @@ export function ProjectsPage() {
           if (editingProject) {
             await updateProject(editingProject.id, payload);
             showToast(t("projects.toasts.saveSuccess"), "success");
+            await loadListData();
           } else {
             await addProject(payload);
-            setProjectsPage(1);
             showToast(t("projects.toasts.addSuccess"), "success");
+            await loadListData();
           }
-          await loadListData();
         }}
       />
     </>

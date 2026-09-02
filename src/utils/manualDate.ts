@@ -99,3 +99,20 @@ export const isIsoInRange = (
   if (max && iso > max) return false;
   return true;
 };
+
+/** YYYY-MM-DD as the last millisecond of that local calendar day, in UTC. */
+export const toEndOfLocalDayIso = (isoDate: string): string | null => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const end = new Date(year, month - 1, day, 23, 59, 59, 999);
+  return Number.isNaN(end.getTime()) ? null : end.toISOString();
+};
+
+export const isEndOfLocalDayPast = (isoDate: string, now = new Date()) => {
+  const iso = toEndOfLocalDayIso(isoDate);
+  if (!iso) return true;
+  return new Date(iso).getTime() <= now.getTime();
+};

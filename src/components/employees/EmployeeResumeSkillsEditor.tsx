@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { ROUTES } from "../../constants/routes";
 import { useTranslation } from "../../i18n";
 import type { SkillGroup, SkillLevel } from "../../types/skill";
+import { sortSkillLevelsByRank } from "../../utils/skillLevels";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { alertErrorClass } from "../ui/modalStyles";
 import { EmployeeField } from "./employee-ui";
@@ -32,8 +33,7 @@ const skillTypePillClasses = [
 const getSkillTypeClass = (index: number) =>
   skillTypePillClasses[index % skillTypePillClasses.length];
 
-const sortLevels = (levels: SkillLevel[]) =>
-  [...levels].sort((left, right) => right.progress - left.progress);
+const sortLevels = (levels: SkillLevel[]) => sortSkillLevelsByRank(levels);
 
 const skillKey = (skill: { id?: string; name: string }) => skill.id ?? skill.name;
 

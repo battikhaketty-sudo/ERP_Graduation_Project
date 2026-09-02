@@ -8,6 +8,9 @@ import { DepartmentsPage } from "../pages/DepartmentsPage";
 import { EmployeesPage } from "../pages/EmployeesPage";
 import { HrPage } from "../pages/HrPage";
 import { LoginPage } from "../pages/LoginPage";
+import { ForgotPasswordPage } from "../pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "../pages/ResetPasswordPage";
+import { ConfirmEmailPage } from "../pages/ConfirmEmailPage";
 import { ProfilePage } from "../pages/ProfilePage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { bindAppRouter } from "./navigation";
@@ -22,6 +25,21 @@ export const router = createBrowserRouter([
         path: ROUTES.login,
         loader: guestLoader,
         element: <LoginPage />,
+      },
+      {
+        path: ROUTES.forgotPassword,
+        loader: guestLoader,
+        element: <ForgotPasswordPage />,
+      },
+      {
+        path: ROUTES.resetPassword,
+        loader: guestLoader,
+        element: <ResetPasswordPage />,
+      },
+      {
+        path: ROUTES.confirmEmail,
+        loader: guestLoader,
+        element: <ConfirmEmailPage />,
       },
       {
         loader: requireAuthLoader,

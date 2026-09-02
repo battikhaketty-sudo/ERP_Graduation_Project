@@ -30,6 +30,7 @@ import {
   taskDependencyTypeToApi,
   taskPriorityToApi,
 } from "./project.enums";
+import { toEndOfLocalDayIso } from "../../utils/manualDate";
 import {
   filterProjectSections,
   normalizeInvitation,
@@ -814,6 +815,40 @@ export const getProjectMembers = async (projectId: string, query: MembersQuery =
 export const getAllProjectMembers = async (projectId: string) =>
   fetchAllPages((page, limit) => getProjectMembers(projectId, { page, limit }));
 
+/** Projects where this employee already appears as a member (id or userId). */
+export const findProjectsForEmployee = async (employee: {
+  id: string;
+  userId?: string;
+}) => {
+  const lookup = new Set(
+    [employee.id, employee.userId].map((value) => value?.trim()).filter(Boolean) as string[],
+  );
+  if (!lookup.size) return [];
+
+  const projects = await getAllProjects();
+  const matches = await Promise.all(
+    projects.map(async (project) => {
+      try {
+        const result = await getProjectMembers(project.id, { page: 1, limit: 50 });
+        const expected = result.meta.totalItems || result.records.length;
+        if (result.records.length >= 20 && expected <= 2) {
+          return null;
+        }
+        const hit = result.records.some((member) =>
+          [member.id, member.employeeId, member.userId].some(
+            (id) => id && lookup.has(id),
+          ),
+        );
+        return hit ? { id: project.id, name: project.name } : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return matches.filter((item): item is { id: string; name: string } => Boolean(item));
+};
+
 export const updateMember = async (
   projectId: string,
   memberId: string,
@@ -845,7 +880,8 @@ export const getProjectInvitations = async (
   const response = await api.get(`/projects/${projectId}/invitations`, { params });
   return unwrapPage<Record<string, unknown>>(response.data)
     .map((item) => normalizeInvitation(item, projectId))
-    .filter((item): item is ProjectInvitation => Boolean(item));
+    .filter((item): item is ProjectInvitation => Boolean(item))
+    .filter((item) => item.projectId === projectId);
 };
 
 const dedupeInvitationsById = (invitations: ProjectInvitation[]) => {
@@ -916,7 +952,9 @@ export const addInvitation = async (payload: InvitationFormPayload) => {
     invitedEmployeeId: payload.employeeId,
     role: roleIdFromLabel(payload.role),
     message: (payload.message ?? "").slice(0, 2000),
-    expiresAtUtc: payload.expiresAt ? toIsoDate(payload.expiresAt) : null,
+    expiresAtUtc: payload.expiresAt
+      ? toEndOfLocalDayIso(payload.expiresAt) ?? toIsoDate(payload.expiresAt)
+      : null,
   });
 
   assertMutationSuccess(response.data, "فشل إرسال الدعوة.");

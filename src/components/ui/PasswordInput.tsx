@@ -3,19 +3,25 @@ import { useState } from "react";
 import { useTranslation } from "../../i18n";
 
 type PasswordInputProps = {
+  id?: string;
   value: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   name?: string;
   readOnly?: boolean;
+  disabled?: boolean;
+  autoComplete?: string;
   className?: string;
   placeholder?: string;
 };
 
 export function PasswordInput({
+  id,
   value,
   onChange,
   name,
   readOnly = false,
+  disabled = false,
+  autoComplete,
   className = "",
   placeholder,
 }: PasswordInputProps) {
@@ -25,11 +31,14 @@ export function PasswordInput({
   return (
     <div className="relative">
       <input
+        id={id}
         type={visible ? "text" : "password"}
         name={name}
         value={value}
         onChange={onChange}
         readOnly={readOnly}
+        disabled={disabled}
+        autoComplete={autoComplete}
         placeholder={placeholder}
         className={[className, "pe-10"].filter(Boolean).join(" ")}
       />

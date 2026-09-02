@@ -218,6 +218,7 @@ export function RolesTab({ search, onNotice, onDataChanged }: RolesTabProps) {
           onClose={() => setModal(null)}
           onSaved={() => {
             onDataChanged();
+            if (modal.mode === "add") setPage(1);
             void loadRoles();
           }}
           onDeleted={() => {
