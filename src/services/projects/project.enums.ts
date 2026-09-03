@@ -4,26 +4,25 @@ import type {
   TaskDependencyType,
   TaskPriority,
 } from "../../types/project";
+import {
+  DependencyTypeApi,
+  PriorityApi,
+  ProjectInvitationStatusApi,
+  ProjectMemberRoleApi,
+  ProjectStatusApi,
+} from "../backendEnums";
 
-export const ProjectStatusApi = {
-  NotStarted: 0,
-  InProgress: 1,
-  Completed: 2,
-} as const;
+export {
+  ProjectInvitationStatusApi,
+  ProjectMemberRoleApi,
+  ProjectStatusApi,
+};
 
-export const ProjectInvitationStatusApi = {
-  Pending: 0,
-  Accepted: 1,
-  Rejected: 2,
-  Expired: 3,
-  Cancelled: 4,
-} as const;
+/** Matches backend `Priority` enum. */
+export const TaskPriorityApi = PriorityApi;
 
-export const ProjectMemberRoleApi = {
-  Manager: 0,
-  Member: 1,
-  Observer: 2,
-} as const;
+/** Matches backend `DependencyType` enum. */
+export const TaskDependencyTypeApi = DependencyTypeApi;
 
 export type ProjectMemberRoleOption = {
   id: number;
@@ -67,7 +66,7 @@ export const projectStatusToApi = (status: ProjectStatus): number => {
 
 export const projectStatusFromApi = (value: unknown): ProjectStatus => {
   const numeric = Number(value);
-  if (!Number.isNaN(numeric) && PROJECT_STATUS_BY_API[numeric]) {
+  if (Number.isInteger(numeric) && numeric in PROJECT_STATUS_BY_API) {
     return PROJECT_STATUS_BY_API[numeric];
   }
 
@@ -124,7 +123,7 @@ export const sortTasksByPriority = <
 
 export const invitationStatusFromApi = (value: unknown): InvitationStatus => {
   const numeric = Number(value);
-  if (!Number.isNaN(numeric) && INVITATION_STATUS_BY_API[numeric]) {
+  if (Number.isInteger(numeric) && numeric in INVITATION_STATUS_BY_API) {
     return INVITATION_STATUS_BY_API[numeric];
   }
 
@@ -168,14 +167,6 @@ export const roleIdFromLabel = (label: string) => {
   return ProjectMemberRoleApi.Member;
 };
 
-/** Matches backend `Priority` enum for project tasks. */
-export const TaskPriorityApi = {
-  Low: 0,
-  Medium: 1,
-  High: 2,
-  Critical: 3,
-} as const;
-
 const TASK_PRIORITY_BY_API: Record<number, TaskPriority> = {
   [TaskPriorityApi.Low]: "low",
   [TaskPriorityApi.Medium]: "medium",
@@ -195,7 +186,7 @@ export const taskPriorityToApi = (priority: TaskPriority): number => {
 
 export const taskPriorityFromApi = (value: unknown): TaskPriority => {
   const numeric = Number(value);
-  if (!Number.isNaN(numeric) && TASK_PRIORITY_BY_API[numeric]) {
+  if (Number.isInteger(numeric) && numeric in TASK_PRIORITY_BY_API) {
     return TASK_PRIORITY_BY_API[numeric];
   }
   const normalized = String(value ?? "")
@@ -209,14 +200,6 @@ export const taskPriorityFromApi = (value: unknown): TaskPriority => {
   if (normalized.includes("medium") || normalized.includes("med")) return "medium";
   return "medium";
 };
-
-/** Matches backend `DependencyType` enum. */
-export const TaskDependencyTypeApi = {
-  FinishToStart: 0,
-  StartToStart: 1,
-  FinishToFinish: 2,
-  StartToFinish: 3,
-} as const;
 
 const DEPENDENCY_TYPE_BY_API: Record<number, TaskDependencyType> = {
   [TaskDependencyTypeApi.FinishToStart]: "finish_to_start",
@@ -237,7 +220,7 @@ export const taskDependencyTypeToApi = (type: TaskDependencyType = "finish_to_st
 
 export const taskDependencyTypeFromApi = (value: unknown): TaskDependencyType => {
   const numeric = Number(value);
-  if (!Number.isNaN(numeric) && DEPENDENCY_TYPE_BY_API[numeric]) {
+  if (Number.isInteger(numeric) && numeric in DEPENDENCY_TYPE_BY_API) {
     return DEPENDENCY_TYPE_BY_API[numeric];
   }
   const normalized = String(value ?? "")

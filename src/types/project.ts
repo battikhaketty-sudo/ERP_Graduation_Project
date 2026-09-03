@@ -185,6 +185,11 @@ export type SectionFormPayload = {
   isFinalSection: boolean;
 };
 
+export type TaskDependencyDraft = {
+  predecessorId: string;
+  type: TaskDependencyType;
+};
+
 export type TaskFormPayload = {
   title: string;
   description: string;
@@ -196,6 +201,7 @@ export type TaskFormPayload = {
   assigneeIds: string[];
   assigneeNames: string[];
   dependsOnTaskIds?: string[];
+  dependencies?: TaskDependencyDraft[];
 };
 
 export type ProjectStats = {

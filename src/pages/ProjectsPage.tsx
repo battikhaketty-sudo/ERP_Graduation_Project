@@ -32,6 +32,7 @@ import {
   addSection,
   addTask,
   deleteMember,
+  getAllProjectMembers,
   deleteProject,
   deleteSection,
   deleteTask,
@@ -57,7 +58,10 @@ import type {
   TaskStats,
 } from "../types/project";
 
+import { getEmployees } from "../services/employees/employee.service";
+import { isActiveProjectMember, memberLookupIds } from "../services/projects/project.mapper";
 import { getThrownApiDisplay, getThrownErrorMessage } from "../utils/apiResponse";
+import { getCurrentActorIds, getCurrentUserEmail, getCurrentUserName } from "../utils/accessToken";
 
 type ActiveTab = "projects" | "invitations";
 
@@ -255,6 +259,67 @@ export function ProjectsPage() {
       await loadListData();
     } catch (err) {
       const message = getThrownErrorMessage(err, t("projects.page.deleteError"));
+      setError(message);
+      showToast(message, "error");
+    }
+  };
+
+  const resolveCurrentMembership = async (projectId: string) => {
+    const members = await getAllProjectMembers(projectId);
+    const actorIds = new Set(getCurrentActorIds());
+    let self = members.find((member) =>
+      memberLookupIds(member).some((id) => actorIds.has(id)),
+    );
+
+    if (!self) {
+      const email = getCurrentUserEmail();
+      const name = getCurrentUserName();
+      const result = await getEmployees(1, 100, name ? { legalName: name } : undefined);
+      const me = result.data.find((employee) => {
+        const employeeEmail = employee.email.trim().toLowerCase();
+        if (email && employeeEmail === email) return true;
+        return Boolean(name && employee.name.trim() === name);
+      });
+      if (me) {
+        const lookup = new Set(
+          [me.id, me.userId, me.employeeId].filter(Boolean) as string[],
+        );
+        self = members.find((member) =>
+          memberLookupIds(member).some((id) => lookup.has(id)),
+        );
+      }
+    }
+
+    return self && isActiveProjectMember(self) ? self : null;
+  };
+
+  const handleLeaveProject = async () => {
+    if (!selectedProject) return;
+
+    const confirmed = await confirm({
+      title: t("projects.page.leaveTitle"),
+      message: t("projects.page.leaveMessage", { name: selectedProject.name }),
+      confirmLabel: t("projects.page.leaveConfirm"),
+    });
+    if (!confirmed) return;
+
+    try {
+      const self = await resolveCurrentMembership(selectedProject.id);
+      if (!self) {
+        const message = t("projects.page.leaveNotMember");
+        setError(message);
+        showToast(message, "error");
+        return;
+      }
+
+      await deleteMember(selectedProject.id, self.id);
+      setError(null);
+      showToast(t("projects.toasts.leftProject"), "success");
+      setSelectedProject(null);
+      clearProjectFromUrl();
+      await loadListData();
+    } catch (err) {
+      const message = getThrownErrorMessage(err, t("projects.page.leaveError"));
       setError(message);
       showToast(message, "error");
     }
@@ -462,6 +527,7 @@ export function ProjectsPage() {
             setIsProjectModalOpen(true);
           }}
           onDelete={() => void handleDeleteProject(selectedProject)}
+          onLeaveProject={() => void handleLeaveProject()}
           onAddTask={(sectionId) => {
             setEditingTask(null);
             setDefaultTaskSectionId(sectionId);
@@ -659,9 +725,6 @@ export function ProjectsPage() {
             }
             onReject={(invitation) =>
               void handleMyInvitationAction(invitation, "rejected")
-            }
-            onCancel={(invitation) =>
-              void handleMyInvitationAction(invitation, "cancelled")
             }
           />
         )}

@@ -1,10 +1,12 @@
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "../../i18n";
+import { employeePath } from "../../constants/entityPaths";
 import { getSectionFlowGate } from "../../services/projects/sectionDependencies";
 import { listProjectTasks, sortTasksByPriority } from "../../services/projects";
 import type { Project, ProjectSection, ProjectTask } from "../../types/project";
 import { accentBtnClass } from "../ui/formStyles";
+import { EntityLink } from "../ui/EntityLink";
 import { PriorityBadge } from "./ProjectBadges";
 
 const KANBAN_PAGE_SIZE = 8;
@@ -39,9 +41,7 @@ function TaskCard({
     (task.assigneeNames.length || task.assigneeIds.length || 0);
 
   return (
-    <button
-      type="button"
-      onClick={() => onClick?.(task)}
+    <div
       className={[
         "w-full rounded-xl border p-3 text-start shadow-sm transition hover:border-hr-primary hover:bg-hr-hover",
         completed
@@ -49,8 +49,12 @@ function TaskCard({
           : "border-hr-border bg-hr-surface",
       ].join(" ")}
     >
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <h4 className="text-sm font-bold text-hr-text">{task.title}</h4>
+      <button
+        type="button"
+        onClick={() => onClick?.(task)}
+        className="mb-2 flex w-full items-start justify-between gap-2 text-start"
+      >
+        <h4 className="text-sm font-bold text-hr-primary hover:underline">{task.title}</h4>
         <div className="flex shrink-0 items-center gap-1">
           {completed ? (
             <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
@@ -59,26 +63,37 @@ function TaskCard({
           ) : null}
           <PriorityBadge priority={task.priority} />
         </div>
-      </div>
+      </button>
       {task.description && (
-        <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-hr-muted">
-          {task.description}
-        </p>
+        <button
+          type="button"
+          onClick={() => onClick?.(task)}
+          className="mb-3 w-full text-start"
+        >
+          <p className="line-clamp-2 text-xs leading-relaxed text-hr-muted">
+            {task.description}
+          </p>
+        </button>
       )}
       <div className="flex items-center justify-between">
-        <span className="text-[11px] text-hr-muted">
+        <button
+          type="button"
+          onClick={() => onClick?.(task)}
+          className="text-[11px] text-hr-muted"
+        >
           {task.dueDate || task.startDate || t("common.dash")}
-        </span>
+        </button>
         {visibleAssignees.length ? (
           <div className="flex -space-x-2 space-x-reverse">
             {visibleAssignees.map((name, index) => (
-              <span
+              <EntityLink
                 key={`${name}-${index}`}
+                to={employeePath(task.assigneeIds[index])}
                 title={name}
-                className="flex size-7 items-center justify-center rounded-full border-2 border-hr-surface bg-hr-accent-bg text-[10px] font-bold text-hr-primary"
+                className="flex size-7 items-center justify-center rounded-full border-2 border-hr-surface bg-hr-accent-bg text-[10px] font-bold text-hr-primary hover:no-underline"
               >
                 {name.charAt(0)}
-              </span>
+              </EntityLink>
             ))}
             {extraCount > 0 && (
               <span className="flex size-7 items-center justify-center rounded-full border-2 border-hr-surface bg-hr-hover text-[10px] font-bold text-hr-muted">
@@ -87,12 +102,16 @@ function TaskCard({
             )}
           </div>
         ) : assignmentBadge > 0 ? (
-          <span className="flex size-7 items-center justify-center rounded-full bg-hr-accent-bg text-[10px] font-bold text-hr-primary">
+          <button
+            type="button"
+            onClick={() => onClick?.(task)}
+            className="flex size-7 items-center justify-center rounded-full bg-hr-accent-bg text-[10px] font-bold text-hr-primary"
+          >
             {assignmentBadge}
-          </span>
+          </button>
         ) : null}
       </div>
-    </button>
+    </div>
   );
 }
 

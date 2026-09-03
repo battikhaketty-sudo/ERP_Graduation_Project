@@ -1,5 +1,6 @@
 import { Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "../../i18n";
+import { projectTaskPath } from "../../constants/entityPaths";
 import { DetailBackButton } from "../ui/DetailBackButton";
 import { useMemo, useState } from "react";
 import { sortTasksByPriority } from "../../services/projects";
@@ -7,6 +8,8 @@ import type { Project, ProjectSection, ProjectTask } from "../../types/project";
 import { Pagination } from "../Pagination";
 import { TableAddButton } from "../ui/TableToolbar";
 import { TableRowIndex } from "../ui/TableRowIndex";
+import { CopyableIdCell } from "../ui/CopyableIdCell";
+import { EntityLink } from "../ui/EntityLink";
 import { PriorityBadge } from "./ProjectBadges";
 
 export const SECTION_TASKS_PAGE_SIZE = 5;
@@ -176,10 +179,15 @@ export function SectionDetailView({
                       />
                     </td>
                     <td className="truncate px-1 py-2 text-center" title={task.id}>
-                      {task.id.slice(0, 8)}…
+                      <CopyableIdCell
+                        value={task.id}
+                        to={projectTaskPath(project.id, task.id)}
+                      />
                     </td>
-                    <td className="truncate px-1 py-2 text-center font-medium text-hr-primary" title={task.title}>
-                      <span>{task.title}</span>
+                    <td className="truncate px-1 py-2 text-center font-medium" title={task.title}>
+                      <EntityLink to={projectTaskPath(project.id, task.id)}>
+                        {task.title}
+                      </EntityLink>
                       {section.isFinalSection ? (
                         <span className="ms-1 rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
                           {t("common.completed")}

@@ -151,8 +151,21 @@ const mergeTaskFormPayload = (
   assigneeIds: pickDefined(payload.assigneeIds, current?.assigneeIds, []),
   assigneeNames: pickDefined(payload.assigneeNames, current?.assigneeNames, []),
   dependsOnTaskIds: pickDefined(
-    payload.dependsOnTaskIds,
+    payload.dependsOnTaskIds ??
+      payload.dependencies?.map((item) => item.predecessorId),
     current?.dependsOnTaskIds,
+    [],
+  ),
+  dependencies: pickDefined(
+    payload.dependencies ??
+      payload.dependsOnTaskIds?.map((predecessorId) => ({
+        predecessorId,
+        type: "finish_to_start" as const,
+      })),
+    current?.dependsOnTaskIds?.map((predecessorId) => ({
+      predecessorId,
+      type: "finish_to_start" as const,
+    })),
     [],
   ),
 });
@@ -170,9 +183,16 @@ const toTaskCommandBody = (payload: TaskFormPayload) => {
   const assignments = [
     ...new Set((payload.assigneeIds ?? []).map(String).filter(Boolean)),
   ];
-  const dependencies = (payload.dependsOnTaskIds ?? []).map((predecessorId) => ({
-    predecessorId,
-    type: taskDependencyTypeToApi("finish_to_start"),
+  const dependencies = (
+    payload.dependencies?.length
+      ? payload.dependencies
+      : (payload.dependsOnTaskIds ?? []).map((predecessorId) => ({
+          predecessorId,
+          type: "finish_to_start" as const,
+        }))
+  ).map((item) => ({
+    predecessorId: item.predecessorId,
+    type: taskDependencyTypeToApi(item.type),
   }));
 
   return {
@@ -1019,7 +1039,8 @@ export const updateTask = async (
     payload.dueDate === undefined ||
     payload.priority === undefined ||
     payload.assigneeIds === undefined ||
-    payload.dependsOnTaskIds === undefined;
+    payload.dependsOnTaskIds === undefined ||
+    payload.dependencies === undefined;
   if (needsCurrent) {
     try {
       current = await getProjectTaskById(taskId, projectId);

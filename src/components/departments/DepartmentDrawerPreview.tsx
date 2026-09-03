@@ -2,7 +2,9 @@ import { ExternalLink, Loader } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getDepartmentById, type Department } from "../../services/hrApi";
 import { useTranslation } from "../../i18n";
+import { departmentPath, employeePath } from "../../constants/entityPaths";
 import { subtlePanelClass } from "../ui/formStyles";
+import { EntityLink } from "../ui/EntityLink";
 
 type DepartmentDrawerPreviewProps = {
   department: Department;
@@ -60,11 +62,23 @@ export function DepartmentDrawerPreview({
       <dl className="space-y-3 text-sm">
         <div className="flex justify-between gap-3">
           <dt className="text-hr-muted">{t("departments.drawer.manager")}</dt>
-          <dd className="font-medium text-hr-text">{detail.managerName || t("common.dash")}</dd>
+          <dd className="font-medium text-hr-text">
+            <EntityLink to={employeePath(detail.managerId)}>
+              {detail.managerName || t("common.dash")}
+            </EntityLink>
+          </dd>
         </div>
         <div className="flex justify-between gap-3">
           <dt className="text-hr-muted">{t("departments.drawer.parent")}</dt>
-          <dd className="font-medium text-hr-text">{detail.parentName || t("common.dash")}</dd>
+          <dd className="font-medium text-hr-text">
+            {detail.parentId ? (
+              <EntityLink to={departmentPath(detail.parentId)}>
+                {detail.parentName || t("common.dash")}
+              </EntityLink>
+            ) : (
+              t("common.dash")
+            )}
+          </dd>
         </div>
       </dl>
 

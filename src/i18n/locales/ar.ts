@@ -358,6 +358,7 @@ export const ar = {
       loadPreview: "تعذر تحميل التفاصيل",
       save: "فشل حفظ التعديلات",
       saveRoles: "فشل تحديث أدوار المستخدم",
+      missingUserId: "لا يوجد حساب مستخدم مرتبط بهذا الموظف لتعيين الأدوار",
       add: "فشل إضافة الموظف",
       archive: "فشل أرشفة الموظف",
       unarchive: "فشل إلغاء أرشفة الموظف",
@@ -524,6 +525,11 @@ export const ar = {
       deleteMemberMessage: "هل أنت متأكد من إزالة {{name}} من المشروع؟",
       deleteMemberConfirm: "إزالة",
       deleteMemberError: "فشل حذف العضو",
+      leaveTitle: "الخروج من المشروع",
+      leaveMessage: "هل تريد الخروج من مشروع {{name}}؟",
+      leaveConfirm: "خروج",
+      leaveError: "فشل الخروج من المشروع",
+      leaveNotMember: "حسابك الحالي ليس عضواً نشطاً في هذا المشروع.",
       deleteSectionConfirm: "هل أنت متأكد من حذف القسم {{name}}؟",
       deleteSectionError: "فشل حذف القسم",
       moveSectionError: "فشل إعادة ترتيب القسم",
@@ -541,6 +547,7 @@ export const ar = {
       taskUpdated: "تم تحديث المهمة",
       taskDeleted: "تم حذف المهمة",
       memberRemoved: "تم إزالة العضو من المشروع",
+      leftProject: "تم الخروج من المشروع",
       inviteSent: "تم إرسال الدعوة",
       inviteAccepted: "تم قبول الدعوة",
       inviteRejected: "تم رفض الدعوة",
@@ -570,6 +577,7 @@ export const ar = {
     },
     detail: {
       backLabel: "العودة إلى قائمة المشاريع",
+      leaveProject: "الخروج من المشروع",
       defaultDescription: "تفاصيل المشروع",
       tabs: {
         general: "معلومات عامة",
@@ -704,8 +712,11 @@ export const ar = {
       columns: {
         index: "#",
         id: "id",
+        employeeId: "رقم الموظف",
         name: "اسم الموظف",
         role: "الدور",
+        joinedAt: "تاريخ الانضمام",
+        leftAt: "تاريخ الخروج",
         actions: "إجراءات",
       },
     },
@@ -835,10 +846,19 @@ export const ar = {
           assignees: "المكلفون",
           dependsOn: "المهام السابقة (يجب اكتمالها أولاً)",
           dependsOnHint:
-            "تظهر فقط المهام غير المكتملة. المهام في قسم أخير تُعتبر مكتملة وتُخفى من هذه القائمة",
+            "تظهر فقط المهام غير المكتملة. المهام في قسم أخير تُعتبر مكتملة وتُخفى من هذه القائمة. عند تحديد مهمة سابقة يجب اختيار نوع العلاقة الاعتمادية.",
+          dependencyType: "نوع الاعتمادية",
+          addDependency: "إضافة مهمة سابقة",
+          selectPredecessor: "اختاري مهمة سابقة…",
         },
         dependsOnEmpty:
           "لا مهام سابقة متاحة — إمّا لا توجد مهام أخرى، أو أن المهام الأخرى مكتملة (في قسم أخير)",
+        dependencyTypes: {
+          finish_to_start: "Finish to Start — إنهاء ثم بدء",
+          start_to_start: "Start to Start — بدء مع بدء",
+          finish_to_finish: "Finish to Finish — إنهاء مع إنهاء",
+          start_to_finish: "Start to Finish — بدء ثم إنهاء",
+        },
         placeholders: {
           title: "مثال: تصميم الواجهة الرئيسية",
           description: "وصف مختصر للمهمة (اختياري)",
@@ -1091,6 +1111,8 @@ export const ar = {
         refuse: "فشل رفض السجل",
         checkIn: "فشل تسجيل الدخول",
         checkOut: "فشل تسجيل الخروج",
+        shiftOrder: "وقت الخروج يجب أن يكون بعد وقت الدخول.",
+        shiftMax: "مدة الوردية لا يجوز أن تتجاوز 24 ساعة بين الدخول والخروج.",
       },
       actions: {
         approve: "قبول السجل",

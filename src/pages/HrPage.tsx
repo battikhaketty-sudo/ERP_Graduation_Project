@@ -17,13 +17,16 @@ import {
 } from "../components/ui/formStyles";
 import { SearchableSelect } from "../components/ui/SearchableSelect";
 import { CopyableIdCell } from "../components/ui/CopyableIdCell";
+import { EntityLink } from "../components/ui/EntityLink";
 import { TableRowIndex } from "../components/ui/TableRowIndex";
 import { useToast } from "../context/ToastContext";
 import { useConfirmDialog } from "../context/ConfirmDialogContext";
 import {
+  addHoursToDateTimeInput,
   dateTimeInputToIso,
   defaultDateTimeInput,
   isoToDateTimeInput,
+  validateAttendanceShift,
 } from "../utils/timeInput";
 import {
   addAttendence,
@@ -53,6 +56,7 @@ import {
   type SkillGroup,
 } from "../services/hrApi";
 import { getEmployees, getEmployeeCount } from "../services/employeeApi";
+import { AttendenceStatusApi } from "../services/backendEnums";
 import { getThrownErrorMessage } from "../utils/apiResponse";
 import { sortSkillLevelsByRank } from "../utils/skillLevels";
 import { mapNamedOptions } from "../utils/selectOptions";
@@ -66,6 +70,7 @@ import { ModalTitleBar } from "../components/ui/ModalTitleBar";
 import { Pagination } from "../components/Pagination";
 import { usePreferences } from "../context/PreferencesContext";
 import { useTranslation } from "../i18n";
+import { departmentPath, employeePath } from "../constants/entityPaths";
 
 type HrSection =
   | "contracts"
@@ -87,6 +92,9 @@ const attendanceStatusClasses: Record<string, string> = {
   Refused: STATUS_BADGE_CLASS.error,
   Pending: STATUS_BADGE_CLASS.warning,
   Late: STATUS_BADGE_CLASS.info,
+  "1": STATUS_BADGE_CLASS.success,
+  "2": STATUS_BADGE_CLASS.error,
+  "3": STATUS_BADGE_CLASS.warning,
   حاضر: STATUS_BADGE_CLASS.success,
   إجازة: STATUS_BADGE_CLASS.error,
 };
@@ -195,11 +203,9 @@ const emptyAttendanceForm = {
   checkOutAt: defaultDateTimeInput(17, 0),
 };
 
-const displayHour = (value?: string) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return String(date.getHours());
+const formatWorkHours = (value?: number) => {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return String(Math.round(value * 100) / 100);
 };
 
 const attendanceStatusLabelKeys: Record<
@@ -209,12 +215,15 @@ const attendanceStatusLabelKeys: Record<
   مقبول: "approved",
   Approved: "approved",
   approved: "approved",
+  "1": "approved",
   مرفوض: "refused",
   Refused: "refused",
   refused: "refused",
+  "2": "refused",
   معلق: "pending",
   Pending: "pending",
   pending: "pending",
+  "3": "pending",
   متأخر: "late",
   Late: "late",
   late: "late",
@@ -253,10 +262,9 @@ export function HrPage() {
   const attendanceStatusFilterOptions = useMemo(
     () => [
       { value: "", label: t("hr.attendance.filterLabel") },
-      { value: "0", label: t("badges.attendanceStatus.pending") },
-      { value: "1", label: t("badges.attendanceStatus.approved") },
-      { value: "2", label: t("badges.attendanceStatus.refused") },
-      { value: "3", label: t("badges.attendanceStatus.late") },
+      { value: String(AttendenceStatusApi.Pending), label: t("badges.attendanceStatus.pending") },
+      { value: String(AttendenceStatusApi.Approved), label: t("badges.attendanceStatus.approved") },
+      { value: String(AttendenceStatusApi.Refused), label: t("badges.attendanceStatus.refused") },
     ],
     [t],
   );
@@ -937,6 +945,15 @@ export function HrPage() {
 
     if (!checkin) return;
 
+    const shiftError = validateAttendanceShift(
+      attendanceForm.checkInAt,
+      attendanceForm.checkOutAt,
+    );
+    if (shiftError) {
+      setApiNotice(t(`hr.attendance.errors.${shiftError === "order" ? "shiftOrder" : "shiftMax"}`));
+      return;
+    }
+
     try {
       await addAttendence({
         employeeId: attendanceForm.employeeId.trim(),
@@ -1080,6 +1097,7 @@ export function HrPage() {
   };
 
   const openEditAttendance = (record: AttendanceRecord) => {
+    setApiNotice(null);
     setEditingAttendanceId(record.id);
     setEditAttendanceForm({
       recordId: record.id,
@@ -1098,6 +1116,15 @@ export function HrPage() {
       : undefined;
 
     if (!checkin) return;
+
+    const shiftError = validateAttendanceShift(
+      editAttendanceForm.checkInAt,
+      editAttendanceForm.checkOutAt,
+    );
+    if (shiftError) {
+      setApiNotice(t(`hr.attendance.errors.${shiftError === "order" ? "shiftOrder" : "shiftMax"}`));
+      return;
+    }
 
     try {
       await updateAttendence(editingAttendanceId, { checkin, checkout });
@@ -1304,7 +1331,10 @@ export function HrPage() {
         <div className="flex w-full flex-wrap items-center justify-end gap-2 border-b border-hr-border px-4 py-3 sm:px-5">
           <button
             type="button"
-            onClick={() => setActiveSection("addAttendanceModal")}
+            onClick={() => {
+              setApiNotice(null);
+              setActiveSection("addAttendanceModal");
+            }}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-hr-accent-bg px-4 text-sm font-medium text-hr-accent-text transition hover:opacity-90"
           >
             <Plus className="size-4" />
@@ -1395,25 +1425,30 @@ export function HrPage() {
                     />
                   </td>
                   <td className="px-1 py-2.5 text-center">
-                    <CopyableIdCell value={item.employeeId} />
+                    <CopyableIdCell
+                      value={item.employeeId}
+                      to={employeePath(item.employeeId)}
+                    />
                   </td>
                   <td
                     className="max-w-[160px] truncate whitespace-nowrap px-2 py-2.5 text-hr-text"
                     title={item.employeeName}
                   >
-                    {item.employeeName}
+                    <EntityLink to={employeePath(item.employeeId)}>
+                      {item.employeeName}
+                    </EntityLink>
                   </td>
                   <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
-                    {displayHour(item.checkInRaw)}
+                    {item.checkIn}
                   </td>
                   <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
-                    {displayHour(item.checkOutRaw)}
+                    {item.checkOut}
                   </td>
                   <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
-                    {item.totalWorkHours ?? "-"}
+                    {formatWorkHours(item.totalWorkHours)}
                   </td>
                   <td className="whitespace-nowrap px-2 py-2.5 text-center text-hr-text">
-                    {item.requiredWorkHours ?? 8}
+                    {formatWorkHours(item.requiredWorkHours)}
                   </td>
                   <td className="px-2 py-2.5 text-center">
                     <span
@@ -1556,31 +1591,49 @@ export function HrPage() {
                   />
                 </td>
                 <td className="px-2 py-3 text-center">
-                  <CopyableIdCell value={item.id} />
+                  <CopyableIdCell
+                    value={item.id}
+                    to={departmentPath(item.id)}
+                  />
                 </td>
                 <td
                   className="truncate px-2 py-3 text-hr-text"
                   title={item.name}
                 >
-                  {item.name}
+                  <EntityLink to={departmentPath(item.id)}>{item.name}</EntityLink>
                 </td>
                 <td
                   className="truncate px-2 py-3 text-hr-text"
                   title={item.parentName || undefined}
                 >
-                  {item.parentName || "-"}
+                  {item.parentId ? (
+                    <EntityLink to={departmentPath(item.parentId)}>
+                      {item.parentName || "-"}
+                    </EntityLink>
+                  ) : (
+                    "-"
+                  )}
                 </td>
                 <td
                   className="truncate px-2 py-3 text-center text-hr-text"
                   title={item.managerId || undefined}
                 >
-                  {item.managerId || "-"}
+                  {item.managerId ? (
+                    <CopyableIdCell
+                      value={item.managerId}
+                      to={employeePath(item.managerId)}
+                    />
+                  ) : (
+                    "-"
+                  )}
                 </td>
                 <td
                   className="truncate px-2 py-3 text-hr-text"
                   title={item.managerName || undefined}
                 >
-                  {item.managerName || "-"}
+                  <EntityLink to={employeePath(item.managerId)}>
+                    {item.managerName || "-"}
+                  </EntityLink>
                 </td>
                 <td
                   className="line-clamp-2 break-words px-2 py-3 text-hr-text"
@@ -2024,12 +2077,15 @@ export function HrPage() {
               </label>
               <DateTimeInput
                 value={attendanceForm.checkOutAt}
+                min={attendanceForm.checkInAt}
+                max={addHoursToDateTimeInput(attendanceForm.checkInAt, 24)}
                 onChange={(value) =>
                   setAttendanceForm((prev) => ({ ...prev, checkOutAt: value }))
                 }
                 aria-label={t("hr.attendance.modals.checkOutTime")}
               />
             </div>
+            {apiNotice ? <p className={`mb-4 ${alertErrorClass}`}>{apiNotice}</p> : null}
             <div className="flex justify-center gap-3">
               <button
                 type="button"
@@ -2089,6 +2145,8 @@ export function HrPage() {
               </label>
               <DateTimeInput
                 value={editAttendanceForm.checkOutAt}
+                min={editAttendanceForm.checkInAt}
+                max={addHoursToDateTimeInput(editAttendanceForm.checkInAt, 24)}
                 onChange={(value) =>
                   setEditAttendanceForm((prev) => ({
                     ...prev,
@@ -2098,6 +2156,7 @@ export function HrPage() {
                 aria-label={t("hr.attendance.modals.checkOutTime")}
               />
             </div>
+            {apiNotice ? <p className={`mb-4 ${alertErrorClass}`}>{apiNotice}</p> : null}
             <div className="flex justify-center gap-3">
               <button
                 type="button"

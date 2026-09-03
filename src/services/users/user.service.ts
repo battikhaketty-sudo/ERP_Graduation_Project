@@ -44,7 +44,10 @@ export const getUserById = async (id: string): Promise<UserAccount> => {
 };
 
 export const updateUserRoles = async (userId: string, roleIds: string[]) => {
-  const response = await api.put(`/users/${userId}/roles`, { roleIds });
+  const ids = [
+    ...new Set(roleIds.map((id) => String(id).trim()).filter(Boolean)),
+  ];
+  const response = await api.put(`/users/${userId}/roles`, { roleIds: ids });
   assertMutationSuccess(response.data, "فشل تحديث أدوار المستخدم.");
 };
 

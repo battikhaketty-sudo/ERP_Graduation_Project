@@ -30,8 +30,10 @@ import {
   focusAndScrollToFirstError,
 } from "../../utils/formUx";
 import { mapNamedOptions } from "../../utils/selectOptions";
+import { departmentPath, employeePath } from "../../constants/entityPaths";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
+import { EntityLink } from "../ui/EntityLink";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { ManualDateInput } from "../ui/ManualDateInput";
 import { EmployeeAvatar } from "./EmployeeAvatar";
@@ -67,6 +69,15 @@ type EmployeeDetailViewProps = {
 
 type TabType = "work" | "citizenship" | "personal" | "resume";
 
+const uniqueIds = (ids: Iterable<string>) => [
+  ...new Set([...ids].map((id) => String(id).trim()).filter(Boolean)),
+];
+
+const idsKey = (ids: Iterable<string>) => uniqueIds(ids).sort().join("|");
+
+const accountUserId = (employee: Pick<Employee, "id" | "userId">) =>
+  String(employee.userId || employee.id || "").trim();
+
 export function EmployeeDetailView({
   employee,
   onBack,
@@ -97,6 +108,7 @@ export function EmployeeDetailView({
   >([]);
   const [availableRoles, setAvailableRoles] = useState<AppRole[]>([]);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+  const [initialRoleIds, setInitialRoleIds] = useState<string[]>([]);
   const [fixedRoleIds, setFixedRoleIds] = useState<Set<string>>(new Set());
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [editingUserRoles, setEditingUserRoles] = useState(false);
@@ -121,7 +133,7 @@ export function EmployeeDetailView({
     setLoading(true);
     setError(null);
 
-    const userId = employee.userId || employee.id;
+    const userId = accountUserId(employee);
 
     Promise.all([
       getEmployeeById(employee.id),
@@ -151,13 +163,17 @@ export function EmployeeDetailView({
         };
         setResumeHydrationKey((key) => key + 1);
         setAvailableRoles(roles);
-        setSelectedRoleIds(userAccount?.roles.map((role) => role.roleId) ?? []);
-        setFixedRoleIds(
-          new Set(
-            userAccount?.roles.filter((role) => role.isFixed).map((role) => role.roleId) ??
-              [],
-          ),
+        const assignedIds = uniqueIds(
+          userAccount?.roles.map((role) => role.roleId) ?? [],
         );
+        const fixedIds = uniqueIds(
+          userAccount?.roles
+            .filter((role) => role.isFixed)
+            .map((role) => role.roleId) ?? [],
+        );
+        setSelectedRoleIds(assignedIds);
+        setInitialRoleIds(assignedIds);
+        setFixedRoleIds(new Set(fixedIds));
         setDepartmentOptions(
           departmentsResult.records.map((department) => ({
             id: department.id,
@@ -395,6 +411,28 @@ export function EmployeeDetailView({
     setError(null);
 
     try {
+      const userId = accountUserId(editData);
+      const nextRoleIds = uniqueIds([...selectedRoleIds, ...fixedRoleIds]);
+      const rolesChanged = idsKey(nextRoleIds) !== idsKey([...initialRoleIds, ...fixedRoleIds]);
+
+      if (rolesChanged) {
+        if (!userId) {
+          setError(t("employees.errors.missingUserId"));
+          setSaving(false);
+          return;
+        }
+        try {
+          await updateUserRoles(userId, nextRoleIds);
+          setInitialRoleIds(nextRoleIds);
+        } catch (roleErr) {
+          setError(
+            getThrownErrorMessage(roleErr, t("employees.errors.saveRoles")),
+          );
+          setSaving(false);
+          return;
+        }
+      }
+
       const submittedLocalPhoto = editData.avatar?.startsWith("data:")
         ? editData.avatar
         : "";
@@ -425,35 +463,26 @@ export function EmployeeDetailView({
       };
       setResumeHydrationKey((key) => key + 1);
 
-      const userId = refreshed.userId || refreshed.id;
-      const nextRoleIds = [...new Set([...selectedRoleIds, ...fixedRoleIds])];
-      const previousRoleIds = [
-        ...new Set([
-          ...(editData.userAccount?.roles.map((role) => role.roleId) ?? []),
-          ...fixedRoleIds,
-        ]),
-      ].sort();
-      const rolesChanged =
-        [...nextRoleIds].sort().join("|") !== previousRoleIds.join("|");
-
       let userAccount = editData.userAccount;
-      let roleWarning: string | null = null;
-
-      if (rolesChanged) {
-        try {
-          await updateUserRoles(userId, nextRoleIds);
-          userAccount = await getUserById(userId);
-        } catch (roleErr) {
-          roleWarning = getThrownErrorMessage(
-            roleErr,
-            t("employees.errors.saveRoles"),
-          );
-        }
-      } else {
-        try {
-          userAccount = (await getUserById(userId)) ?? userAccount;
-        } catch {
-          // Keep previously loaded account info if refresh is forbidden.
+      try {
+        userAccount = (await getUserById(accountUserId(refreshed) || userId)) ?? userAccount;
+      } catch {
+        if (rolesChanged) {
+          userAccount = {
+            ...(userAccount ?? {
+              id: userId,
+              email: refreshed.email,
+              isActive: true,
+              emailConfirmed: false,
+              roles: [],
+              rolesCount: 0,
+            }),
+            roles: nextRoleIds.map((roleId) => ({
+              roleId,
+              isFixed: fixedRoleIds.has(roleId),
+            })),
+            rolesCount: nextRoleIds.length,
+          };
         }
       }
 
@@ -469,19 +498,26 @@ export function EmployeeDetailView({
         avatar: keptLocalPhoto,
       };
       setEditData(merged);
-      if (userAccount) {
-        setSelectedRoleIds(userAccount.roles.map((role) => role.roleId));
+      if (rolesChanged) {
+        setSelectedRoleIds(nextRoleIds);
+        setInitialRoleIds(nextRoleIds);
+      } else if (userAccount) {
+        const assignedIds = uniqueIds(userAccount.roles.map((role) => role.roleId));
+        setSelectedRoleIds(assignedIds);
+        setInitialRoleIds(assignedIds);
         setFixedRoleIds(
           new Set(
-            userAccount.roles.filter((role) => role.isFixed).map((role) => role.roleId),
+            uniqueIds(
+              userAccount.roles
+                .filter((role) => role.isFixed)
+                .map((role) => role.roleId),
+            ),
           ),
         );
       }
       onUpdate(merged);
       if (photoMissingOnServer) {
         setError(t("employees.errors.photoNotPersistedByServer"));
-      } else if (roleWarning) {
-        setError(roleWarning);
       }
     } catch (err) {
       const message = getThrownErrorMessage(err, t("employees.errors.save"));
@@ -667,17 +703,27 @@ export function EmployeeDetailView({
                       options={mapNamedOptions(departmentOptions)}
                       placeholder={t("employees.detail.placeholders.selectDepartment")}
                     />
+                    {editData.departmentId ? (
+                      <EntityLink
+                        to={departmentPath(editData.departmentId)}
+                        className="mt-1 inline-block text-xs"
+                      >
+                        {t("common.view")}
+                      </EntityLink>
+                    ) : null}
                   </EmployeeField>
                   <EmployeeField label={t("employees.detail.fields.manager")}>
-                    <input
-                      value={
-                        selectedDepartment?.managerName ||
-                        editData.managerName ||
-                        t("common.dash")
-                      }
-                      readOnly
-                      className={readOnlyClass}
-                    />
+                    <div className={`${readOnlyClass} flex items-center`}>
+                      <EntityLink
+                        to={employeePath(
+                          selectedDepartment?.managerId || editData.managerId,
+                        )}
+                      >
+                        {selectedDepartment?.managerName ||
+                          editData.managerName ||
+                          t("common.dash")}
+                      </EntityLink>
+                    </div>
                   </EmployeeField>
                   <EmployeeField label={t("employees.detail.fields.contractType")} hint={t("employees.detail.fields.contractTypeHint")}>
                     <SearchableSelect
@@ -969,21 +1015,27 @@ export function EmployeeDetailView({
         </div>
       </section>
 
-      {editingUserRoles && (editData.userId || editData.id) ? (
+      {editingUserRoles && accountUserId(editData) ? (
         <EditUserRolesModal
-          userId={editData.userId || editData.id}
+          userId={accountUserId(editData)}
           onClose={() => setEditingUserRoles(false)}
           onSaved={() => {
-            const userId = editData.userId || editData.id;
+            const userId = accountUserId(editData);
             void getUserById(userId)
               .then((userAccount) => {
+                const assignedIds = uniqueIds(
+                  userAccount.roles.map((role) => role.roleId),
+                );
                 setEditData((prev) => ({ ...prev, userAccount }));
-                setSelectedRoleIds(userAccount.roles.map((role) => role.roleId));
+                setSelectedRoleIds(assignedIds);
+                setInitialRoleIds(assignedIds);
                 setFixedRoleIds(
                   new Set(
-                    userAccount.roles
-                      .filter((role) => role.isFixed)
-                      .map((role) => role.roleId),
+                    uniqueIds(
+                      userAccount.roles
+                        .filter((role) => role.isFixed)
+                        .map((role) => role.roleId),
+                    ),
                   ),
                 );
               })

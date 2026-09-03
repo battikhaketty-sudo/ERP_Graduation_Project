@@ -15,6 +15,7 @@ import { CopyableIdCell } from "./ui/CopyableIdCell";
 import { TableRowIndex } from "./ui/TableRowIndex";
 import type { WorkScheduleStatsSnapshot } from "./WorkScheduleStatsBanner";
 import { apiTimeToInputValue, timeInputToMinutes } from "../utils/timeInput";
+import { PeriodTypeApi } from "../services/backendEnums";
 import {
   addWorkingPeriod,
   addWorkingSchedule,
@@ -219,8 +220,8 @@ export function WorkSchedulePanel({
         { id: 6, name: "Saturday" },
       ]);
       const fallbackPeriods = translatePeriodOptions([
-        { id: 1, name: "Work" },
-        { id: 2, name: "Break" },
+        { id: PeriodTypeApi.Working, name: "Working" },
+        { id: PeriodTypeApi.Break, name: "Break" },
       ]);
       setDayOptions(fallbackDays);
       setPeriodOptions(fallbackPeriods);

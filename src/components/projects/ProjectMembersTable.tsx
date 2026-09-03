@@ -1,9 +1,11 @@
 import { Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "../../i18n";
+import { employeePath } from "../../constants/entityPaths";
 import type { ProjectMember } from "../../types/project";
 import { TableAddButton } from "../ui/TableToolbar";
 import { Pagination } from "../Pagination";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
+import { EntityLink } from "../ui/EntityLink";
 import { TableRowIndex } from "../ui/TableRowIndex";
 import { MemberRoleBadge } from "./ProjectBadges";
 
@@ -19,6 +21,7 @@ type ProjectMembersTableProps = {
   onDelete: (member: ProjectMember) => void;
   showAddButton?: boolean;
   onAddClick?: () => void;
+  onLeaveProject?: () => void;
 };
 
 export function ProjectMembersTable({
@@ -31,18 +34,30 @@ export function ProjectMembersTable({
   onDelete,
   showAddButton,
   onAddClick,
+  onLeaveProject,
 }: ProjectMembersTableProps) {
   const { t } = useTranslation();
 
   return (
     <section className="hr-card">
-      {showAddButton && (
-        <div className="px-4 pt-4 sm:px-5">
-          <TableAddButton
-            label={t("projects.members.addMember")}
-            onClick={() => onAddClick?.()}
-            className="rounded-xl bg-[#F5A623] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#E8940A]"
-          />
+      {(showAddButton || onLeaveProject) && (
+        <div className="flex flex-wrap items-center gap-2 px-4 pt-4 sm:px-5">
+          {showAddButton ? (
+            <TableAddButton
+              label={t("projects.members.addMember")}
+              onClick={() => onAddClick?.()}
+              className="rounded-xl bg-[#F5A623] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#E8940A]"
+            />
+          ) : null}
+          {onLeaveProject ? (
+            <button
+              type="button"
+              onClick={onLeaveProject}
+              className="rounded-xl border border-red-200 bg-red-50 px-5 py-2 text-sm font-bold text-red-600 transition hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/70"
+            >
+              {t("projects.detail.leaveProject")}
+            </button>
+          ) : null}
         </div>
       )}
 
@@ -57,7 +72,7 @@ export function ProjectMembersTable({
                 {t("projects.members.columns.id")}
               </th>
               <th className="px-3 py-3 text-center font-medium">
-                {t("projects.detail.fields.managerId")}
+                {t("projects.members.columns.employeeId")}
               </th>
               <th className="px-3 py-3 text-center font-medium">
                 {t("projects.members.columns.name")}
@@ -66,10 +81,10 @@ export function ProjectMembersTable({
                 {t("projects.members.columns.role")}
               </th>
               <th className="px-3 py-3 text-center font-medium">
-                {t("projects.detail.fields.startDate")}
+                {t("projects.members.columns.joinedAt")}
               </th>
               <th className="px-3 py-3 text-center font-medium">
-                {t("projects.detail.fields.endDate")}
+                {t("projects.members.columns.leftAt")}
               </th>
               <th className="px-3 py-3 text-center font-medium">
                 {t("projects.members.columns.actions")}
@@ -100,10 +115,18 @@ export function ProjectMembersTable({
                     <CopyableIdCell value={member.id} />
                   </td>
                   <td className="px-3 py-3 text-center">
-                    {member.employeeId || t("common.dash")}
+                    <CopyableIdCell
+                      value={member.employeeId}
+                      to={employeePath(member.employeeId)}
+                    />
                   </td>
                   <td className="px-3 py-3 text-center font-medium">
-                    {member.employeeName}
+                    <EntityLink
+                      to={employeePath(member.employeeId)}
+                      title={member.employeeName}
+                    >
+                      {member.employeeName}
+                    </EntityLink>
                   </td>
                   <td className="px-3 py-3 text-center">
                     <MemberRoleBadge role={member.role} />

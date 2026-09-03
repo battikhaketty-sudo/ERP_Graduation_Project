@@ -13,6 +13,7 @@ import {
 } from "../utils/apiResponse";
 import { extractRowNumber } from "../utils/tableRowNumber";
 import { fetchAllPages } from "../utils/fetchAllPages";
+import { ATTENDENCE_STATUS_BY_API } from "./backendEnums";
 
 export type { AttendanceFilters, AttendancePayload, AttendanceRecord } from "../types/attendance";
 export type { ContractType } from "../types/contract";
@@ -24,11 +25,22 @@ const formatDateTime = (value?: string | null) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString("ar-SY", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
   });
+};
+
+const readNumericField = (item: Record<string, unknown>, ...keys: string[]) => {
+  for (const key of keys) {
+    const value = item[key];
+    if (value == null || value === "") continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
 };
 
 const normalizeContract = (
@@ -54,6 +66,19 @@ const normalizeDepartment = (item: Record<string, unknown>): Department => ({
   rowNumber: extractRowNumber(item),
 });
 
+const attendanceStatusFromApi = (item: Record<string, unknown>) => {
+  const named = item.statusName ?? item.StatusName;
+  if (typeof named === "string" && named.trim()) return named.trim();
+
+  const raw = item.status ?? item.Status;
+  const numeric = Number(raw);
+  if (Number.isInteger(numeric) && numeric in ATTENDENCE_STATUS_BY_API) {
+    return ATTENDENCE_STATUS_BY_API[numeric];
+  }
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return "-";
+};
+
 const readAttendanceDate = (item: Record<string, unknown>, ...keys: string[]) => {
   for (const key of keys) {
     const value = item[key];
@@ -77,9 +102,21 @@ const normalizeAttendance = (item: Record<string, unknown>): AttendanceRecord =>
     checkOut: formatDateTime(checkOutRaw || null),
     checkInRaw: checkInRaw || undefined,
     checkOutRaw: checkOutRaw || undefined,
-    status: String(item.statusName ?? item.status ?? "-"),
-    totalWorkHours: Number(item.totalWorkHours ?? 0) || undefined,
-    requiredWorkHours: Number(item.requiredWorkHours ?? 8) || undefined,
+    status: attendanceStatusFromApi(item),
+    totalWorkHours: readNumericField(
+      item,
+      "totalWorkHours",
+      "TotalWorkHours",
+      "totalHours",
+      "TotalHours",
+    ),
+    requiredWorkHours: readNumericField(
+      item,
+      "requiredWorkHours",
+      "RequiredWorkHours",
+      "requiredHours",
+      "RequiredHours",
+    ),
     rowNumber: extractRowNumber(item),
   };
 };

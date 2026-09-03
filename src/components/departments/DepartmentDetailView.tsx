@@ -12,6 +12,8 @@ import {
 import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { alertErrorClass, cardSurfaceClass, detailFooterClass, readOnlyClass } from "../ui/formStyles";
 import { DetailBackButton } from "../ui/DetailBackButton";
+import { EntityLink } from "../ui/EntityLink";
+import { employeePath } from "../../constants/entityPaths";
 import { DepartmentField, inputClass } from "./department-ui";
 
 type DepartmentDetailViewProps = {
@@ -228,6 +230,14 @@ export function DepartmentDetailView({
                     </option>
                   ))}
                 </select>
+                {editData.managerId ? (
+                  <EntityLink
+                    to={employeePath(editData.managerId)}
+                    className="mt-1 inline-block text-xs"
+                  >
+                    {t("common.view")}
+                  </EntityLink>
+                ) : null}
               </DepartmentField>
 
               <div className="sm:col-span-2">

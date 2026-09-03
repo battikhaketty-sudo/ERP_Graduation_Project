@@ -1,10 +1,12 @@
 import { Archive, ArchiveRestore, Eye, Pencil, X } from "lucide-react";
 import { DEFAULT_PAGE_SIZE } from "../../constants/defaults";
+import { departmentPath, employeePath } from "../../constants/entityPaths";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useTranslation } from "../../i18n";
 import type { Employee } from "../../types/employee";
 import { Pagination } from "../Pagination";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
+import { EntityLink } from "../ui/EntityLink";
 import { TableRowIndex } from "../ui/TableRowIndex";
 import { EmptyState } from "../EmptyState";
 import { TablePanelHeader } from "../ui/TablePanelHeader";
@@ -189,7 +191,10 @@ export function EmployeeTable({
                     />
                   </td>
                   <td className="px-3 py-3 text-center align-middle">
-                    <CopyableIdCell value={employee.userId || employee.employeeId || "-"} />
+                    <CopyableIdCell
+                      value={employee.userId || employee.employeeId || employee.id}
+                      to={employeePath(employee.id)}
+                    />
                   </td>
                   <td className={`px-3 py-3 align-middle ${nameAlignClass}`}>
                     <div className="inline-flex max-w-full items-center gap-2">
@@ -202,7 +207,9 @@ export function EmployeeTable({
                         className="max-w-[140px] truncate font-medium text-hr-text"
                         title={employee.name}
                       >
-                        {employee.name}
+                        <EntityLink to={employeePath(employee.id)}>
+                          {employee.name}
+                        </EntityLink>
                       </span>
                     </div>
                   </td>
@@ -227,7 +234,9 @@ export function EmployeeTable({
                     title={employee.department || undefined}
                   >
                     <span className="inline-block max-w-[110px] truncate align-middle">
-                      {employee.department || t("common.dash")}
+                      <EntityLink to={departmentPath(employee.departmentId)}>
+                        {employee.department || t("common.dash")}
+                      </EntityLink>
                     </span>
                   </td>
                   <td

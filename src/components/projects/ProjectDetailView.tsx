@@ -4,6 +4,8 @@ import { useUrlQueryNavigation } from "../../hooks/useUrlQueryNavigation";
 import { DetailBackButton } from "../ui/DetailBackButton";
 import { StatusBanner } from "../ui/StatusBanner";
 import { cardSurfaceClass, subtlePanelClass } from "../ui/formStyles";
+import { EntityLink } from "../ui/EntityLink";
+import { employeePath } from "../../constants/entityPaths";
 import { buildProjectDetailStats } from "../../services/projects/project.mapper";
 import {
   getProjectInvitations,
@@ -55,6 +57,7 @@ type ProjectDetailViewProps = {
   onInviteMember: () => void;
   onEditMember: (member: ProjectMember, role: string) => Promise<void>;
   onDeleteMember: (member: ProjectMember) => void;
+  onLeaveProject: () => void;
   /** Bump after sending an invite so the invitations tab reloads. */
   invitationsReloadKey?: number;
   onRefresh?: () => Promise<void> | void;
@@ -82,6 +85,7 @@ export function ProjectDetailView({
   onInviteMember,
   onEditMember,
   onDeleteMember,
+  onLeaveProject,
   invitationsReloadKey = 0,
   onRefresh,
 }: ProjectDetailViewProps) {
@@ -320,6 +324,13 @@ export function ProjectDetailView({
           </button>
           <button
             type="button"
+            onClick={onLeaveProject}
+            className="rounded-xl bg-hr-surface px-5 py-2 text-sm font-bold text-orange-600"
+          >
+            {t("projects.detail.leaveProject")}
+          </button>
+          <button
+            type="button"
             onClick={onDelete}
             className="rounded-xl bg-hr-surface px-5 py-2 text-sm font-bold text-red-500"
           >
@@ -368,6 +379,7 @@ export function ProjectDetailView({
           <ProjectTasksChartPanel
             project={project}
             onAddTask={(sectionId) => onAddTask(sectionId)}
+            onTaskClick={(task) => openTaskInUrl(task.id)}
           />
         </>
       )}
@@ -384,6 +396,7 @@ export function ProjectDetailView({
               <InfoItem
                 label={t("projects.detail.fields.managerName")}
                 value={project.managerName || t("common.dash")}
+                to={employeePath(project.managerId)}
               />
               <InfoItem
                 label={t("projects.detail.fields.endDate")}
@@ -413,6 +426,7 @@ export function ProjectDetailView({
               onDelete={onDeleteMember}
               showAddButton
               onAddClick={onInviteMember}
+              onLeaveProject={onLeaveProject}
             />
           </div>
           <div className="mb-5">
@@ -442,6 +456,7 @@ export function ProjectDetailView({
             onDelete={onDeleteMember}
             showAddButton
             onAddClick={onInviteMember}
+            onLeaveProject={onLeaveProject}
           />
         </div>
       )}
@@ -514,17 +529,25 @@ function InfoItem({
   label,
   value,
   dir,
+  to,
 }: {
   label: string;
   value: string;
   dir?: "ltr" | "rtl";
+  to?: string;
 }) {
   return (
     <div className={subtlePanelClass}>
       <p className="mb-1 text-xs text-hr-muted">{label}</p>
-      <p className="text-sm font-medium text-hr-text" dir={dir}>
-        {value}
-      </p>
+      {to ? (
+        <EntityLink to={to} className="text-sm" title={value}>
+          {value}
+        </EntityLink>
+      ) : (
+        <p className="text-sm font-medium text-hr-text" dir={dir}>
+          {value}
+        </p>
+      )}
     </div>
   );
 }

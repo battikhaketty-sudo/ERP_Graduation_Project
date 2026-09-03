@@ -4,7 +4,9 @@ import type { Employee } from "../../types/employee";
 import { getEmployeeById } from "../../services/employeeApi";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { useTranslation } from "../../i18n";
+import { departmentPath } from "../../constants/entityPaths";
 import { alertErrorClass, subtlePanelClass } from "../ui/formStyles";
+import { EntityLink } from "../ui/EntityLink";
 import { RoleBadge } from "../RoleBadge";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 
@@ -85,7 +87,9 @@ export function EmployeeDrawerPreview({
           <UserRound className="size-4 text-hr-muted" />
           <dt className="text-hr-muted">{t("employees.drawer.department")}</dt>
           <dd className="ms-auto font-medium text-hr-text">
-            {detail.department || t("common.dash")}
+            <EntityLink to={departmentPath(detail.departmentId)}>
+              {detail.department || t("common.dash")}
+            </EntityLink>
           </dd>
         </div>
       </dl>

@@ -1,7 +1,9 @@
 import { ArrowRightLeft } from "lucide-react";
 import { useTranslation } from "../../i18n";
+import { employeePath } from "../../constants/entityPaths";
 import type { TaskTransition } from "../../types/project";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
+import { EntityLink } from "../ui/EntityLink";
 
 type TaskTransitionsPanelProps = {
   transitions: TaskTransition[];
@@ -54,10 +56,11 @@ export function TaskTransitionsPanel({ transitions }: TaskTransitionsPanelProps)
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-hr-muted">
-                <span>
-                  {t("projects.modals.addTask.transitions.by", {
-                    name: item.memberName || item.memberId,
-                  })}
+                <span className="inline-flex flex-wrap items-center gap-1">
+                  {t("projects.modals.addTask.transitions.by", { name: "" }).trim()}
+                  <EntityLink to={employeePath(item.memberId)}>
+                    {item.memberName || item.memberId}
+                  </EntityLink>
                 </span>
                 <span>{formatUtc(item.createdAtUtc)}</span>
                 <CopyableIdCell value={item.id} />

@@ -15,7 +15,10 @@ import {
 import type {
   Project,
   ProjectMember,
+  ProjectSection,
   ProjectTask,
+  TaskDependencyDraft,
+  TaskDependencyType,
   TaskFormPayload,
   TaskPriority,
   TaskTransition,
@@ -44,6 +47,13 @@ import {
   textareaClass,
 } from "./project-ui";
 import { TaskTransitionsPanel } from "./TaskTransitionsPanel";
+
+const DEPENDENCY_TYPES: TaskDependencyType[] = [
+  "finish_to_start",
+  "start_to_start",
+  "finish_to_finish",
+  "start_to_finish",
+];
 
 type AssigneeOption = { id: string; name: string };
 
@@ -153,7 +163,7 @@ export function AddTaskModal({
     dueDate: "",
     priority: "medium" as TaskPriority,
   });
-  const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>([]);
+  const [dependencies, setDependencies] = useState<TaskDependencyDraft[]>([]);
   const [assignees, setAssignees] = useState<AssigneeOption[]>([]);
   const [assigneePickId, setAssigneePickId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -188,14 +198,19 @@ export function AddTaskModal({
           ),
         priority: task.priority || "medium",
       });
-      setDependsOnTaskIds(
-        (task.dependsOnTaskIds ?? []).filter((id) => {
-          const predecessor = project.tasks.find((item) => item.id === id);
-          return (
-            predecessor &&
-            !isTaskCompletedByFinalSection(predecessor, project.sections)
-          );
-        }),
+      setDependencies(
+        (task.dependsOnTaskIds ?? [])
+          .filter((id) => {
+            const predecessor = project.tasks.find((item) => item.id === id);
+            return (
+              predecessor &&
+              !isTaskCompletedByFinalSection(predecessor, project.sections)
+            );
+          })
+          .map((predecessorId) => ({
+            predecessorId,
+            type: "finish_to_start" as const,
+          })),
       );
     } else {
       const sectionId = defaultSectionId || project.sections[0]?.id || "";
@@ -212,7 +227,7 @@ export function AddTaskModal({
         dueDate: defaultDueDate(startDate, project.endDate),
         priority: "medium",
       });
-      setDependsOnTaskIds([]);
+      setDependencies([]);
       setTransitions([]);
     }
 
@@ -232,19 +247,26 @@ export function AddTaskModal({
 
         if (detail) {
           setTransitions(detail.transitions);
-          if (detail.dependsOnTaskIds.length) {
-            setDependsOnTaskIds(
-              detail.dependsOnTaskIds.filter((id) => {
-                const predecessor = project.tasks.find((item) => item.id === id);
-                return (
-                  predecessor &&
-                  !isTaskCompletedByFinalSection(predecessor, project.sections)
-                );
-              }),
-            );
-          }
-        } else if (!task) {
-          setTransitions([]);
+          const fromDetail = detail.dependencies.length
+            ? detail.dependencies.map((item) => ({
+                predecessorId: item.taskId,
+                type: item.dependencyType,
+              }))
+            : detail.dependsOnTaskIds.map((predecessorId) => ({
+                predecessorId,
+                type: "finish_to_start" as const,
+              }));
+          setDependencies(
+            fromDetail.filter((item) => {
+              const predecessor = project.tasks.find(
+                (taskItem) => taskItem.id === item.predecessorId,
+              );
+              return (
+                predecessor &&
+                !isTaskCompletedByFinalSection(predecessor, project.sections)
+              );
+            }),
+          );
         }
 
         if (detail?.assignments.length) {
@@ -315,6 +337,11 @@ export function AddTaskModal({
     );
   }, [project.sections, project.tasks, task?.id]);
 
+  const selectedByPredecessorId = useMemo(
+    () => new Map(dependencies.map((item) => [item.predecessorId, item])),
+    [dependencies],
+  );
+
   const handleClose = () => {
     if (saving) return;
     setError(null);
@@ -346,11 +373,25 @@ export function AddTaskModal({
     setAssignees((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const toggleDependency = (taskId: string) => {
-    setDependsOnTaskIds((prev) =>
-      prev.includes(taskId)
-        ? prev.filter((id) => id !== taskId)
-        : [...prev, taskId],
+  const toggleDependency = (taskId: string, checked: boolean) => {
+    if (checked) {
+      setDependencies((prev) =>
+        prev.some((item) => item.predecessorId === taskId)
+          ? prev
+          : [...prev, { predecessorId: taskId, type: "finish_to_start" }],
+      );
+      return;
+    }
+    setDependencies((prev) =>
+      prev.filter((item) => item.predecessorId !== taskId),
+    );
+  };
+
+  const updateDependencyType = (taskId: string, type: TaskDependencyType) => {
+    setDependencies((prev) =>
+      prev.map((item) =>
+        item.predecessorId === taskId ? { ...item, type } : item,
+      ),
     );
   };
 
@@ -416,13 +457,16 @@ export function AddTaskModal({
         priority: form.priority,
         assigneeIds: validAssignees.map((item) => item.id),
         assigneeNames: validAssignees.map((item) => item.name),
-        dependsOnTaskIds: dependsOnTaskIds.filter((id) => {
-          const predecessor = project.tasks.find((item) => item.id === id);
+        dependencies: dependencies.filter((item) => {
+          const predecessor = project.tasks.find(
+            (taskItem) => taskItem.id === item.predecessorId,
+          );
           return (
             predecessor &&
             !isTaskCompletedByFinalSection(predecessor, project.sections)
           );
         }),
+        dependsOnTaskIds: dependencies.map((item) => item.predecessorId),
       });
       onClose();
     } catch (err) {
@@ -633,25 +677,50 @@ export function AddTaskModal({
             <p className="mb-2 text-xs text-hr-muted">
               {t("projects.modals.addTask.fields.dependsOnHint")}
             </p>
-            <div className="max-h-40 overflow-y-auto rounded-xl border border-hr-border">
+            <div className="rounded-xl border border-hr-border">
               {dependencyOptions.length ? (
                 dependencyOptions.map((item) => {
-                  const checked = dependsOnTaskIds.includes(item.id);
+                  const selected = selectedByPredecessorId.get(item.id);
                   return (
-                    <label
+                    <div
                       key={item.id}
-                      className="flex cursor-pointer items-center gap-3 border-b border-hr-border px-4 py-2.5 last:border-b-0 hover:bg-hr-hover"
+                      className="flex flex-col gap-2 border-b border-hr-border px-4 py-3 last:border-b-0 sm:flex-row sm:items-center"
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleDependency(item.id)}
-                        className="size-4 rounded border-hr-border"
-                      />
-                      <span className="text-sm text-hr-text">
-                        {item.title || item.name}
-                      </span>
-                    </label>
+                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-sm font-medium text-hr-text">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selected)}
+                          onChange={(event) =>
+                            toggleDependency(item.id, event.target.checked)
+                          }
+                          className="size-4 shrink-0 accent-hr-primary"
+                        />
+                        <span className="min-w-0 truncate">
+                          {item.title || item.name}
+                        </span>
+                      </label>
+                      {selected ? (
+                        <select
+                          value={selected.type}
+                          onChange={(event) =>
+                            updateDependencyType(
+                              item.id,
+                              event.target.value as TaskDependencyType,
+                            )
+                          }
+                          className={`${inputClass} sm:max-w-[16rem]`}
+                          aria-label={t(
+                            "projects.modals.addTask.fields.dependencyType",
+                          )}
+                        >
+                          {DEPENDENCY_TYPES.map((type) => (
+                            <option key={type} value={type}>
+                              {t(`projects.modals.addTask.dependencyTypes.${type}`)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                    </div>
                   );
                 })
               ) : (

@@ -4,7 +4,9 @@ import { readIsFixed } from "../../utils/readIsFixed";
 export const normalizeUserRoleAssignment = (
   item: Record<string, unknown>,
 ): UserRoleAssignment => ({
-  roleId: String(item.roleId ?? item.RoleId ?? item.id ?? item.Id ?? ""),
+  roleId: String(
+    item.roleId ?? item.RoleId ?? item.id ?? item.Id ?? "",
+  ).trim(),
   isFixed: readIsFixed(item),
 });
 

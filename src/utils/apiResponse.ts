@@ -79,6 +79,24 @@ const API_ERROR_MESSAGES: Record<string, string> = {
     "لا يمكن الحذف لأن هذا القسم مرتبط بأقسام فرعية أو بيانات أخرى.",
   "Attendence.Error.CannotEditApproved":
     "لا يمكن تعديل سجل حضور مقبول.",
+  Forbidden:
+    "لا يمكنك تنفيذ هذه العملية. حسابك لا يملك الصلاحية المطلوبة.",
+  "Auth.Error.Forbidden":
+    "لا يمكنك تنفيذ هذه العملية. حسابك لا يملك الصلاحية المطلوبة.",
+  "Authorization.Error.Forbidden":
+    "لا يمكنك تنفيذ هذه العملية. حسابك لا يملك الصلاحية المطلوبة.",
+  HigherRoleLevelRequired:
+    "رتبتك الحالية أقل من المطلوب لهذه العملية. تحتاج دوراً أعلى.",
+  HeigherRoleLevelRequired:
+    "رتبتك الحالية أقل من المطلوب لهذه العملية. تحتاج دوراً أعلى.",
+  "Auth.Error.HigherRoleLevelRequired":
+    "رتبتك الحالية أقل من المطلوب لهذه العملية. تحتاج دوراً أعلى.",
+  "Auth.Error.HeigherRoleLevelRequired":
+    "رتبتك الحالية أقل من المطلوب لهذه العملية. تحتاج دوراً أعلى.",
+  "Authorization.Error.HigherRoleLevelRequired":
+    "رتبتك الحالية أقل من المطلوب لهذه العملية. تحتاج دوراً أعلى.",
+  "Authorization.Error.HeigherRoleLevelRequired":
+    "رتبتك الحالية أقل من المطلوب لهذه العملية. تحتاج دوراً أعلى.",
 };
 
 const looksLikeErrorCode = (value: string) =>
@@ -164,6 +182,16 @@ const humanizeErrorCode = (code: string) => {
   }
   if (code.includes("Password")) {
     return "كلمة المرور لا تستوفي متطلبات النظام.";
+  }
+  if (
+    code.includes("HigherRoleLevel") ||
+    code.includes("HeigherRoleLevel") ||
+    code.includes("RoleLevelRequired")
+  ) {
+    return "رتبتك الحالية أقل من المطلوب لهذه العملية. تحتاج دوراً أعلى.";
+  }
+  if (code.includes("Forbidden")) {
+    return "لا يمكنك تنفيذ هذه العملية. حسابك لا يملك الصلاحية المطلوبة.";
   }
   if (code.includes("Internal") || code.includes("Server")) {
     return "خطأ داخلي في السيرفر. تحقق من اكتمال البيانات.";
