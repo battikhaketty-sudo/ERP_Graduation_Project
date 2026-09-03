@@ -58,20 +58,22 @@ export function DepartmentsPage() {
   );
   useRegisterCommandActions(commandActions);
 
-  const fetchDepartments = async () => {
+  const fetchDepartments = async (page = currentPage) => {
     try {
       setLoading(true);
       setError(null);
       const result = await getDepartments({
-        page: currentPage,
+        page,
         limit: PAGE_SIZE,
         name: search.trim() || undefined,
       });
       setDepartments(result.records);
       setTotalPages(result.meta.totalPages || 1);
       setTotalCount(result.meta.totalItems || result.records.length);
+      return result.records;
     } catch (err) {
       setError(getThrownErrorMessage(err, t("departments.errors.loadList")));
+      return [];
     } finally {
       setLoading(false);
     }
@@ -124,11 +126,8 @@ export function DepartmentsPage() {
   const filteredDepartments = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return departments;
-    return departments.filter(
-      (department) =>
-        department.name.toLowerCase().includes(query) ||
-        (department.managerName || "").toLowerCase().includes(query) ||
-        (department.parentName || "").toLowerCase().includes(query),
+    return departments.filter((department) =>
+      department.name.toLowerCase().includes(query),
     );
   }, [departments, search]);
 
@@ -159,7 +158,6 @@ export function DepartmentsPage() {
       await addDepartment(payload);
       setError(null);
       setIsAddModalOpen(false);
-      setCurrentPage(1);
       await fetchDepartments();
       showToast(t("departments.toasts.addSuccess"), "success");
     } catch (err) {
@@ -173,14 +171,15 @@ export function DepartmentsPage() {
   const handleDeleteDepartment = async (id: string) => {
     try {
       await deleteDepartment(id);
+      setFullPageDepartment(null);
       clearDepartmentFromUrl();
       setDrawerDepartment(null);
       await fetchDepartments();
       showToast(t("departments.toasts.deleteSuccess"), "success");
     } catch (err) {
       const message = getThrownErrorMessage(err, t("departments.errors.delete"));
-      setError(message);
       showToast(message, "error");
+      throw err;
     }
   };
 

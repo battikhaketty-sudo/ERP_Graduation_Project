@@ -5,7 +5,9 @@ import { useProjectLabels } from "../../hooks/useProjectLabels";
 import { useTranslation } from "../../i18n";
 import { getAllProjects } from "../../services/projects";
 import type { InvitationFormPayload, Project } from "../../types/project";
-import { mapNamedOptions } from "../../utils/selectOptions";
+import { isEndOfLocalDayPast } from "../../utils/manualDate";
+import { mapEmployeeOptions, mapNamedOptions } from "../../utils/selectOptions";
+import { getThrownApiDisplay } from "../../utils/apiResponse";
 import { FormField } from "../ui/FormField";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { ManualDateInput } from "../ui/ManualDateInput";
@@ -109,6 +111,12 @@ export function InviteMemberModal({
 
   const projectStartDate = selectedProject?.startDate?.slice(0, 10) || "";
 
+  const isProjectManager = (employee: { id: string; userId?: string }) => {
+    const managerId = selectedProject?.managerId?.trim();
+    if (!managerId) return false;
+    return employee.id === managerId || Boolean(employee.userId && employee.userId === managerId);
+  };
+
   if (!isOpen) return null;
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -125,8 +133,16 @@ export function InviteMemberModal({
       setError(t("projects.modals.inviteMember.errors.dateBeforeProjectStart"));
       return;
     }
+    if (form.expiresAt && isEndOfLocalDayPast(form.expiresAt)) {
+      setError(t("projects.modals.inviteMember.errors.dateInPast"));
+      return;
+    }
 
     const employee = employees.find((item) => item.id === form.employeeId);
+    if (employee && isProjectManager(employee)) {
+      setError(t("projects.modals.inviteMember.errors.alreadyManager"));
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -142,10 +158,14 @@ export function InviteMemberModal({
       });
       onClose();
     } catch (err) {
+      const selectedIsManager = Boolean(employee && isProjectManager(employee));
+      if (selectedIsManager) {
+        setError(t("projects.modals.inviteMember.errors.alreadyManager"));
+        return;
+      }
+
       setError(
-        err && typeof err === "object" && "message" in err
-          ? String(err.message)
-          : t("projects.modals.inviteMember.errors.sendFailed"),
+        getThrownApiDisplay(err, t("projects.modals.inviteMember.errors.sendFailed")),
       );
     } finally {
       setSaving(false);
@@ -212,8 +232,11 @@ export function InviteMemberModal({
               onChange={(value) =>
                 setForm((prev) => ({ ...prev, employeeId: value }))
               }
-              options={mapNamedOptions(employees, {
-                description: (employee) => employee.id,
+              options={mapEmployeeOptions(employees, {
+                description: (employee) =>
+                  isProjectManager(employee)
+                    ? t("projects.modals.inviteMember.fields.employeeStatusManager")
+                    : undefined,
               })}
               placeholder={t(
                 "projects.modals.inviteMember.placeholders.employee",
@@ -279,7 +302,7 @@ export function InviteMemberModal({
             ) : null}
           </div>
 
-          {error && <p className={alertErrorClass}>{error}</p>}
+          {error ? <p className={alertErrorClass}>{error}</p> : null}
 
           <div className="flex flex-wrap justify-center gap-3 pt-2">
             <button

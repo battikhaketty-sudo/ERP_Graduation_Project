@@ -203,8 +203,7 @@ function TaskDependencyFlowCanvas({
 
     return graphTasks.filter((task) => {
       if (!q) return true;
-      const hay = `${task.title} ${task.name} ${task.description}`.toLowerCase();
-      return hay.includes(q);
+      return (task.name || task.title).toLowerCase().includes(q);
     });
   }, [graphTasks, search]);
 

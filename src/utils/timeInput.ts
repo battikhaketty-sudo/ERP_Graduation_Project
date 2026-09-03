@@ -68,6 +68,36 @@ export const dateTimeInputToIso = (value: string) => {
   return date.toISOString();
 };
 
+export const addHoursToDateTimeInput = (value: string, hours: number) => {
+  if (!value.trim()) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setTime(date.getTime() + hours * 60 * 60 * 1000);
+  return isoToDateTimeInput(date.toISOString());
+};
+
+const MAX_ATTENDANCE_SHIFT_MS = 24 * 60 * 60 * 1000;
+
+export type AttendanceShiftError = "order" | "maxShift";
+
+/** Checkout, if set, must be after check-in and within 24 hours. */
+export const validateAttendanceShift = (
+  checkinInput: string,
+  checkoutInput?: string,
+): AttendanceShiftError | null => {
+  if (!checkoutInput?.trim()) return null;
+
+  const startIso = dateTimeInputToIso(checkinInput);
+  const endIso = dateTimeInputToIso(checkoutInput);
+  if (!startIso || !endIso) return "order";
+
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  if (end <= start) return "order";
+  if (end - start > MAX_ATTENDANCE_SHIFT_MS) return "maxShift";
+  return null;
+};
+
 export const defaultDateTimeInput = (hours = 9, minutes = 0) => {
   const date = new Date();
   date.setSeconds(0, 0);

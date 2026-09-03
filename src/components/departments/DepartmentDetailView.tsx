@@ -5,7 +5,6 @@ import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 import { useTranslation } from "../../i18n";
 import { getEmployees } from "../../services/employeeApi";
 import {
-  deleteDepartment,
   getDepartmentById,
   updateDepartment,
   type Department,
@@ -13,6 +12,8 @@ import {
 import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { alertErrorClass, cardSurfaceClass, detailFooterClass, readOnlyClass } from "../ui/formStyles";
 import { DetailBackButton } from "../ui/DetailBackButton";
+import { EntityLink } from "../ui/EntityLink";
+import { employeePath } from "../../constants/entityPaths";
 import { DepartmentField, inputClass } from "./department-ui";
 
 type DepartmentDetailViewProps = {
@@ -42,25 +43,53 @@ export function DepartmentDetailView({
   >([]);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
+    setEditData(department);
 
-    Promise.all([getDepartmentById(department.id), getEmployees(1, 100)])
-      .then(([detail, employeesResult]) => {
-        setEditData(detail);
-        setEmployeeOptions(
-          employeesResult.data.map((employee) => ({
+    const load = async () => {
+      const [detailResult, employeesResult] = await Promise.allSettled([
+        getDepartmentById(department.id),
+        getEmployees(1, 100),
+      ]);
+
+      if (cancelled) return;
+
+      if (detailResult.status === "fulfilled") {
+        setEditData(detailResult.value);
+      }
+
+      const options: Array<{ id: string; name: string }> = [];
+      if (employeesResult.status === "fulfilled") {
+        options.push(
+          ...employeesResult.value.data.map((employee) => ({
             id: employee.id,
             name: employee.name,
           })),
         );
-      })
-      .catch((err) => {
-        setEditData(department);
-        setError(getThrownErrorMessage(err, t("departments.detail.loadError")));
-      })
-      .finally(() => setLoading(false));
-  }, [department, t]);
+      }
+
+      const currentManagerId = department.managerId?.trim();
+      if (
+        currentManagerId &&
+        !options.some((employee) => employee.id === currentManagerId)
+      ) {
+        options.unshift({
+          id: currentManagerId,
+          name: department.managerName?.trim() || currentManagerId,
+        });
+      }
+
+      setEmployeeOptions(options);
+      setLoading(false);
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [department]);
 
   const parentOptions = allDepartments.filter(
     (item) => item.id !== editData.id,
@@ -104,8 +133,7 @@ export function DepartmentDetailView({
     if (!confirmed) return;
 
     try {
-      await deleteDepartment(editData.id);
-      onDelete(editData.id);
+      await onDelete(editData.id);
     } catch (err) {
       setError(getThrownErrorMessage(err, t("departments.detail.deleteError")));
     }
@@ -202,6 +230,14 @@ export function DepartmentDetailView({
                     </option>
                   ))}
                 </select>
+                {editData.managerId ? (
+                  <EntityLink
+                    to={employeePath(editData.managerId)}
+                    className="mt-1 inline-block text-xs"
+                  >
+                    {t("common.view")}
+                  </EntityLink>
+                ) : null}
               </DepartmentField>
 
               <div className="sm:col-span-2">

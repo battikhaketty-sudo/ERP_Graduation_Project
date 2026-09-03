@@ -1,5 +1,9 @@
 import { login as loginRequest, logout as logoutRequest } from "../services/authApi";
 import {
+  startAccessTokenRefreshLoop,
+  stopAccessTokenRefreshLoop,
+} from "../services/tokenRefresh";
+import {
   clearSession as clearStoredSession,
   getStoredUser,
   getToken,
@@ -19,6 +23,7 @@ export function getSession(): Session | null {
   const user = getStoredUser();
   const token = getToken();
   if (!user || !token) return null;
+  startAccessTokenRefreshLoop();
   return { user, token };
 }
 
@@ -26,6 +31,7 @@ export async function login(credentials: LoginCredentials): Promise<Session> {
   const result = await loginRequest(credentials);
   setToken(result.token);
   setStoredUser(result.user);
+  startAccessTokenRefreshLoop();
   return { user: result.user, token: result.token };
 }
 
@@ -35,9 +41,11 @@ export async function logout() {
   } catch {
     // ignore API errors — always clear local session
   }
+  stopAccessTokenRefreshLoop();
   clearStoredSession();
 }
 
 export function clearSession() {
+  stopAccessTokenRefreshLoop();
   clearStoredSession();
 }

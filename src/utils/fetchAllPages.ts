@@ -14,11 +14,16 @@ export async function fetchAllPages<T>(
 ): Promise<T[]> {
   const first = await fetchPage(1, limit);
   const all = [...first.records];
-  const totalPages = Math.max(first.meta.totalPages ?? 1, 1);
+  const totalPages = Math.min(Math.max(first.meta.totalPages ?? 1, 1), 40);
 
   for (let page = 2; page <= totalPages; page += 1) {
-    const { records } = await fetchPage(page, limit);
-    all.push(...records);
+    try {
+      const { records } = await fetchPage(page, limit);
+      if (!records.length) break;
+      all.push(...records);
+    } catch {
+      break;
+    }
   }
 
   return all;

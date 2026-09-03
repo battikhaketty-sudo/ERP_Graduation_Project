@@ -1,7 +1,9 @@
 import { ListPlus, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "../../i18n";
+import { employeePath } from "../../constants/entityPaths";
 import { Pagination } from "../Pagination";
 import { TableRowIndex } from "../ui/TableRowIndex";
+import { EntityLink } from "../ui/EntityLink";
 import { EmptyState } from "../EmptyState";
 import { ProjectStatusBadge } from "./ProjectBadges";
 import { getProjectListProgressPercent } from "./projectProgress";
@@ -146,7 +148,10 @@ export function ProjectsTable({
                 <div className="min-w-0">
                   <h3 className="truncate text-base font-bold text-hr-text">{project.name}</h3>
                   <p className="mt-0.5 text-xs text-hr-muted">
-                    {t("projects.table.columns.manager")}: {project.managerName || t("common.dash")}
+                    {t("projects.table.columns.manager")}:{" "}
+                    <EntityLink to={employeePath(project.managerId)}>
+                      {project.managerName || t("common.dash")}
+                    </EntityLink>
                   </p>
                 </div>
                 <ProjectStatusBadge status={project.status} />
@@ -238,7 +243,9 @@ export function ProjectsTable({
                     <ProgressCell percent={getProjectListProgressPercent(project)} />
                   </td>
                   <td className="truncate px-3 py-3 text-center">
-                    {project.managerName || t("common.dash")}
+                    <EntityLink to={employeePath(project.managerId)}>
+                      {project.managerName || t("common.dash")}
+                    </EntityLink>
                   </td>
                   <td
                     className={[

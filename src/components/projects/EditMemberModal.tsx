@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useProjectLabels } from "../../hooks/useProjectLabels";
 import { useTranslation } from "../../i18n";
+import { employeePath } from "../../constants/entityPaths";
 import type { ProjectMember } from "../../types/project";
 import { alertErrorClass, cancelBtnClass, ModalCloseButton, ModalTitleBar } from "../ui/modalStyles";
+import { EntityLink } from "../ui/EntityLink";
 import { inputClass, modalCardClass, modalOverlayClass } from "./project-ui";
 
 type EditMemberModalProps = {
@@ -57,7 +59,11 @@ export function EditMemberModal({ isOpen, member, onClose, onSubmit }: EditMembe
         <ModalCloseButton onClick={onClose} disabled={saving} />
         <ModalTitleBar
           title={t("projects.modals.editMember.title")}
-          subtitle={member.employeeName}
+          subtitle={
+            <EntityLink to={employeePath(member.employeeId)}>
+              {member.employeeName}
+            </EntityLink>
+          }
           onClose={onClose}
           disabled={saving}
           hideCloseButton

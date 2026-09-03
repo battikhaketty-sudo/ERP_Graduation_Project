@@ -5,6 +5,7 @@ import type {
 } from "../../types/employee";
 import { env } from "../../config/env";
 import { normalizeBirthDateValue } from "../../utils/employeeDates";
+import { RESUME_LINE_TYPE_BY_API } from "../backendEnums";
 
 const MEDIA_PROXY_PREFIX = "/media";
 
@@ -121,7 +122,7 @@ const mapResumeLines = (resume: Record<string, unknown>): EmployeeResumeLine[] =
       title: String(line.title || ""),
       description: line.description ? String(line.description) : undefined,
       type: Number.isFinite(typeValue) ? typeValue : 0,
-      typeName: String(line.typeName || ""),
+      typeName: String(line.typeName || RESUME_LINE_TYPE_BY_API[typeValue] || ""),
       fromDate: line.fromDate ? String(line.fromDate).split("T")[0] : undefined,
       toDate: line.toDate ? String(line.toDate).split("T")[0] : undefined,
     };
@@ -149,7 +150,7 @@ export const normalizeEmployee = (
   if (!isDetail) {
     return {
       id: String(item.id || ""),
-      userId: String(item.userId || ""),
+      userId: String(item.userId || item.UserId || ""),
       employeeId: String(item.userId || item.id || ""),
       resumeId: item.resumeId ? String(item.resumeId) : undefined,
       name: String(item.legalName || item.name || "بدون اسم"),
@@ -182,8 +183,8 @@ export const normalizeEmployee = (
   const wageValue = Number(work.wage);
 
   return {
-    id: String(item.id || item.userId || ""),
-    userId: String(item.userId ?? item.id ?? ""),
+    id: String(item.id || item.Id || item.userId || item.UserId || ""),
+    userId: String(item.userId ?? item.UserId ?? item.id ?? item.Id ?? ""),
     employeeId: String(item.userId || item.id || ""),
     resumeId: resume.id ? String(resume.id) : item.resumeId ? String(item.resumeId) : undefined,
     name: String(personal.legalName || item.name || "بدون اسم"),

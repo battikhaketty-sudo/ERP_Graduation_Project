@@ -2,9 +2,10 @@ import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 import { useTranslation } from "../../i18n";
-import { deletePermission, getPermissions } from "../../services/permissions";
+import { deletePermission, getAllPermissions, getPermissions } from "../../services/permissions";
 import type { AppPermission } from "../../types/permission";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
+import { filterByName, paginateItems } from "../../utils/filterByName";
 import { Pagination } from "../Pagination";
 import { TablePanelHeader } from "../ui/TablePanelHeader";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
@@ -43,13 +44,18 @@ export function PermissionsTab({
     try {
       setLoading(true);
       onNotice(null);
-      const result = await getPermissions({
-        page,
-        limit: PAGE_SIZE,
-        name: search.trim() || undefined,
-      });
-      setPermissions(result.records);
-      setTotalPages(result.meta.totalPages || 1);
+      const query = search.trim();
+
+      if (query) {
+        const filtered = filterByName(await getAllPermissions(), query);
+        const paged = paginateItems(filtered, page, PAGE_SIZE);
+        setPermissions(paged.records);
+        setTotalPages(paged.totalPages);
+      } else {
+        const result = await getPermissions({ page, limit: PAGE_SIZE });
+        setPermissions(result.records);
+        setTotalPages(result.meta.totalPages || 1);
+      }
     } catch (err) {
       onNotice(getThrownErrorMessage(err, t("access.permissions.errors.loadList")));
     } finally {
@@ -200,6 +206,7 @@ export function PermissionsTab({
           onClose={() => setModal(null)}
           onSaved={() => {
             onDataChanged();
+            if (modal.mode === "add") setPage(1);
             void loadPermissions();
           }}
           onDeleted={() => {

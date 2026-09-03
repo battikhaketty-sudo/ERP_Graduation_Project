@@ -66,6 +66,13 @@ export function CommandBar() {
         keywords: ["حضور", "دوام", "attendance", "hr"],
         icon: CalendarClock,
       },
+      {
+        id: "nav-profile",
+        label: t("header.profileMenu"),
+        route: ROUTES.profile,
+        keywords: ["ملف", "بروفايل", "profile", "account"],
+        icon: Users,
+      },
     ],
     [t],
   );

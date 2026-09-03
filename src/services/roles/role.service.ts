@@ -8,7 +8,6 @@ import {
   unwrapPage,
   unwrapPagedMeta,
 } from "../../utils/apiResponse";
-import { sortNewestFirst } from "../../utils/listOrder";
 import { fetchAllPages } from "../../utils/fetchAllPages";
 import { normalizeRole } from "./role.mapper";
 
@@ -26,9 +25,7 @@ export const getRoles = async ({ page = 1, limit = 50, name }: RolesQuery = {}) 
 
   const response = await api.get("/roles", { params });
   const meta = unwrapPagedMeta(response.data);
-  const records = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(response.data).map(normalizeRole),
-  );
+  const records = unwrapPage<Record<string, unknown>>(response.data).map(normalizeRole);
 
   return {
     records,
@@ -49,38 +46,55 @@ export const getRoleById = async (id: string): Promise<AppRole> => {
   return normalizeRole(unwrapEntity(response.data) as Record<string, unknown>);
 };
 
+const roleFromPayload = (id: string, payload: RoleFormPayload): AppRole => {
+  const permissionIds = payload.permissionIds ?? [];
+  return {
+    id,
+    name: payload.name.trim(),
+    description: payload.description?.trim() || null,
+    isDefault: payload.isDefault,
+    level: payload.level,
+    isFixed: false,
+    permissionIds,
+    permissions: permissionIds.map((permissionId) => ({
+      permissionId,
+      isFixed: false,
+    })),
+    numberOfPermissions: permissionIds.length,
+  };
+};
+
+const tryGetRoleById = async (id: string, fallback: AppRole): Promise<AppRole> => {
+  try {
+    return await getRoleById(id);
+  } catch {
+    return fallback;
+  }
+};
+
 export const addRole = async (payload: RoleFormPayload): Promise<AppRole> => {
   const response = await api.post("/roles", toRoleBody(payload));
   assertSuccess(response.data);
 
   const createdId = unwrapData<string>(response.data);
-  if (typeof createdId === "string" && createdId.trim()) {
-    return getRoleById(createdId);
+  const id = typeof createdId === "string" ? createdId.trim() : "";
+  const fallback = roleFromPayload(id, payload);
+
+  if (id) {
+    return tryGetRoleById(id, fallback);
   }
 
-  const { records } = await getRoles({ page: 1, limit: 1, name: payload.name });
-  if (records[0]) return records[0];
-  throw { message: "فشل إنشاء الدور." };
+  return fallback;
 };
 
 export const updateRole = async (
   id: string,
-  payload: Partial<RoleFormPayload>,
+  payload: RoleFormPayload,
 ): Promise<AppRole> => {
-  const current = await getRoleById(id);
-  const response = await api.put(
-    `/roles/${id}`,
-    toRoleBody({
-      name: payload.name ?? current.name,
-      description:
-        payload.description !== undefined ? payload.description : current.description,
-      isDefault: payload.isDefault ?? current.isDefault,
-      level: payload.level ?? current.level,
-      permissionIds: payload.permissionIds ?? current.permissionIds ?? [],
-    }),
-  );
+  const body = toRoleBody(payload);
+  const response = await api.put(`/roles/${id}`, body);
   assertMutationSuccess(response.data, "فشل تحديث الدور.");
-  return getRoleById(id);
+  return tryGetRoleById(id, roleFromPayload(id, payload));
 };
 
 export const deleteRole = async (id: string) => {

@@ -22,7 +22,6 @@ import {
   unwrapPage,
   unwrapPagedMeta,
 } from "../../utils/apiResponse";
-import { sortNewestFirst } from "../../utils/listOrder";
 import { fetchAllPages } from "../../utils/fetchAllPages";
 import {
   projectStatusToApi,
@@ -31,6 +30,7 @@ import {
   taskDependencyTypeToApi,
   taskPriorityToApi,
 } from "./project.enums";
+import { toEndOfLocalDayIso } from "../../utils/manualDate";
 import {
   filterProjectSections,
   normalizeInvitation,
@@ -151,8 +151,21 @@ const mergeTaskFormPayload = (
   assigneeIds: pickDefined(payload.assigneeIds, current?.assigneeIds, []),
   assigneeNames: pickDefined(payload.assigneeNames, current?.assigneeNames, []),
   dependsOnTaskIds: pickDefined(
-    payload.dependsOnTaskIds,
+    payload.dependsOnTaskIds ??
+      payload.dependencies?.map((item) => item.predecessorId),
     current?.dependsOnTaskIds,
+    [],
+  ),
+  dependencies: pickDefined(
+    payload.dependencies ??
+      payload.dependsOnTaskIds?.map((predecessorId) => ({
+        predecessorId,
+        type: "finish_to_start" as const,
+      })),
+    current?.dependsOnTaskIds?.map((predecessorId) => ({
+      predecessorId,
+      type: "finish_to_start" as const,
+    })),
     [],
   ),
 });
@@ -170,9 +183,16 @@ const toTaskCommandBody = (payload: TaskFormPayload) => {
   const assignments = [
     ...new Set((payload.assigneeIds ?? []).map(String).filter(Boolean)),
   ];
-  const dependencies = (payload.dependsOnTaskIds ?? []).map((predecessorId) => ({
-    predecessorId,
-    type: taskDependencyTypeToApi("finish_to_start"),
+  const dependencies = (
+    payload.dependencies?.length
+      ? payload.dependencies
+      : (payload.dependsOnTaskIds ?? []).map((predecessorId) => ({
+          predecessorId,
+          type: "finish_to_start" as const,
+        }))
+  ).map((item) => ({
+    predecessorId: item.predecessorId,
+    type: taskDependencyTypeToApi(item.type),
   }));
 
   return {
@@ -427,11 +447,9 @@ export const getProjects = async ({ page = 1, limit = 10, name }: ProjectsQuery 
 
   const response = await api.get("/projects", { params });
   const meta = unwrapPagedMeta(response.data);
-  const records = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(response.data)
-      .map((item) => normalizeProjectListItem(item))
-      .filter((item): item is Project => Boolean(item)),
-  );
+  const records = unwrapPage<Record<string, unknown>>(response.data)
+    .map((item) => normalizeProjectListItem(item))
+    .filter((item): item is Project => Boolean(item));
 
   return {
     records,
@@ -799,11 +817,9 @@ export const getProjectMembers = async (projectId: string, query: MembersQuery =
 
   const response = await api.get(`/projects/${projectId}/members`, { params });
   const meta = unwrapPagedMeta(response.data);
-  const records = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(response.data)
-      .map((item) => normalizeMember(item))
-      .filter((item): item is NonNullable<typeof item> => Boolean(item)),
-  );
+  const records = unwrapPage<Record<string, unknown>>(response.data)
+    .map((item) => normalizeMember(item))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   return {
     records,
@@ -818,6 +834,40 @@ export const getProjectMembers = async (projectId: string, query: MembersQuery =
 
 export const getAllProjectMembers = async (projectId: string) =>
   fetchAllPages((page, limit) => getProjectMembers(projectId, { page, limit }));
+
+/** Projects where this employee already appears as a member (id or userId). */
+export const findProjectsForEmployee = async (employee: {
+  id: string;
+  userId?: string;
+}) => {
+  const lookup = new Set(
+    [employee.id, employee.userId].map((value) => value?.trim()).filter(Boolean) as string[],
+  );
+  if (!lookup.size) return [];
+
+  const projects = await getAllProjects();
+  const matches = await Promise.all(
+    projects.map(async (project) => {
+      try {
+        const result = await getProjectMembers(project.id, { page: 1, limit: 50 });
+        const expected = result.meta.totalItems || result.records.length;
+        if (result.records.length >= 20 && expected <= 2) {
+          return null;
+        }
+        const hit = result.records.some((member) =>
+          [member.id, member.employeeId, member.userId].some(
+            (id) => id && lookup.has(id),
+          ),
+        );
+        return hit ? { id: project.id, name: project.name } : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return matches.filter((item): item is { id: string; name: string } => Boolean(item));
+};
 
 export const updateMember = async (
   projectId: string,
@@ -848,11 +898,10 @@ export const getProjectInvitations = async (
   if (query.projectName?.trim()) params.ProjectName = query.projectName.trim();
 
   const response = await api.get(`/projects/${projectId}/invitations`, { params });
-  return sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(response.data)
-      .map((item) => normalizeInvitation(item, projectId))
-      .filter((item): item is ProjectInvitation => Boolean(item)),
-  );
+  return unwrapPage<Record<string, unknown>>(response.data)
+    .map((item) => normalizeInvitation(item, projectId))
+    .filter((item): item is ProjectInvitation => Boolean(item))
+    .filter((item) => item.projectId === projectId);
 };
 
 const dedupeInvitationsById = (invitations: ProjectInvitation[]) => {
@@ -886,7 +935,7 @@ export const getAllInvitations = async (query: InvitationsQuery = {}) => {
     );
   });
 
-  return sortNewestFirst(dedupeInvitationsById(merged));
+  return dedupeInvitationsById(merged);
 };
 
 const listMyInvitationsPage = async (page = 1, limit = 50) => {
@@ -899,7 +948,7 @@ const listMyInvitationsPage = async (page = 1, limit = 50) => {
     .filter((item): item is ProjectInvitation => Boolean(item));
 
   return {
-    records: sortNewestFirst(records),
+    records,
     meta: {
       ...meta,
       totalPages: meta.totalItems
@@ -915,7 +964,7 @@ export const getMyInvitations = async () => {
     (page, limit) => listMyInvitationsPage(page, limit),
     50,
   );
-  return sortNewestFirst(dedupeInvitationsById(records));
+  return dedupeInvitationsById(records);
 };
 
 export const addInvitation = async (payload: InvitationFormPayload) => {
@@ -923,7 +972,9 @@ export const addInvitation = async (payload: InvitationFormPayload) => {
     invitedEmployeeId: payload.employeeId,
     role: roleIdFromLabel(payload.role),
     message: (payload.message ?? "").slice(0, 2000),
-    expiresAtUtc: payload.expiresAt ? toIsoDate(payload.expiresAt) : null,
+    expiresAtUtc: payload.expiresAt
+      ? toEndOfLocalDayIso(payload.expiresAt) ?? toIsoDate(payload.expiresAt)
+      : null,
   });
 
   assertMutationSuccess(response.data, "فشل إرسال الدعوة.");
@@ -988,7 +1039,8 @@ export const updateTask = async (
     payload.dueDate === undefined ||
     payload.priority === undefined ||
     payload.assigneeIds === undefined ||
-    payload.dependsOnTaskIds === undefined;
+    payload.dependsOnTaskIds === undefined ||
+    payload.dependencies === undefined;
   if (needsCurrent) {
     try {
       current = await getProjectTaskById(taskId, projectId);

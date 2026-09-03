@@ -4,6 +4,7 @@ import { useTranslation } from "../../i18n";
 import { getUsers } from "../../services/users";
 import type { UserAccount } from "../../types/user";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
+import { paginateItems } from "../../utils/filterByName";
 import { Pagination } from "../Pagination";
 import { TablePanelHeader } from "../ui/TablePanelHeader";
 import { TableRowIndex } from "../ui/TableRowIndex";
@@ -31,13 +32,21 @@ export function UsersTab({ search, onNotice, onDataChanged }: UsersTabProps) {
     try {
       setLoading(true);
       onNotice(null);
-      const result = await getUsers({
-        page,
-        limit: PAGE_SIZE,
-        email: search.trim() || undefined,
-      });
-      setUsers(result.records);
-      setTotalPages(result.meta.totalPages || 1);
+      const query = search.trim().toLowerCase();
+
+      if (query) {
+        const result = await getUsers({ page: 1, limit: 100 });
+        const filtered = result.records.filter((user) =>
+          user.email.toLowerCase().includes(query),
+        );
+        const paged = paginateItems(filtered, page, PAGE_SIZE);
+        setUsers(paged.records);
+        setTotalPages(paged.totalPages);
+      } else {
+        const result = await getUsers({ page, limit: PAGE_SIZE });
+        setUsers(result.records);
+        setTotalPages(result.meta.totalPages || 1);
+      }
     } catch (err) {
       onNotice(getThrownErrorMessage(err, t("access.users.errors.loadList")));
     } finally {

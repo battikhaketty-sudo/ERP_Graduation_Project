@@ -2,9 +2,10 @@ import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "../../i18n";
 import { useConfirmDialog } from "../../context/ConfirmDialogContext";
-import { deleteRole, getRoles } from "../../services/roles";
+import { deleteRole, getAllRoles, getRoles } from "../../services/roles";
 import type { AppRole } from "../../types/role";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
+import { filterByName, paginateItems } from "../../utils/filterByName";
 import { Pagination } from "../Pagination";
 import { TablePanelHeader } from "../ui/TablePanelHeader";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
@@ -36,13 +37,18 @@ export function RolesTab({ search, onNotice, onDataChanged }: RolesTabProps) {
     try {
       setLoading(true);
       onNotice(null);
-      const result = await getRoles({
-        page,
-        limit: PAGE_SIZE,
-        name: search.trim() || undefined,
-      });
-      setRoles(result.records);
-      setTotalPages(result.meta.totalPages || 1);
+      const query = search.trim();
+
+      if (query) {
+        const filtered = filterByName(await getAllRoles(), query);
+        const paged = paginateItems(filtered, page, PAGE_SIZE);
+        setRoles(paged.records);
+        setTotalPages(paged.totalPages);
+      } else {
+        const result = await getRoles({ page, limit: PAGE_SIZE });
+        setRoles(result.records);
+        setTotalPages(result.meta.totalPages || 1);
+      }
     } catch (err) {
       onNotice(getThrownErrorMessage(err, t("access.roles.errors.loadList")));
     } finally {
@@ -212,6 +218,7 @@ export function RolesTab({ search, onNotice, onDataChanged }: RolesTabProps) {
           onClose={() => setModal(null)}
           onSaved={() => {
             onDataChanged();
+            if (modal.mode === "add") setPage(1);
             void loadRoles();
           }}
           onDeleted={() => {

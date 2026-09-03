@@ -1,5 +1,6 @@
 import { Check, Copy } from "lucide-react";
 import { useState, type MouseEvent } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "../../i18n";
 import { truncateMiddle } from "../../utils/truncateMiddle";
 import { iconBtnClass } from "./formStyles";
@@ -8,9 +9,16 @@ type CopyableIdCellProps = {
   value?: string;
   head?: number;
   tail?: number;
+  /** When set, the truncated id opens this details page. Copy still works. */
+  to?: string | null;
 };
 
-export function CopyableIdCell({ value = "", head = 3, tail = 3 }: CopyableIdCellProps) {
+export function CopyableIdCell({
+  value = "",
+  head = 3,
+  tail = 3,
+  to,
+}: CopyableIdCellProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
@@ -34,7 +42,18 @@ export function CopyableIdCell({ value = "", head = 3, tail = 3 }: CopyableIdCel
 
   return (
     <span className="inline-flex items-center justify-center gap-1.5 font-mono text-xs" title={value}>
-      <span>{display}</span>
+      {to ? (
+        <Link
+          to={to}
+          onClick={(event) => event.stopPropagation()}
+          className="text-hr-primary hover:underline"
+          title={value}
+        >
+          {display}
+        </Link>
+      ) : (
+        <span>{display}</span>
+      )}
       <button
         type="button"
         onClick={handleCopy}

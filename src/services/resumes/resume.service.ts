@@ -5,6 +5,7 @@ import {
   unwrapData,
   unwrapEntity,
 } from "../../utils/apiResponse";
+import { RESUME_LINE_TYPE_BY_API, ResumeLineTypeApi } from "../backendEnums";
 
 export type ResumeLineTypeOption = {
   id: number;
@@ -41,7 +42,15 @@ export const getResumeLineTypes = async (): Promise<ResumeLineTypeOption[]> => {
   const data =
     unwrapData<Record<string, unknown>[]>(payload) ??
     (Array.isArray(payload) ? (payload as Record<string, unknown>[]) : null);
-  if (!Array.isArray(data)) return [];
+  if (!Array.isArray(data) || data.length === 0) {
+    return [
+      { id: ResumeLineTypeApi.Education, name: RESUME_LINE_TYPE_BY_API[ResumeLineTypeApi.Education] },
+      { id: ResumeLineTypeApi.Training, name: RESUME_LINE_TYPE_BY_API[ResumeLineTypeApi.Training] },
+      { id: ResumeLineTypeApi.Experience, name: RESUME_LINE_TYPE_BY_API[ResumeLineTypeApi.Experience] },
+      { id: ResumeLineTypeApi.Certificate, name: RESUME_LINE_TYPE_BY_API[ResumeLineTypeApi.Certificate] },
+      { id: ResumeLineTypeApi.Other, name: RESUME_LINE_TYPE_BY_API[ResumeLineTypeApi.Other] },
+    ];
+  }
   return data.map((item) => normalizeLineType(item)).filter((item) => item.id > 0);
 };
 

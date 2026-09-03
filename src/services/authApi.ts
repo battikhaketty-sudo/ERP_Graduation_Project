@@ -1,5 +1,5 @@
 import api from "./api";
-import { clearSession, setRefreshToken, setToken } from "./tokenStorage";
+import { clearSession, getRefreshToken, getStoredUser, setRefreshToken, setToken } from "./tokenStorage";
 import type { AuthUser, LoginCredentials, LoginResult } from "../types/auth";
 import { assertSuccess, unwrapData } from "../utils/apiResponse";
 
@@ -50,12 +50,72 @@ export const login = async (credentials: LoginCredentials): Promise<LoginResult>
   return { token, user };
 };
 
+export const changePassword = async (payload: {
+  oldPassword: string;
+  newPassword: string;
+}) => {
+  const res = await api.post("/auth/change-password", {
+    oldPassword: payload.oldPassword,
+    newPassword: payload.newPassword,
+  });
+  assertSuccess(res.data);
+  return res.data;
+};
+
+export const forgotPassword = async (email: string) => {
+  const res = await api.post("/auth/forgot-password", { email: email.trim() });
+  assertSuccess(res.data);
+  return res.data;
+};
+
+export const resetPassword = async (payload: {
+  email: string;
+  otpCode: string;
+  newPassword: string;
+}) => {
+  const res = await api.post("/auth/reset-password", {
+    email: payload.email.trim(),
+    otpCode: payload.otpCode.trim(),
+    newPassword: payload.newPassword,
+  });
+  assertSuccess(res.data);
+  return res.data;
+};
+
+export const confirmEmail = async (payload: { email: string; code: string }) => {
+  const res = await api.post("/auth/confirm-email", {
+    email: payload.email.trim(),
+    code: payload.code.trim(),
+  });
+  assertSuccess(res.data);
+  return res.data;
+};
+
+export const resendEmailConfirmCode = async (email: string) => {
+  const res = await api.post("/auth/resend-email-confirm-code", {
+    email: email.trim(),
+  });
+  assertSuccess(res.data);
+  return res.data;
+};
+
 export const logout = async () => {
   try {
-    await api.post("/auth/logout");
+    await api.post("/auth/logout", {
+      refreshToken: getRefreshToken(),
+      email: getStoredUser()?.email,
+    });
   } catch {
     // ignore logout API errors and clear local session anyway
   }
 };
 
-export default { login, logout };
+export default {
+  login,
+  logout,
+  changePassword,
+  forgotPassword,
+  resetPassword,
+  confirmEmail,
+  resendEmailConfirmCode,
+};

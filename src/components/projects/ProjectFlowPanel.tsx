@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "../../i18n";
 import { getProjectTaskGraph } from "../../services/projects";
 import type { Project, ProjectTask, TaskStats } from "../../types/project";
@@ -6,7 +6,6 @@ import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { cardSurfaceClass } from "../ui/formStyles";
 import { StatusBanner } from "../ui/StatusBanner";
 import { TableAddButton } from "../ui/TableToolbar";
-import { buildProjectProgressSnapshot } from "./projectProgress";
 import {
   TaskDependencyFlow,
   type TaskFlowFilter,
@@ -20,55 +19,10 @@ type ProjectFlowPanelProps = {
   onDeleteTask?: (task: ProjectTask) => void;
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  onTrack: "#5BB8E8",
-  late: "#FF6B6B",
-};
-
-function CompletionRing({ percent }: { percent: number }) {
-  const size = 128;
-  const stroke = 10;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (percent / 100) * circumference;
-
-  return (
-    <div className="relative mx-auto size-32">
-      <svg width={size} height={size} className="-rotate-90" viewBox={`0 0 ${size} ${size}`}>
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={stroke}
-          className="text-hr-border"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="#2F80ED"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          className="transition-[stroke-dashoffset] duration-500"
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-bold text-hr-primary">{percent}%</span>
-      </div>
-    </div>
-  );
-}
-
 const FILTERS: TaskFlowFilter[] = ["all"];
 
 export function ProjectFlowPanel({
   project,
-  taskStats,
   onAddTask,
   onEditTask,
   onDeleteTask,
@@ -110,11 +64,6 @@ export function ProjectFlowPanel({
       cancelled = true;
     };
   }, [graphReloadKey, project.id, project.tasks, t]);
-
-  const snapshot = useMemo(
-    () => buildProjectProgressSnapshot(project, taskStats),
-    [project, taskStats],
-  );
 
   return (
     <section className={`mb-5 ${cardSurfaceClass} overflow-hidden`}>
@@ -196,100 +145,6 @@ export function ProjectFlowPanel({
               onDeleteTask={(task) => onDeleteTask?.(task)}
             />
           )}
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-2xl border border-hr-border bg-hr-surface p-4 text-center sm:col-span-2 lg:col-span-1">
-            <p className="mb-3 text-sm font-medium text-hr-muted">
-              {t("projects.detail.flow.completion")}
-            </p>
-            <CompletionRing percent={snapshot.completionPercent} />
-            <p className="mt-3 text-xs text-hr-muted">
-              {snapshot.taskStats.total
-                ? t("projects.detail.flow.tasksSummary", {
-                    total: snapshot.taskStats.total,
-                    late: snapshot.taskStats.late,
-                  })
-                : t("projects.detail.flow.noTasks")}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-hr-border bg-hr-surface p-4">
-            <p className="mb-4 text-sm font-medium text-hr-text">
-              {t("projects.detail.flow.statusMix")}
-            </p>
-            <div className="space-y-3">
-              {snapshot.statusDistribution.map((item) => (
-                <div key={item.key}>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="text-hr-muted">
-                      {t(`projects.detail.flow.status.${item.key}`)}
-                    </span>
-                    <span className="font-medium text-hr-text">
-                      {item.count} · {item.percent}%
-                    </span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-hr-border">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${item.percent}%`,
-                        backgroundColor: STATUS_COLORS[item.key],
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-hr-border bg-hr-surface p-4 sm:col-span-2 lg:col-span-1">
-            <p className="mb-4 text-sm font-medium text-hr-text">
-              {t("projects.detail.flow.timeline")}
-            </p>
-            {snapshot.timeline.hasRange ? (
-              <div>
-                <div className="mb-2 flex items-center justify-between text-xs text-hr-muted">
-                  <span>{snapshot.timeline.startLabel}</span>
-                  <span>{snapshot.timeline.endLabel}</span>
-                </div>
-                <div className="relative h-3 overflow-hidden rounded-full bg-hr-border">
-                  <div
-                    className={[
-                      "h-full rounded-full transition-all",
-                      snapshot.timeline.isOverdue ? "bg-red-500" : "bg-hr-primary",
-                    ].join(" ")}
-                    style={{
-                      width: `${Math.min(100, snapshot.timeline.elapsedPercent)}%`,
-                    }}
-                  />
-                  {!snapshot.timeline.isOverdue ? (
-                    <span
-                      className="absolute top-1/2 size-3 -translate-y-1/2 rounded-full border-2 border-hr-surface bg-hr-primary"
-                      style={{
-                        insetInlineStart: `calc(${Math.min(100, snapshot.timeline.elapsedPercent)}% - 6px)`,
-                      }}
-                      title={t("projects.detail.flow.today")}
-                    />
-                  ) : null}
-                </div>
-                <p
-                  className={[
-                    "mt-2 text-xs",
-                    snapshot.timeline.isOverdue ? "text-red-500" : "text-hr-muted",
-                  ].join(" ")}
-                >
-                  {snapshot.timeline.isOverdue
-                    ? t("projects.detail.flow.overdue")
-                    : `${t("projects.detail.flow.today")} · ${snapshot.timeline.elapsedPercent}%`}
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-hr-muted">
-                {t("projects.detail.flow.noTimeline")}
-              </p>
-            )}
-          </div>
         </div>
       </div>
     </section>

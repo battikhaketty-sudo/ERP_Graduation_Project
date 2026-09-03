@@ -18,6 +18,8 @@ export type SelectOption = {
 export type EmployeeOption = {
   id: string;
   name: string;
+  email?: string;
+  userId?: string;
 };
 
 type ReferenceScope = {
@@ -41,6 +43,24 @@ const emptyState: ReferenceOptionsState = {
   loading: false,
   error: null,
 };
+
+function dedupeEmployees(items: EmployeeOption[]): EmployeeOption[] {
+  const byId = new Map<string, EmployeeOption>();
+  for (const item of items) {
+    if (!item.id || byId.has(item.id)) continue;
+    byId.set(item.id, item);
+  }
+
+  const byEmail = new Map<string, EmployeeOption>();
+  for (const item of byId.values()) {
+    const email = item.email?.trim().toLowerCase();
+    const key = email && email !== "-" ? `email:${email}` : `id:${item.id}`;
+    if (byEmail.has(key)) continue;
+    byEmail.set(key, item);
+  }
+
+  return [...byEmail.values()];
+}
 
 export function useReferenceOptions(enabled: boolean, scope: ReferenceScope = {}) {
   const loadDepartments = scope.departments ?? true;
@@ -102,10 +122,14 @@ export function useReferenceOptions(enabled: boolean, scope: ReferenceScope = {}
 
         if (loadEmployees) {
           const employeesResult = results[index++] as Awaited<ReturnType<typeof getEmployees>>;
-          nextState.employees = employeesResult.data.map((employee) => ({
-            id: employee.id,
-            name: employee.name,
-          }));
+          nextState.employees = dedupeEmployees(
+            employeesResult.data.map((employee) => ({
+              id: employee.id,
+              name: employee.name,
+              email: employee.email,
+              userId: employee.userId,
+            })),
+          );
         }
 
         setState(nextState);

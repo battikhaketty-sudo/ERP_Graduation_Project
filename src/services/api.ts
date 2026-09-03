@@ -2,8 +2,8 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { isAuthRoute } from "../auth/config";
 import { env } from "../config/env";
 import { redirectToLogin } from "../router/navigation";
-import { formatApiErrorMessage } from "../utils/apiResponse";
-import { refreshAccessToken } from "./tokenRefresh";
+import { extractApiErrorCode, extractApiRawText, formatApiErrorMessage } from "../utils/apiResponse";
+import { ensureAccessTokenFresh, refreshAccessToken, stopAccessTokenRefreshLoop } from "./tokenRefresh";
 import { clearSession, getToken } from "./tokenStorage";
 
 const usesViteProxy = !/^https?:\/\//i.test(env.apiBaseUrl);
@@ -17,22 +17,28 @@ type RetriableRequestConfig = InternalAxiosRequestConfig & {
 const getErrorFallback = (status: number, url?: string) => {
   if (isAuthRoute(url)) {
     if (status >= 500) {
-      return "خطأ في السيرفر أثناء تسجيل الدخول. حاول مجدداً أو تواصل مع الإدارة.";
+      return "خطأ في السيرفر. حاول مجدداً أو تواصل مع الإدارة.";
+    }
+    if (url?.includes("/auth/login")) {
+      if (status === 400) {
+        return "بيانات الدخول غير صحيحة. تحقق من البريد وكلمة المرور.";
+      }
+      return `تعذر تسجيل الدخول (${status}).`;
     }
     if (status === 400) {
-      return "بيانات الدخول غير صحيحة. تحقق من البريد وكلمة المرور.";
+      return "تعذر إكمال العملية. تحقق من البيانات ثم أعد المحاولة.";
     }
-    return `تعذر تسجيل الدخول (${status}).`;
+    return `تعذر إكمال العملية (${status}).`;
   }
 
   if (status >= 500) {
     return "خطأ داخلي في السيرفر (500). حاول مجدداً أو تحقق من البيانات المرسلة.";
   }
+  if (status === 403) {
+    return "لا يمكنك تنفيذ هذه العملية. حسابك لا يملك الصلاحية المطلوبة.";
+  }
   if (status === 400) {
     return "طلب غير صالح (400). تحقق من الحقول المطلوبة.";
-  }
-  if (status === 403) {
-    return "ليس لديك صلاحية لتنفيذ هذا الإجراء (403).";
   }
   return `حدث خطأ من السيرفر (${status}).`;
 };
@@ -45,11 +51,12 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(
-  (config) => {
-    const token = getToken();
-
-    if (token && !isAuthRoute(config.url)) {
-      config.headers.Authorization = `Bearer ${token}`;
+  async (config) => {
+    if (!isAuthRoute(config.url)) {
+      const token = (await ensureAccessTokenFresh()) ?? getToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
 
     if (config.data instanceof FormData) {
@@ -70,22 +77,11 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-let refreshPromise: Promise<string> | null = null;
-
 const handleUnauthorized = (message = SESSION_EXPIRED_MESSAGE) => {
+  stopAccessTokenRefreshLoop();
   clearSession();
   redirectToLogin(message);
   throw { message };
-};
-
-const refreshSession = async () => {
-  if (!refreshPromise) {
-    refreshPromise = refreshAccessToken().finally(() => {
-      refreshPromise = null;
-    });
-  }
-
-  return refreshPromise;
 };
 
 api.interceptors.response.use(
@@ -110,7 +106,7 @@ api.interceptors.response.use(
         originalRequest._retry = true;
 
         try {
-          const newToken = await refreshSession();
+          const newToken = await refreshAccessToken();
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
           return api(originalRequest);
         } catch {
@@ -119,11 +115,15 @@ api.interceptors.response.use(
       }
 
       if (status === 401) {
-        if (originalRequest?.url?.includes("/auth/login")) {
+        if (isAuthRoute(originalRequest?.url)) {
           throw {
+            code: extractApiErrorCode(data),
+            rawApi: extractApiRawText(data),
             message: formatApiErrorMessage(
               data as Record<string, unknown> | string | undefined,
-              "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+              originalRequest?.url?.includes("/auth/login")
+                ? "البريد الإلكتروني أو كلمة المرور غير صحيحة."
+                : "تعذر إكمال العملية. تحقق من البيانات ثم أعد المحاولة.",
             ),
           };
         }
@@ -134,19 +134,30 @@ api.interceptors.response.use(
       if (status === 404) {
         const friendly = formatApiErrorMessage(data, "");
         const isLogin = originalRequest?.url?.includes("/auth/login");
+        const isHtml =
+          typeof data === "string" &&
+          (data.includes("<html") ||
+            data.includes("<?xml") ||
+            data.toLowerCase().includes("under construction"));
 
         throw {
           status,
+          code: extractApiErrorCode(data),
+          rawApi: extractApiRawText(data),
           message:
-            friendly ||
-            (isLogin
-              ? "تعذر الوصول لخدمة تسجيل الدخول. تأكد من إعدادات الاستضافة (proxy للـ API)."
-              : "العنصر غير موجود."),
+            isHtml
+              ? "خدمة الـ API غير متاحة حالياً (السيرفر قيد النشر أو تحت الإنشاء). انتظر قليلاً ثم أعد المحاولة."
+              : friendly ||
+                (isLogin
+                  ? "تعذر الوصول لخدمة تسجيل الدخول. تأكد من إعدادات الاستضافة (proxy للـ API)."
+                  : "العنصر غير موجود."),
         };
       }
 
       throw {
         status,
+        code: extractApiErrorCode(data),
+        rawApi: extractApiRawText(data),
         message: formatApiErrorMessage(
           data as Record<string, unknown> | string | undefined,
           getErrorFallback(status, originalRequest?.url),

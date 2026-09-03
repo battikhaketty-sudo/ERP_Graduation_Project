@@ -32,6 +32,7 @@ import {
   addSection,
   addTask,
   deleteMember,
+  getAllProjectMembers,
   deleteProject,
   deleteSection,
   deleteTask,
@@ -57,7 +58,10 @@ import type {
   TaskStats,
 } from "../types/project";
 
-import { getThrownErrorMessage } from "../utils/apiResponse";
+import { getEmployees } from "../services/employees/employee.service";
+import { isActiveProjectMember, memberLookupIds } from "../services/projects/project.mapper";
+import { getThrownApiDisplay, getThrownErrorMessage } from "../utils/apiResponse";
+import { getCurrentActorIds, getCurrentUserEmail, getCurrentUserName } from "../utils/accessToken";
 
 type ActiveTab = "projects" | "invitations";
 
@@ -133,45 +137,23 @@ export function ProjectsPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const loadListData = useCallback(async () => {
-    const query = search.trim().toLowerCase();
-
+  const loadListData = useCallback(async (page = projectsPage) => {
     try {
       setLoading(true);
       setError(null);
 
       const [projectsResult, statsResult, invitationsResult] = await Promise.all([
           getProjects({
-            page: query ? 1 : projectsPage,
-            limit: query ? 100 : PROJECTS_PAGE_SIZE,
+            page,
+            limit: PROJECTS_PAGE_SIZE,
+            name: search.trim() || undefined,
           }),
           getProjectStats(),
           getMyInvitations(),
         ]);
 
-      let projectRecords = projectsResult.records;
-      if (query) {
-        projectRecords = projectRecords.filter((project) =>
-          [
-            project.name,
-            project.number,
-            project.managerName,
-            project.assignedEmployeeName,
-            project.description,
-          ].some((field) => field.toLowerCase().includes(query)),
-        );
-        const totalPages = Math.max(
-          1,
-          Math.ceil(projectRecords.length / PROJECTS_PAGE_SIZE),
-        );
-        const page = Math.min(projectsPage, totalPages);
-        const start = (page - 1) * PROJECTS_PAGE_SIZE;
-        setProjects(projectRecords.slice(start, start + PROJECTS_PAGE_SIZE));
-        setProjectsTotalPages(totalPages);
-      } else {
-        setProjects(projectRecords);
-        setProjectsTotalPages(projectsResult.meta.totalPages || 1);
-      }
+      setProjects(projectsResult.records);
+      setProjectsTotalPages(projectsResult.meta.totalPages || 1);
 
       setStats(statsResult);
       setMyInvitations(invitationsResult);
@@ -280,6 +262,67 @@ export function ProjectsPage() {
     }
   };
 
+  const resolveCurrentMembership = async (projectId: string) => {
+    const members = await getAllProjectMembers(projectId);
+    const actorIds = new Set(getCurrentActorIds());
+    let self = members.find((member) =>
+      memberLookupIds(member).some((id) => actorIds.has(id)),
+    );
+
+    if (!self) {
+      const email = getCurrentUserEmail();
+      const name = getCurrentUserName();
+      const result = await getEmployees(1, 100, name ? { legalName: name } : undefined);
+      const me = result.data.find((employee) => {
+        const employeeEmail = employee.email.trim().toLowerCase();
+        if (email && employeeEmail === email) return true;
+        return Boolean(name && employee.name.trim() === name);
+      });
+      if (me) {
+        const lookup = new Set(
+          [me.id, me.userId, me.employeeId].filter(Boolean) as string[],
+        );
+        self = members.find((member) =>
+          memberLookupIds(member).some((id) => lookup.has(id)),
+        );
+      }
+    }
+
+    return self && isActiveProjectMember(self) ? self : null;
+  };
+
+  const handleLeaveProject = async () => {
+    if (!selectedProject) return;
+
+    const confirmed = await confirm({
+      title: t("projects.page.leaveTitle"),
+      message: t("projects.page.leaveMessage", { name: selectedProject.name }),
+      confirmLabel: t("projects.page.leaveConfirm"),
+    });
+    if (!confirmed) return;
+
+    try {
+      const self = await resolveCurrentMembership(selectedProject.id);
+      if (!self) {
+        const message = t("projects.page.leaveNotMember");
+        setError(message);
+        showToast(message, "error");
+        return;
+      }
+
+      await deleteMember(selectedProject.id, self.id);
+      setError(null);
+      showToast(t("projects.toasts.leftProject"), "success");
+      setSelectedProject(null);
+      clearProjectFromUrl();
+      await loadListData();
+    } catch (err) {
+      const message = getThrownErrorMessage(err, t("projects.page.leaveError"));
+      setError(message);
+      showToast(message, "error");
+    }
+  };
+
   const handleDeleteMember = async (member: ProjectMember) => {
     if (!selectedProject) return;
 
@@ -298,7 +341,7 @@ export function ProjectsPage() {
       setError(null);
       showToast(t("projects.toasts.memberRemoved"), "success");
     } catch (err) {
-      const message = getThrownErrorMessage(
+      const message = getThrownApiDisplay(
         err,
         t("projects.page.deleteMemberError"),
       );
@@ -411,10 +454,10 @@ export function ProjectsPage() {
   const filteredMyInvitations = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return myInvitations;
-    return myInvitations.filter((invitation) =>
-      [invitation.projectName, invitation.employeeName, invitation.projectId].some(
-        (field) => field.toLowerCase().includes(query),
-      ),
+    return myInvitations.filter(
+      (invitation) =>
+        invitation.projectName.toLowerCase().includes(query) ||
+        invitation.employeeName.toLowerCase().includes(query),
     );
   }, [myInvitations, search]);
 
@@ -482,6 +525,7 @@ export function ProjectsPage() {
             setIsProjectModalOpen(true);
           }}
           onDelete={() => void handleDeleteProject(selectedProject)}
+          onLeaveProject={() => void handleLeaveProject()}
           onAddTask={(sectionId) => {
             setEditingTask(null);
             setDefaultTaskSectionId(sectionId);
@@ -512,7 +556,7 @@ export function ProjectsPage() {
               await refreshSelectedProject(selectedProject.id);
               showToast(t("projects.toasts.memberUpdated"), "success");
             } catch (err) {
-              const message = getThrownErrorMessage(
+              const message = getThrownApiDisplay(
                 err,
                 t("projects.page.loadError"),
               );
@@ -679,9 +723,6 @@ export function ProjectsPage() {
             onReject={(invitation) =>
               void handleMyInvitationAction(invitation, "rejected")
             }
-            onCancel={(invitation) =>
-              void handleMyInvitationAction(invitation, "cancelled")
-            }
           />
         )}
       </main>
@@ -697,12 +738,12 @@ export function ProjectsPage() {
           if (editingProject) {
             await updateProject(editingProject.id, payload);
             showToast(t("projects.toasts.saveSuccess"), "success");
+            await loadListData();
           } else {
             await addProject(payload);
-            setProjectsPage(1);
             showToast(t("projects.toasts.addSuccess"), "success");
+            await loadListData();
           }
-          await loadListData();
         }}
       />
     </>

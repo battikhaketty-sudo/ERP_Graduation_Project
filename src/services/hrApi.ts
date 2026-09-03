@@ -13,7 +13,7 @@ import {
 } from "../utils/apiResponse";
 import { extractRowNumber } from "../utils/tableRowNumber";
 import { fetchAllPages } from "../utils/fetchAllPages";
-import { sortNewestFirst } from "../utils/listOrder";
+import { ATTENDENCE_STATUS_BY_API } from "./backendEnums";
 
 export type { AttendanceFilters, AttendancePayload, AttendanceRecord } from "../types/attendance";
 export type { ContractType } from "../types/contract";
@@ -25,18 +25,35 @@ const formatDateTime = (value?: string | null) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString("ar-SY", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
   });
 };
 
-const normalizeContract = (item: Record<string, unknown>): ContractType => ({
-  id: String(item.id ?? crypto.randomUUID()),
-  name: String(item.name ?? "بدون اسم"),
-  rowNumber: extractRowNumber(item),
-});
+const readNumericField = (item: Record<string, unknown>, ...keys: string[]) => {
+  for (const key of keys) {
+    const value = item[key];
+    if (value == null || value === "") continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+};
+
+const normalizeContract = (
+  item: Record<string, unknown>,
+  fallbackName = "",
+): ContractType => {
+  const name = String(item.name ?? item.Name ?? fallbackName).trim();
+  return {
+    id: String(item.id ?? item.Id ?? ""),
+    name: name || fallbackName || "بدون اسم",
+    rowNumber: extractRowNumber(item),
+  };
+};
 
 const normalizeDepartment = (item: Record<string, unknown>): Department => ({
   id: String(item.id ?? crypto.randomUUID()),
@@ -48,6 +65,19 @@ const normalizeDepartment = (item: Record<string, unknown>): Department => ({
   description: String(item.description ?? ""),
   rowNumber: extractRowNumber(item),
 });
+
+const attendanceStatusFromApi = (item: Record<string, unknown>) => {
+  const named = item.statusName ?? item.StatusName;
+  if (typeof named === "string" && named.trim()) return named.trim();
+
+  const raw = item.status ?? item.Status;
+  const numeric = Number(raw);
+  if (Number.isInteger(numeric) && numeric in ATTENDENCE_STATUS_BY_API) {
+    return ATTENDENCE_STATUS_BY_API[numeric];
+  }
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return "-";
+};
 
 const readAttendanceDate = (item: Record<string, unknown>, ...keys: string[]) => {
   for (const key of keys) {
@@ -72,9 +102,21 @@ const normalizeAttendance = (item: Record<string, unknown>): AttendanceRecord =>
     checkOut: formatDateTime(checkOutRaw || null),
     checkInRaw: checkInRaw || undefined,
     checkOutRaw: checkOutRaw || undefined,
-    status: String(item.statusName ?? item.status ?? "-"),
-    totalWorkHours: Number(item.totalWorkHours ?? 0) || undefined,
-    requiredWorkHours: Number(item.requiredWorkHours ?? 8) || undefined,
+    status: attendanceStatusFromApi(item),
+    totalWorkHours: readNumericField(
+      item,
+      "totalWorkHours",
+      "TotalWorkHours",
+      "totalHours",
+      "TotalHours",
+    ),
+    requiredWorkHours: readNumericField(
+      item,
+      "requiredWorkHours",
+      "RequiredWorkHours",
+      "requiredHours",
+      "RequiredHours",
+    ),
     rowNumber: extractRowNumber(item),
   };
 };
@@ -111,17 +153,56 @@ const normalizeSkillGroup = (item: Record<string, unknown>): SkillGroup => {
 
 export const getContractTypes = async (page = 1, limit = 50) => {
   const res = await api.get("/contract-types", { params: { Page: page, Limit: limit } });
-  return sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(res.data).map((item) =>
-      normalizeContract(item),
-    ),
+  return unwrapPage<Record<string, unknown>>(res.data).map((item) =>
+    normalizeContract(item),
   );
 };
 
+export const getContractTypeById = async (id: string) => {
+  const res = await api.get(`/contract-types/${id}`);
+  return normalizeContract(unwrapEntity(res.data) as Record<string, unknown>);
+};
+
 export const addContractType = async (name: string) => {
-  const res = await api.post("/contract-types", { name });
-  const data = unwrapEntity<Record<string, unknown>>(res.data);
-  return normalizeContract(data);
+  const trimmed = name.trim();
+  const res = await api.post("/contract-types", { name: trimmed });
+  assertSuccess(res.data);
+
+  const created = unwrapData<Record<string, unknown> | string>(res.data);
+  const id =
+    typeof created === "string"
+      ? created.trim()
+      : created && typeof created === "object"
+        ? String(created.id ?? created.Id ?? "").trim()
+        : "";
+
+  const fallback: ContractType = {
+    id,
+    name:
+      created && typeof created === "object"
+        ? String(created.name ?? created.Name ?? trimmed).trim() || trimmed
+        : trimmed,
+  };
+
+  if (id) {
+    try {
+      const detail = await getContractTypeById(id);
+      return {
+        id: detail.id || id,
+        name:
+          detail.name && detail.name !== "بدون اسم" ? detail.name : trimmed,
+        rowNumber: detail.rowNumber,
+      };
+    } catch {
+      return fallback;
+    }
+  }
+
+  if (created && typeof created === "object") {
+    return normalizeContract(created, trimmed);
+  }
+
+  return fallback;
 };
 
 export const updateContractType = async (id: string, name: string) => {
@@ -145,10 +226,8 @@ export const getDepartments = async (filters: DepartmentFilters = {}) => {
   if (managerName?.trim()) params.ManagerName = managerName.trim();
 
   const res = await api.get("/departments", { params });
-  const records = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(res.data).map((item) =>
-      normalizeDepartment(item),
-    ),
+  const records = unwrapPage<Record<string, unknown>>(res.data).map((item) =>
+    normalizeDepartment(item),
   );
   const meta = unwrapPagedMeta(res.data);
 
@@ -178,10 +257,22 @@ export const addDepartment = async (data: {
   });
   assertSuccess(res.data);
   const createdId = unwrapData<string>(res.data);
-  if (typeof createdId === "string" && createdId.trim()) {
-    return getDepartmentById(createdId);
+  const id = typeof createdId === "string" ? createdId.trim() : "";
+  const fallback: Department = {
+    id,
+    name: data.name,
+    managerId: data.managerId,
+    parentId: data.parentId ?? "",
+    description: data.description ?? "",
+  };
+  if (id) {
+    try {
+      return await getDepartmentById(id);
+    } catch {
+      return fallback;
+    }
   }
-  return null;
+  return fallback.id ? fallback : null;
 };
 
 export const getDepartmentById = async (id: string) => {
@@ -206,7 +297,17 @@ export const updateDepartment = async (
     description: data.description || null,
   });
   assertSuccess(res.data);
-  return getDepartmentById(id);
+  try {
+    return await getDepartmentById(id);
+  } catch {
+    return {
+      id,
+      name: data.name,
+      managerId: data.managerId,
+      parentId: data.parentId ?? "",
+      description: data.description ?? "",
+    };
+  }
 };
 
 export const deleteDepartment = async (id: string) => {
@@ -260,10 +361,8 @@ export const getAttendences = async (filters: AttendanceFilters = {}) => {
   if (status !== undefined) params.Status = status;
 
   const res = await api.get("/attendences", { params });
-  const records = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(res.data).map((item) =>
-      normalizeAttendance(item),
-    ),
+  const records = unwrapPage<Record<string, unknown>>(res.data).map((item) =>
+    normalizeAttendance(item),
   );
   const meta = unwrapPagedMeta(res.data);
 
@@ -331,9 +430,7 @@ export const deleteAttendence = async (id: string) => {
 export const getSkillTypesPage = async (page = 1, limit = 50) => {
   const res = await api.get("/skill-types", { params: { Page: page, Limit: limit } });
   const meta = unwrapPagedMeta(res.data);
-  const records = sortNewestFirst(
-    unwrapPage<Record<string, unknown>>(res.data).map(normalizeSkillGroup),
-  );
+  const records = unwrapPage<Record<string, unknown>>(res.data).map(normalizeSkillGroup);
 
   return {
     records,

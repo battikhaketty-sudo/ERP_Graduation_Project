@@ -2,6 +2,8 @@ type DateTimeInputProps = {
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  min?: string;
+  max?: string;
   "aria-label"?: string;
 };
 
@@ -9,12 +11,16 @@ export function DateTimeInput({
   value,
   onChange,
   className = "",
+  min,
+  max,
   "aria-label": ariaLabel,
 }: DateTimeInputProps) {
   return (
     <input
       type="datetime-local"
       value={value}
+      min={min || undefined}
+      max={max || undefined}
       onChange={(event) => onChange(event.target.value)}
       aria-label={ariaLabel}
       className={[

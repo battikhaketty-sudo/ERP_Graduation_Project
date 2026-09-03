@@ -1,4 +1,5 @@
 import { useTranslation } from "../../i18n";
+import { employeePath, projectPath } from "../../constants/entityPaths";
 import { Pagination } from "../Pagination";
 import {
   cardSurfaceClass,
@@ -6,6 +7,7 @@ import {
   tableRowClass,
 } from "../ui/formStyles";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
+import { EntityLink } from "../ui/EntityLink";
 import { TableRowIndex } from "../ui/TableRowIndex";
 import { TableAddButton } from "../ui/TableToolbar";
 import { InvitationStatusBadge } from "./ProjectBadges";
@@ -18,14 +20,14 @@ type InvitationsTableProps = {
   onPageChange: (page: number) => void;
   onAccept: (invitation: ProjectInvitation) => void;
   onReject: (invitation: ProjectInvitation) => void;
-  onCancel: (invitation: ProjectInvitation) => void;
+  onCancel?: (invitation: ProjectInvitation) => void;
   /** When true, hide project columns (already inside a project). */
   projectScoped?: boolean;
   title?: string;
   emptyMessage?: string;
   showInviteButton?: boolean;
   onInviteClick?: () => void;
-  /** Personal inbox: accept / reject / cancel. Project manage: cancel only. */
+  /** Personal inbox: accept / reject. Project manage: cancel only. */
   actionsMode?: "personal" | "manage";
 };
 
@@ -122,15 +124,28 @@ export function InvitationsTable({
                   {!projectScoped && (
                     <>
                       <td className="truncate px-2 py-3 text-center font-medium">
-                        {invitation.projectName}
+                        <EntityLink
+                          to={projectPath(invitation.projectId)}
+                          title={invitation.projectName}
+                        >
+                          {invitation.projectName}
+                        </EntityLink>
                       </td>
                       <td className="px-2 py-3 text-center">
-                        <CopyableIdCell value={invitation.projectId} />
+                        <CopyableIdCell
+                          value={invitation.projectId}
+                          to={projectPath(invitation.projectId)}
+                        />
                       </td>
                     </>
                   )}
                   <td className="truncate px-2 py-3 text-center">
-                    {invitation.employeeName}
+                    <EntityLink
+                      to={employeePath(invitation.employeeId)}
+                      title={invitation.employeeName}
+                    >
+                      {invitation.employeeName}
+                    </EntityLink>
                   </td>
                   <td className="px-2 py-3 text-center">
                     <InvitationStatusBadge status={invitation.status} />
@@ -165,13 +180,15 @@ export function InvitationsTable({
                             </button>
                           </>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => onCancel(invitation)}
-                          className="rounded-md bg-slate-500 px-2 py-1 text-[11px] font-bold text-white hover:bg-slate-600"
-                        >
-                          {t("common.cancel")}
-                        </button>
+                        {actionsMode === "manage" && onCancel ? (
+                          <button
+                            type="button"
+                            onClick={() => onCancel(invitation)}
+                            className="rounded-md bg-slate-500 px-2 py-1 text-[11px] font-bold text-white hover:bg-slate-600"
+                          >
+                            {t("common.cancel")}
+                          </button>
+                        ) : null}
                       </div>
                     ) : (
                       <span className="text-xs text-hr-muted">{t("common.dash")}</span>

@@ -16,7 +16,7 @@ import type {
   ProjectFormPayload,
   ProjectStatus,
 } from "../../types/project";
-import { mapNamedOptions } from "../../utils/selectOptions";
+import { mapEmployeeOptions } from "../../utils/selectOptions";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { ManualDateInput } from "../ui/ManualDateInput";
 import { readOnlyClass } from "../ui/formStyles";
@@ -244,9 +244,7 @@ export function AddProjectModal({
                       managerId: value,
                     }))
                   }
-                  options={mapNamedOptions(employees, {
-                    description: (employee) => employee.id,
-                  })}
+                  options={mapEmployeeOptions(employees)}
                   placeholder={t("projects.modals.addProject.placeholders.manager")}
                   searchPlaceholder={t(
                     "projects.modals.addProject.placeholders.managerSearch",

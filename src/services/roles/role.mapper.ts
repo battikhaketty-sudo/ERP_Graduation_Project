@@ -28,8 +28,8 @@ export const normalizeRole = (item: Record<string, unknown>): AppRole => {
   );
 
   return {
-    id: String(item.id ?? item.roleId ?? ""),
-    name: String(item.name ?? item.roleName ?? "بدون اسم"),
+    id: String(item.id ?? item.Id ?? item.roleId ?? item.RoleId ?? ""),
+    name: String(item.name ?? item.Name ?? item.roleName ?? item.RoleName ?? "بدون اسم"),
     description:
       typeof item.description === "string" || item.description === null
         ? item.description

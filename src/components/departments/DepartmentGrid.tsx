@@ -1,8 +1,10 @@
 import { Building2, Eye, Pencil } from "lucide-react";
 import { useTranslation } from "../../i18n";
+import { departmentPath, employeePath } from "../../constants/entityPaths";
 import type { Department } from "../../types/department";
 import { EmptyState } from "../EmptyState";
 import { Pagination } from "../Pagination";
+import { EntityLink } from "../ui/EntityLink";
 import { TablePanelHeader } from "../ui/TablePanelHeader";
 
 type DepartmentGridProps = {
@@ -72,10 +74,20 @@ export function DepartmentGrid({
               </div>
               <h3 className="mb-1 text-base font-bold text-hr-text">{department.name}</h3>
               <p className="text-sm text-hr-muted">
-                {t("departments.grid.manager")}: {department.managerName || t("common.dash")}
+                {t("departments.grid.manager")}:{" "}
+                <EntityLink to={employeePath(department.managerId)}>
+                  {department.managerName || t("common.dash")}
+                </EntityLink>
               </p>
               <p className="text-sm text-hr-muted">
-                {t("departments.grid.parent")}: {department.parentName || t("departments.grid.noParent")}
+                {t("departments.grid.parent")}:{" "}
+                {department.parentId ? (
+                  <EntityLink to={departmentPath(department.parentId)}>
+                    {department.parentName || t("departments.grid.noParent")}
+                  </EntityLink>
+                ) : (
+                  t("departments.grid.noParent")
+                )}
               </p>
             </button>
 

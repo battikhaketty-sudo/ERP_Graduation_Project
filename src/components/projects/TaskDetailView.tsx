@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "../../i18n";
-import { ROUTES } from "../../constants/routes";
+import {
+  employeePath,
+  projectSectionPath,
+  projectTaskPath,
+} from "../../constants/entityPaths";
 import { getProjectTaskById } from "../../services/projects";
 import type { Project, ProjectTask, ProjectTaskDetail } from "../../types/project";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
@@ -9,6 +12,7 @@ import { DetailBackButton } from "../ui/DetailBackButton";
 import { StatusBanner } from "../ui/StatusBanner";
 import { cardSurfaceClass, subtlePanelClass } from "../ui/formStyles";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
+import { EntityLink } from "../ui/EntityLink";
 import { PriorityBadge } from "./ProjectBadges";
 
 type TaskDetailViewProps = {
@@ -32,7 +36,6 @@ export function TaskDetailView({
   onDelete,
 }: TaskDetailViewProps) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const [task, setTask] = useState<ProjectTaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +143,11 @@ export function TaskDetailView({
             </p>
             <PriorityBadge priority={task.priority} />
           </div>
-          <InfoItem label={t("projects.taskDetail.fields.section")} value={sectionName} />
+          <InfoItem
+            label={t("projects.taskDetail.fields.section")}
+            value={sectionName}
+            to={projectSectionPath(project.id, task.sectionId)}
+          />
           <InfoItem
             label={t("projects.taskDetail.fields.expectedHours")}
             value={String(task.expectedHours)}
@@ -193,10 +200,15 @@ export function TaskDetailView({
                     onClick={() => onOpenTask(dependency.taskId)}
                   >
                     <td className="px-3 py-3 text-center">
-                      <CopyableIdCell value={dependency.taskId} />
+                      <CopyableIdCell
+                        value={dependency.taskId}
+                        to={projectTaskPath(project.id, dependency.taskId)}
+                      />
                     </td>
-                    <td className="truncate px-3 py-3 text-center font-medium text-hr-primary">
-                      {dependency.taskTitle}
+                    <td className="truncate px-3 py-3 text-center font-medium">
+                      <EntityLink to={projectTaskPath(project.id, dependency.taskId)}>
+                        {dependency.taskTitle}
+                      </EntityLink>
                     </td>
                     <td className="px-3 py-3 text-center">
                       {t(dependencyTypeKey(dependency.dependencyType))}
@@ -247,26 +259,25 @@ export function TaskDetailView({
                 task.assignments.map((assignment, index) => (
                   <tr
                     key={`${assignment.memberId}-${index}`}
-                    className={`${index % 2 ? "hr-table-row-alt" : "hr-table-row"} ${
-                      assignment.employeeId ? "cursor-pointer hover:bg-hr-hover" : ""
-                    }`}
-                    onClick={() => {
-                      if (!assignment.employeeId) return;
-                      navigate(`${ROUTES.employees}?id=${assignment.employeeId}`);
-                    }}
+                    className={index % 2 ? "hr-table-row-alt" : "hr-table-row"}
                   >
                     <td className="px-3 py-3 text-center">
                       <CopyableIdCell value={assignment.memberId} />
                     </td>
                     <td className="px-3 py-3 text-center">
                       {assignment.employeeId ? (
-                        <CopyableIdCell value={assignment.employeeId} />
+                        <CopyableIdCell
+                          value={assignment.employeeId}
+                          to={employeePath(assignment.employeeId)}
+                        />
                       ) : (
                         t("common.dash")
                       )}
                     </td>
-                    <td className="truncate px-3 py-3 text-center font-medium text-hr-primary">
-                      {assignment.employeeName}
+                    <td className="truncate px-3 py-3 text-center font-medium">
+                      <EntityLink to={employeePath(assignment.employeeId)}>
+                        {assignment.employeeName}
+                      </EntityLink>
                     </td>
                     <td className="px-3 py-3 text-center">
                       {assignment.assignedAt || t("common.dash")}
@@ -320,20 +331,41 @@ export function TaskDetailView({
                     className={index % 2 ? "hr-table-row-alt" : "hr-table-row"}
                   >
                     <td className="px-3 py-3 text-center">
-                      {transition.fromSectionName || transition.fromSectionId || t("common.dash")}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      {transition.toSectionName || transition.toSectionId || t("common.dash")}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      {transition.memberId ? (
-                        <CopyableIdCell value={transition.memberId} />
+                      {transition.fromSectionName || transition.fromSectionId ? (
+                        <EntityLink
+                          to={projectSectionPath(project.id, transition.fromSectionId)}
+                        >
+                          {transition.fromSectionName || transition.fromSectionId}
+                        </EntityLink>
                       ) : (
                         t("common.dash")
                       )}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      {transition.memberName || t("common.dash")}
+                      {transition.toSectionName || transition.toSectionId ? (
+                        <EntityLink
+                          to={projectSectionPath(project.id, transition.toSectionId)}
+                        >
+                          {transition.toSectionName || transition.toSectionId}
+                        </EntityLink>
+                      ) : (
+                        t("common.dash")
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {transition.memberId ? (
+                        <CopyableIdCell
+                          value={transition.memberId}
+                          to={employeePath(transition.memberId)}
+                        />
+                      ) : (
+                        t("common.dash")
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <EntityLink to={employeePath(transition.memberId)}>
+                        {transition.memberName || t("common.dash")}
+                      </EntityLink>
                     </td>
                     <td className="px-3 py-3 text-center">
                       {transition.createdAtUtc
@@ -361,16 +393,20 @@ function InfoItem({
   label,
   value,
   copyable,
+  to,
 }: {
   label: string;
   value: string;
   copyable?: boolean;
+  to?: string;
 }) {
   return (
     <div className={subtlePanelClass}>
       <p className="mb-1 text-xs text-hr-muted">{label}</p>
       {copyable ? (
-        <CopyableIdCell value={value} />
+        <CopyableIdCell value={value} to={to} />
+      ) : to ? (
+        <EntityLink to={to}>{value}</EntityLink>
       ) : (
         <p className="text-sm font-medium text-hr-text">{value}</p>
       )}

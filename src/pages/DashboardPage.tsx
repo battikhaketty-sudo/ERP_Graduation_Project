@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "../i18n";
 import { ROUTES } from "../constants/routes";
+import { projectTaskPath } from "../constants/entityPaths";
 import {
   getDashboardSummary,
   type DashboardSummary,
@@ -344,7 +345,8 @@ export function DashboardPage() {
                         type="button"
                         onClick={() =>
                           navigate(
-                            `${ROUTES.projects}?id=${encodeURIComponent(task.projectId)}`,
+                            projectTaskPath(task.projectId, task.id) ||
+                              `${ROUTES.projects}?id=${encodeURIComponent(task.projectId)}`,
                           )
                         }
                         className="flex w-full items-start justify-between gap-3 py-3 text-start transition hover:bg-hr-hover/60"
