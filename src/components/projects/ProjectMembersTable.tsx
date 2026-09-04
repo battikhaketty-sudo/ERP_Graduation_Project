@@ -61,8 +61,8 @@ export function ProjectMembersTable({
         </div>
       )}
 
-      <div className="overflow-x-auto px-2 pb-2 pt-3 sm:px-4">
-        <table className="min-w-[900px] w-full text-sm">
+      <div className="overflow-hidden px-2 pb-2 pt-3 sm:px-4">
+        <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="hr-table-head">
               <th className="px-3 py-3 text-center font-medium">

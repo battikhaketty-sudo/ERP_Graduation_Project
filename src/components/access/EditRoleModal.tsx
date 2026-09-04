@@ -468,7 +468,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
 
             <div className={tablePanelClass}>
               <div className={tableScrollClass}>
-                <table className="w-full min-w-[640px] border-collapse text-sm">
+                <table className="w-full table-fixed border-collapse text-sm">
                   <thead className="bg-hr-table-head text-hr-muted">
                     <tr>
                       <th className="px-3 py-3 text-center font-medium">

@@ -167,8 +167,8 @@ export function ProjectsTable({
       </div>
 
       {/* Desktop table: name, status, owner, deadline */}
-      <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[720px] table-fixed border-collapse text-sm">
+      <div className="hidden overflow-hidden md:block">
+        <table className="w-full table-fixed border-collapse text-sm">
           <thead>
             <tr className="hr-table-head">
               <th className="w-12 px-3 py-3 text-center font-medium">

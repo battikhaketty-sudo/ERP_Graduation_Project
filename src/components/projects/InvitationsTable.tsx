@@ -64,8 +64,8 @@ export function InvitationsTable({
           />
         ) : null}
       </div>
-      <div className="min-w-0 max-w-full overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+      <div className="min-w-0 max-w-full overflow-hidden">
+        <table className="w-full table-fixed border-collapse text-sm">
           <thead>
             <tr className={tableHeadRowClass}>
               <th className="px-2 py-3 text-center font-medium">

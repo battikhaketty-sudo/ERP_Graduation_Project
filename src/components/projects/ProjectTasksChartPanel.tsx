@@ -39,8 +39,8 @@ export function ProjectTasksChartPanel({
         ) : null}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[420px] border-collapse text-sm">
+      <div className="overflow-hidden">
+        <table className="w-full table-fixed border-collapse text-sm">
           <thead>
             <tr className="bg-hr-table-alt text-hr-muted">
               <th className="px-3 py-2.5 text-start text-xs font-medium">

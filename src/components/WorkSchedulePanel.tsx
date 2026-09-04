@@ -559,8 +559,8 @@ export function WorkSchedulePanel({
             </button>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-hr-border">
-            <table className="min-w-[900px] w-full text-sm">
+          <div className="overflow-hidden rounded-lg border border-hr-border">
+            <table className="w-full table-fixed text-sm">
               <thead className="bg-hr-table-head text-hr-muted">
                 <tr>
                   <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>
@@ -595,7 +595,7 @@ export function WorkSchedulePanel({
                         onChange={(e) => updatePeriodRow(row.localId, { name: e.target.value })}
                         placeholder={defaultPeriodName}
                         aria-label={t("hr.workSchedule.form.periodName")}
-                        className="h-10 w-full min-w-[160px] rounded-lg border border-hr-border px-3 text-center outline-none focus:border-hr-primary"
+                        className="h-10 w-full min-w-0 rounded-lg border border-hr-border px-2 text-center outline-none focus:border-hr-primary"
                       />
                     </td>
                     <td className="px-3 py-3">
@@ -607,7 +607,7 @@ export function WorkSchedulePanel({
                           })
                         }
                         aria-label={t("hr.workSchedule.form.day")}
-                        className="h-10 w-full min-w-[120px] rounded-lg border border-hr-border bg-hr-surface px-3 text-center outline-none focus:border-hr-primary"
+                        className="h-10 w-full min-w-0 rounded-lg border border-hr-border bg-hr-surface px-2 text-center outline-none focus:border-hr-primary"
                       >
                         {dayOptions.map((day) => (
                           <option key={`day-${day.id}`} value={String(day.id)}>
@@ -625,7 +625,7 @@ export function WorkSchedulePanel({
                           })
                         }
                         aria-label={t("hr.workSchedule.form.periodType")}
-                        className="h-10 w-full min-w-[120px] rounded-lg border border-hr-border bg-hr-surface px-3 text-center outline-none focus:border-hr-primary"
+                        className="h-10 w-full min-w-0 rounded-lg border border-hr-border bg-hr-surface px-2 text-center outline-none focus:border-hr-primary"
                       >
                         {periodOptions.map((period) => (
                           <option key={`period-${period.id}`} value={String(period.id)}>
@@ -738,42 +738,42 @@ export function WorkSchedulePanel({
     <section className="rounded-xl border border-hr-border bg-hr-surface p-4 shadow-card sm:p-5">
       {listToolbar}
 
-      <div className="overflow-x-auto rounded-lg border border-hr-border">
-        <table className="w-full min-w-[1080px] table-fixed border-collapse text-sm">
+      <div className="overflow-hidden rounded-lg border border-hr-border">
+        <table className="w-full table-fixed border-collapse text-sm">
           <colgroup>
-            <col className="w-12" />
-            <col className="w-36" />
-            <col />
-            <col className="w-28" />
-            <col className="w-32" />
-            <col className="w-44" />
-            <col className="w-44" />
-            <col className="w-24" />
+            <col className="w-[6%]" />
+            <col className="w-[14%]" />
+            <col className="w-[20%]" />
+            <col className="w-[10%]" />
+            <col className="w-[12%]" />
+            <col className="w-[14%]" />
+            <col className="w-[14%]" />
+            <col className="w-[10%]" />
           </colgroup>
           <thead className="bg-hr-table-head text-xs text-hr-muted">
             <tr>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+              <th className="px-1.5 py-2.5 text-center font-medium">
                 {t("table.columns.index")}
               </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+              <th className="px-1.5 py-2.5 text-center font-medium">
                 {t("table.columns.id")}
               </th>
-              <th className="whitespace-nowrap px-3 py-2.5 text-start font-medium">
+              <th className="px-2 py-2.5 text-start font-medium">
                 {t("hr.workSchedule.columns.scheduleName")}
               </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+              <th className="px-1.5 py-2.5 text-center font-medium">
                 {t("hr.workSchedule.columns.periodsCount")}
               </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+              <th className="px-1.5 py-2.5 text-center font-medium">
                 {t("hr.workSchedule.columns.workingDays")}
               </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+              <th className="px-1.5 py-2.5 text-center font-medium">
                 {t("hr.workSchedule.columns.weeklyHours")}
               </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+              <th className="px-1.5 py-2.5 text-center font-medium">
                 {t("hr.workSchedule.columns.dailyHours")}
               </th>
-              <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+              <th className="px-1.5 py-2.5 text-center font-medium">
                 {t("common.actions")}
               </th>
             </tr>

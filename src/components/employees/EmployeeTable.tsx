@@ -117,7 +117,7 @@ export function EmployeeTable({
         </div>
       ) : null}
 
-      <div className="min-w-0 overflow-x-auto">
+      <div className="min-w-0 overflow-hidden">
         {employees.length === 0 ? (
           <EmptyState
             title={t("employees.table.emptyTitle")}
@@ -130,7 +130,7 @@ export function EmployeeTable({
             onAction={onAddClick}
           />
         ) : (
-          <table className="w-full border-collapse text-sm">
+          <table className="w-full table-fixed border-collapse text-sm">
             <thead>
               <tr className="hr-table-head">
                 <th className="w-12 px-3 py-3 text-center font-medium">
@@ -148,16 +148,16 @@ export function EmployeeTable({
                 <th className="w-36 px-3 py-3 text-center font-medium">
                   {t("employees.table.columns.userId")}
                 </th>
-                <th className={`min-w-[180px] px-3 py-3 font-medium ${nameAlignClass}`}>
+                <th className={`px-3 py-3 font-medium ${nameAlignClass}`}>
                   {t("employees.table.columns.name")}
                 </th>
-                <th className="min-w-[160px] px-3 py-3 text-center font-medium">
+                <th className="px-3 py-3 text-center font-medium">
                   {t("employees.table.columns.email")}
                 </th>
-                <th className="min-w-[120px] px-3 py-3 text-center font-medium">
+                <th className="w-[16%] px-3 py-3 text-center font-medium">
                   {t("employees.table.columns.phone")}
                 </th>
-                <th className="min-w-[100px] px-3 py-3 text-center font-medium">
+                <th className="w-[16%] px-3 py-3 text-center font-medium">
                   {t("employees.table.columns.department")}
                 </th>
                 <th className="w-28 px-3 py-3 text-center font-medium">

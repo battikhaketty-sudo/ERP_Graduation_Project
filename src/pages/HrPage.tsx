@@ -1368,38 +1368,38 @@ export function HrPage() {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full table-auto text-sm">
+        <div className="overflow-hidden">
+          <table className="w-full table-fixed text-sm">
             <thead className="bg-hr-table-head text-[11px] leading-tight text-hr-muted">
               <tr>
-                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                <th className="px-1.5 py-2.5 text-center font-medium">
                   {t("hr.attendance.checkOut")}
                 </th>
-                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                <th className="px-1.5 py-2.5 text-center font-medium">
                   {t("hr.attendance.columns.recordNumber")}
                 </th>
-                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                <th className="px-1.5 py-2.5 text-center font-medium">
                   {t("hr.attendance.columns.employeeNumber")}
                 </th>
-                <th className="whitespace-nowrap px-2 py-2.5 text-start font-medium">
+                <th className="px-1.5 py-2.5 text-start font-medium">
                   {t("hr.attendance.columns.employeeName")}
                 </th>
-                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                <th className="px-1.5 py-2.5 text-center font-medium">
                   {t("hr.attendance.columns.checkIn")}
                 </th>
-                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                <th className="px-1.5 py-2.5 text-center font-medium">
                   {t("hr.attendance.columns.checkOut")}
                 </th>
-                <th className="whitespace-nowrap px-1 py-2.5 text-center font-medium">
+                <th className="px-1 py-2.5 text-center font-medium">
                   {t("hr.attendance.columns.totalWorkHours")}
                 </th>
-                <th className="whitespace-nowrap px-1 py-2.5 text-center font-medium">
+                <th className="px-1 py-2.5 text-center font-medium">
                   {t("hr.attendance.columns.requiredWorkHours")}
                 </th>
-                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                <th className="px-1.5 py-2.5 text-center font-medium">
                   {t("hr.attendance.columns.status")}
                 </th>
-                <th className="whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                <th className="px-1.5 py-2.5 text-center font-medium">
                   {t("table.columns.actions")}
                 </th>
               </tr>
