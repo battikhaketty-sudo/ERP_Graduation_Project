@@ -7,19 +7,20 @@ import { useTranslation } from "../../i18n";
 import { departmentPath } from "../../constants/entityPaths";
 import { alertErrorClass, subtlePanelClass } from "../ui/formStyles";
 import { EntityLink } from "../ui/EntityLink";
-import { RoleBadge } from "../RoleBadge";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 
 type EmployeeDrawerPreviewProps = {
   employee: Employee;
   onOpenFull: () => void;
-  onToggleArchive: (employee: Employee) => void;
+  onArchive: (employee: Employee) => void;
+  onUnarchive: (employee: Employee) => void;
 };
 
 export function EmployeeDrawerPreview({
   employee,
   onOpenFull,
-  onToggleArchive,
+  onArchive,
+  onUnarchive,
 }: EmployeeDrawerPreviewProps) {
   const { t } = useTranslation();
   const [detail, setDetail] = useState<Employee>(employee);
@@ -30,7 +31,7 @@ export function EmployeeDrawerPreview({
     setLoading(true);
     setError(null);
     getEmployeeById(employee.id)
-      .then((result) => setDetail({ ...result, isArchived: employee.isArchived }))
+      .then((result) => setDetail(result))
       .catch((err) => {
         setDetail(employee);
         setError(getThrownErrorMessage(err, t("employees.errors.loadPreview")));
@@ -63,9 +64,6 @@ export function EmployeeDrawerPreview({
           className="mb-3 size-24 rounded-2xl object-cover ring-2 ring-hr-border text-2xl"
         />
         <h3 className="text-lg font-bold text-hr-text">{detail.name}</h3>
-        <div className="mt-2">
-          <RoleBadge role={detail.role} />
-        </div>
       </div>
 
       <dl className={`space-y-3 ${subtlePanelClass} text-sm`}>
@@ -103,19 +101,23 @@ export function EmployeeDrawerPreview({
           <ExternalLink className="size-4" />
           {t("common.openFullDetails")}
         </button>
-        <button
-          type="button"
-          onClick={() => onToggleArchive(detail)}
-          className={`h-11 rounded-xl text-sm font-bold text-white transition ${
-            detail.isArchived
-              ? "bg-emerald-600 hover:bg-emerald-700"
-              : "bg-amber-600 hover:bg-amber-700"
-          }`}
-        >
-          {detail.isArchived
-            ? t("employees.archive.unarchiveLabel")
-            : t("employees.archive.archiveLabel")}
-        </button>
+        {detail.isArchived ? (
+          <button
+            type="button"
+            onClick={() => onUnarchive(detail)}
+            className="h-11 rounded-xl bg-emerald-600 text-sm font-bold text-white transition hover:bg-emerald-700"
+          >
+            {t("employees.archive.unarchiveLabel")}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onArchive(detail)}
+            className="h-11 rounded-xl bg-amber-600 text-sm font-bold text-white transition hover:bg-amber-700"
+          >
+            {t("employees.archive.archiveLabel")}
+          </button>
+        )}
       </div>
     </div>
   );

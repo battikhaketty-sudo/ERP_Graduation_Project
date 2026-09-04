@@ -1,6 +1,8 @@
 export {
   getResumeLineTypes,
   getResumeById,
+  findResumeIdByEmployee,
+  hydrateEmployeeResume,
   addResumeLine,
   updateResumeLine,
   deleteResumeLine,

@@ -22,17 +22,8 @@ import {
 } from "../services/employees";
 import type { Employee } from "../types/employee";
 import { getThrownErrorMessage } from "../utils/apiResponse";
-import {
-  addArchivedEmployee,
-  getArchivedEmployeeIds,
-  getArchivedEmployees,
-  isLocallyArchived,
-  removeArchivedEmployee,
-} from "../utils/archivedEmployeesStore";
 import { exportToCsv } from "../utils/exportCsv";
 import { useTranslation } from "../i18n";
-
-type ArchiveView = "active" | "archived";
 
 export function EmployeesPage() {
   const { confirm } = useConfirmDialog();
@@ -47,7 +38,7 @@ export function EmployeesPage() {
   } = useUrlQueryNavigation({ param: "id" });
 
   const [search, setSearch] = useState("");
-  const [archiveView, setArchiveView] = useState<ArchiveView>("active");
+  const [archiveView, setArchiveView] = useState<"active" | "archived">("active");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -94,27 +85,12 @@ export function EmployeesPage() {
           setError(null);
         }
 
-        if (archiveView === "archived") {
-          const archived = getArchivedEmployees();
-          setEmployees(archived);
-          setTotalPages(1);
-          setTotalCount(archived.length);
-          return archived;
-        }
-
-        const archivedIds = getArchivedEmployeeIds();
         const result = await getEmployees(page, DEFAULT_PAGE_SIZE, {
-          archived: false,
           legalName: search.trim() || undefined,
+          archived: archiveView === "archived",
         });
 
-        const data = (result.data || []).filter(
-          (employee) =>
-            !archivedIds.has(employee.id) &&
-            !employee.isArchived &&
-            !isLocallyArchived(employee.id),
-        );
-
+        const data = result.data || [];
         setEmployees(data);
         setTotalPages(result.totalPages || 1);
         setTotalCount(result.totalCount || data.length);
@@ -150,19 +126,12 @@ export function EmployeesPage() {
       return;
     }
 
-    // Keep the open detail record stable — don't replace it with a list stub
-    // on every employees refresh (that wipes local photo previews).
+    let cancelled = false;
+
     setFullPageEmployee((current) => {
       if (current?.id === employeeId) return current;
-      return (
-        employees.find((employee) => employee.id === employeeId) ?? current
-      );
+      return employees.find((employee) => employee.id === employeeId) ?? null;
     });
-
-    const fromList = employees.some((employee) => employee.id === employeeId);
-    if (fromList) return;
-
-    let cancelled = false;
 
     const loadEmployee = async () => {
       try {
@@ -170,9 +139,12 @@ export function EmployeesPage() {
         if (!cancelled) {
           setFullPageEmployee(employee);
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          setFullPageEmployee(null);
+          setError(getThrownErrorMessage(err, t("employees.errors.loadDetail")));
+          setFullPageEmployee((current) =>
+            current?.id === employeeId ? current : null,
+          );
         }
       }
     };
@@ -182,7 +154,7 @@ export function EmployeesPage() {
     return () => {
       cancelled = true;
     };
-  }, [employeeId, employees]);
+  }, [employeeId, employees, t]);
 
   const filteredEmployees = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -200,14 +172,14 @@ export function EmployeesPage() {
         t("employees.export.headers.email"),
         t("employees.export.headers.phone"),
         t("employees.export.headers.department"),
-        t("employees.export.headers.role"),
+        t("employees.export.headers.manager"),
       ],
       filteredEmployees.map((employee) => [
         employee.name,
         employee.email,
         employee.workPhone || employee.phone,
         employee.department ?? employee.address,
-        employee.role,
+        employee.managerName ?? "",
       ]),
     );
     showToast(t("employees.toasts.exportSuccess"), "success");
@@ -245,57 +217,37 @@ export function EmployeesPage() {
     }
   };
 
-  const handleToggleArchive = async (employee: Employee) => {
-    const isArchived =
-      archiveView === "archived" || Boolean(employee.isArchived);
+  const handleArchiveAction = async (
+    employee: Employee,
+    action: "archive" | "unarchive",
+  ) => {
+    const isUnarchive = action === "unarchive";
     const confirmed = await confirm({
-      title: isArchived
+      title: isUnarchive
         ? t("employees.archive.unarchiveTitle")
         : t("employees.archive.confirmTitle"),
-      message: isArchived
+      message: isUnarchive
         ? t("employees.archive.unarchiveMessage", { name: employee.name })
         : t("employees.archive.confirmMessage", { name: employee.name }),
-      confirmLabel: isArchived
+      confirmLabel: isUnarchive
         ? t("employees.archive.unarchiveLabel")
         : t("employees.archive.archiveLabel"),
     });
     if (!confirmed) return;
 
     try {
-      if (isArchived) {
+      if (isUnarchive) {
         await unarchiveEmployee(employee.id);
-        removeArchivedEmployee(employee.id);
         showToast(
           t("employees.toasts.unarchiveSuccess", { name: employee.name }),
           "success",
         );
-
-        if (archiveView === "archived") {
-          setEmployees((prev) =>
-            prev.filter((item) => item.id !== employee.id),
-          );
-          setTotalCount((count) => Math.max(0, count - 1));
-        }
       } else {
         await archiveEmployee(employee.id);
-        addArchivedEmployee(employee);
         showToast(
           t("employees.toasts.archiveSuccess", { name: employee.name }),
           "success",
         );
-
-        setEmployees((prev) => {
-          const remaining = prev.filter((item) => item.id !== employee.id);
-          if (
-            archiveView === "active" &&
-            remaining.length === 0 &&
-            currentPage > 1
-          ) {
-            setCurrentPage((page) => page - 1);
-          }
-          return remaining;
-        });
-        setTotalCount((count) => Math.max(0, count - 1));
       }
 
       setError(null);
@@ -306,10 +258,11 @@ export function EmployeesPage() {
         next.delete(employee.id);
         return next;
       });
+      await fetchEmployees({ silent: true });
     } catch (err) {
       const message = getThrownErrorMessage(
         err,
-        isArchived
+        isUnarchive
           ? t("employees.errors.unarchive")
           : t("employees.errors.archive"),
       );
@@ -318,7 +271,7 @@ export function EmployeesPage() {
     }
   };
 
-  const handleArchiveViewChange = (view: ArchiveView) => {
+  const handleArchiveViewChange = (view: "active" | "archived") => {
     setArchiveView(view);
     setCurrentPage(1);
     setSelectedIds(new Set());
@@ -336,23 +289,23 @@ export function EmployeesPage() {
     }
   };
 
-  const handleBulkArchive = async () => {
+  const handleBulkArchiveAction = async (action: "archive" | "unarchive") => {
     const targets = filteredEmployees.filter((employee) =>
       selectedIds.has(employee.id),
     );
     if (!targets.length) return;
 
-    const isArchived = archiveView === "archived";
+    const isUnarchive = action === "unarchive";
     const confirmed = await confirm({
-      title: isArchived
+      title: isUnarchive
         ? t("employees.bulk.unarchiveTitle")
         : t("employees.bulk.archiveTitle"),
-      message: isArchived
+      message: isUnarchive
         ? t("employees.bulk.unarchiveMessage", {
             count: String(targets.length),
           })
         : t("employees.bulk.archiveMessage", { count: String(targets.length) }),
-      confirmLabel: isArchived
+      confirmLabel: isUnarchive
         ? t("employees.bulk.unarchive")
         : t("employees.bulk.archive"),
     });
@@ -360,16 +313,14 @@ export function EmployeesPage() {
 
     try {
       for (const employee of targets) {
-        if (isArchived) {
+        if (isUnarchive) {
           await unarchiveEmployee(employee.id);
-          removeArchivedEmployee(employee.id);
         } else {
           await archiveEmployee(employee.id);
-          addArchivedEmployee(employee);
         }
       }
       showToast(
-        isArchived
+        isUnarchive
           ? t("employees.toasts.bulkUnarchiveSuccess", {
               count: String(targets.length),
             })
@@ -385,7 +336,7 @@ export function EmployeesPage() {
     } catch (err) {
       const message = getThrownErrorMessage(
         err,
-        isArchived
+        isUnarchive
           ? t("employees.errors.unarchive")
           : t("employees.errors.archive"),
       );
@@ -399,7 +350,8 @@ export function EmployeesPage() {
       <EmployeeDetailView
         employee={fullPageEmployee}
         onBack={goBackToEmployeeList}
-        onToggleArchive={handleToggleArchive}
+        onArchive={(employee) => void handleArchiveAction(employee, "archive")}
+        onUnarchive={(employee) => void handleArchiveAction(employee, "unarchive")}
         onUpdate={(updatedEmployee) => {
           setEmployees((prev) =>
             prev.map((employee) =>
@@ -445,8 +397,10 @@ export function EmployeesPage() {
             onPageChange={setCurrentPage}
             onEmployeeClick={setDrawerEmployee}
             onEmployeeEdit={(employee) => openEmployeeInUrl(employee.id)}
-            onToggleArchive={handleToggleArchive}
-            onBulkArchive={() => void handleBulkArchive()}
+            onArchive={(employee) => void handleArchiveAction(employee, "archive")}
+            onUnarchive={(employee) => void handleArchiveAction(employee, "unarchive")}
+            onBulkArchive={() => void handleBulkArchiveAction("archive")}
+            onBulkUnarchive={() => void handleBulkArchiveAction("unarchive")}
             onBulkEdit={handleBulkEdit}
             onClearSelection={clearSelection}
             archiveView={archiveView}
@@ -468,7 +422,8 @@ export function EmployeesPage() {
               openEmployeeInUrl(drawerEmployee.id);
               setDrawerEmployee(null);
             }}
-            onToggleArchive={handleToggleArchive}
+            onArchive={(employee) => void handleArchiveAction(employee, "archive")}
+            onUnarchive={(employee) => void handleArchiveAction(employee, "unarchive")}
           />
         )}
       </DetailDrawer>

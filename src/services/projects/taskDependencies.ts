@@ -1,4 +1,8 @@
-import type { ProjectTask } from "../../types/project";
+import type { ProjectSection, ProjectTask } from "../../types/project";
+
+/** Visual terminals for the task-dependency graph only (not API entities). */
+export const FLOW_START_ID = "__flow_start__";
+export const FLOW_END_ID = "__flow_end__";
 
 /** Display-only gate — tasks no longer have a completion status. */
 export type TaskFlowGate = "ready";
@@ -354,3 +358,21 @@ export const buildAutoTerminalEdges = (
 
 export const TASK_FLOW_NODE_SIZE = { width: NODE_WIDTH, height: NODE_HEIGHT };
 export const TASK_FLOW_LAYER_GAP_X = LAYER_GAP_X;
+
+export const isTaskCompletedByFinalSection = (
+  task: Pick<ProjectTask, "sectionId">,
+  sections: Array<Pick<ProjectSection, "id" | "isFinalSection">>,
+) =>
+  Boolean(
+    sections.find((section) => section.id === task.sectionId)?.isFinalSection,
+  );
+
+export const filterIncompleteTasksForPredecessors = (
+  tasks: ProjectTask[],
+  sections: Array<Pick<ProjectSection, "id" | "isFinalSection">>,
+  options?: { excludeTaskId?: string },
+) =>
+  tasks.filter((task) => {
+    if (options?.excludeTaskId && task.id === options.excludeTaskId) return false;
+    return !isTaskCompletedByFinalSection(task, sections);
+  });

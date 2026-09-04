@@ -118,8 +118,8 @@ export function ProjectDetailView({
   const [invitationsLocalReload, setInvitationsLocalReload] = useState(0);
 
   const detailStats: ProjectDetailStats = useMemo(
-    () => buildProjectDetailStats(project, taskStats),
-    [project, taskStats],
+    () => buildProjectDetailStats(project),
+    [project],
   );
 
   const reloadMembers = useCallback(() => {
@@ -205,10 +205,6 @@ export function ProjectDetailView({
         setSelectedSection({
           ...match,
           ...fresh,
-          dependsOnSectionIds:
-            fresh.dependsOnSectionIds.length > 0
-              ? fresh.dependsOnSectionIds
-              : match.dependsOnSectionIds,
         });
       })
       .catch(() => {

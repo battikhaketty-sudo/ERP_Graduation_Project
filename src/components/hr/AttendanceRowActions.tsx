@@ -3,16 +3,6 @@ import type { AttendanceRecord } from "../../types/attendance";
 import { useTranslation } from "../../i18n";
 import { iconBtnClass } from "../ui/formStyles";
 
-const isPendingStatus = (status: string) => {
-  const normalized = status.trim().toLowerCase();
-  return (
-    normalized === "pending" ||
-    normalized === "معلق" ||
-    normalized === "late" ||
-    normalized === "متأخر"
-  );
-};
-
 type AttendanceRowActionsProps = {
   record: AttendanceRecord;
   onApprove: (id: string) => void;
@@ -29,32 +19,27 @@ export function AttendanceRowActions({
   onDelete,
 }: AttendanceRowActionsProps) {
   const { t } = useTranslation();
-  const pending = isPendingStatus(record.status);
 
   return (
     <div className="flex items-center justify-center gap-1">
-      {pending && (
-        <>
-          <button
-            type="button"
-            title={t("hr.attendance.actions.approve")}
-            aria-label={t("hr.attendance.actions.approve")}
-            onClick={() => onApprove(record.id)}
-            className={`${iconBtnClass} text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40`}
-          >
-            <CheckCircle className="size-4" />
-          </button>
-          <button
-            type="button"
-            title={t("hr.attendance.actions.refuse")}
-            aria-label={t("hr.attendance.actions.refuse")}
-            onClick={() => onRefuse(record.id)}
-            className={`${iconBtnClass} text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40`}
-          >
-            <FileX className="size-4" />
-          </button>
-        </>
-      )}
+      <button
+        type="button"
+        title={t("hr.attendance.actions.approve")}
+        aria-label={t("hr.attendance.actions.approve")}
+        onClick={() => onApprove(record.id)}
+        className={`${iconBtnClass} text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40`}
+      >
+        <CheckCircle className="size-4" />
+      </button>
+      <button
+        type="button"
+        title={t("hr.attendance.actions.refuse")}
+        aria-label={t("hr.attendance.actions.refuse")}
+        onClick={() => onRefuse(record.id)}
+        className={`${iconBtnClass} text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40`}
+      >
+        <FileX className="size-4" />
+      </button>
       <button
         type="button"
         title={t("hr.attendance.actions.edit")}

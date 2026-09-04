@@ -77,20 +77,12 @@ export const projectStatusFromApi = (value: unknown): ProjectStatus => {
   return "not_started";
 };
 
-/** Forward-only project lifecycle: not_started → in_progress → completed. */
+/** Project lifecycle statuses (order is display-only). */
 export const PROJECT_STATUS_ORDER: ProjectStatus[] = [
   "not_started",
   "in_progress",
   "completed",
 ];
-
-export const projectStatusRank = (status: ProjectStatus) =>
-  PROJECT_STATUS_ORDER.indexOf(status);
-
-export const canAdvanceProjectStatus = (
-  from: ProjectStatus,
-  to: ProjectStatus,
-) => projectStatusRank(to) >= projectStatusRank(from);
 
 /** Higher urgency first (urgent/critical → low). */
 export const TASK_PRIORITY_ORDER: Record<TaskPriority, number> = {

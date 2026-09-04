@@ -2,23 +2,12 @@ import { ArrowRightLeft } from "lucide-react";
 import { useTranslation } from "../../i18n";
 import { employeePath } from "../../constants/entityPaths";
 import type { TaskTransition } from "../../types/project";
+import { formatSyriaDateTime } from "../../utils/syriaTime";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
 import { EntityLink } from "../ui/EntityLink";
 
 type TaskTransitionsPanelProps = {
   transitions: TaskTransition[];
-};
-
-const formatUtc = (value: string) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString(undefined, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 };
 
 export function TaskTransitionsPanel({ transitions }: TaskTransitionsPanelProps) {
@@ -62,7 +51,7 @@ export function TaskTransitionsPanel({ transitions }: TaskTransitionsPanelProps)
                     {item.memberName || item.memberId}
                   </EntityLink>
                 </span>
-                <span>{formatUtc(item.createdAtUtc)}</span>
+                <span>{formatSyriaDateTime(item.createdAtUtc)}</span>
                 <CopyableIdCell value={item.id} />
               </div>
             </li>

@@ -18,11 +18,11 @@ import "@xyflow/react/dist/style.css";
 import { Flag, Pencil, Play, Trash2 } from "lucide-react";
 import { useTranslation } from "../../i18n";
 import { useProjectLabels } from "../../hooks/useProjectLabels";
-import { FLOW_END_ID, FLOW_START_ID } from "../../services/projects/flowAnchors";
 import {
   buildAutoTerminalEdges,
   dependencyEdges,
-  getTaskGate,
+  FLOW_END_ID,
+  FLOW_START_ID,
   getTerminalLayout,
   layoutTaskDependencyGraph,
   TASK_FLOW_NODE_SIZE,

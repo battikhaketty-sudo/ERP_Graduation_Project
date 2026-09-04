@@ -54,12 +54,12 @@ export type ProjectSection = {
    * A project may have more than one final section.
    */
   isFinalSection: boolean;
-  /** Section ids that should complete before this stage (local workflow graph). */
-  dependsOnSectionIds: string[];
 };
 
 export type ProjectMember = {
+  /** Project membership id — send this in task `assignments`. */
   id: string;
+  memberId: string;
   employeeId: string;
   userId?: string;
   employeeName: string;
@@ -119,15 +119,10 @@ export type Project = {
   name: string;
   managerId: string;
   managerName: string;
-  assignedEmployeeId: string;
-  assignedEmployeeName: string;
   description: string;
   startDate: string;
   endDate: string;
   status: ProjectStatus;
-  budget: number;
-  rating: number;
-  goals: string[];
   sections: ProjectSection[];
   tasks: ProjectTask[];
   tasksCount?: number;
@@ -137,10 +132,9 @@ export type Project = {
 };
 
 export type ProjectDetailStats = {
-  membersCount: number;
-  tasksCount: number;
-  sectionsCount: number;
-  lateTasksCount: number;
+  membersCount?: number;
+  tasksCount?: number;
+  sectionsCount?: number;
 };
 
 export type ProjectInvitation = {
@@ -205,10 +199,10 @@ export type TaskFormPayload = {
 };
 
 export type ProjectStats = {
-  projectsCount: number;
-  tasksCount: number;
-  sectionsCount: number;
-  assignedEmployeesCount: number;
+  projectsCount?: number;
+  tasksCount?: number;
+  sectionsCount?: number;
+  assignedEmployeesCount?: number;
 };
 
 export type TaskStats = {

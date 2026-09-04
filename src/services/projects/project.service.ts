@@ -31,7 +31,9 @@ import {
   taskPriorityToApi,
 } from "./project.enums";
 import { toEndOfLocalDayIso } from "../../utils/manualDate";
+import { calendarDateToUtcIso } from "../../utils/syriaTime";
 import {
+  buildTaskStatsFromTasks,
   filterProjectSections,
   normalizeInvitation,
   normalizeMember,
@@ -52,31 +54,6 @@ import {
   sameSectionIdSet,
   unregisterSectionOwnership,
 } from "./sectionOwnership";
-import {
-  clearProjectSectionDeps,
-  getProjectSectionDeps,
-  pruneProjectSectionDeps,
-  removeSectionFromDeps,
-  setSectionDependsOn,
-} from "./sectionDepsStorage";
-import {
-  clearProjectSectionEdgeLabels,
-  pruneProjectSectionEdgeLabels,
-  removeSectionFromEdgeLabels,
-  setIncomingSectionEdgeLabels,
-} from "./sectionEdgeLabelsStorage";
-import { sanitizeSectionDependsOn } from "./sectionDependencies";
-import { buildTaskStatsFromTasks } from "./taskStorage";
-import {
-  clearProjectFlowAnchors,
-  FLOW_END_ID,
-  FLOW_START_ID,
-  isFlowTerminalId,
-  linkFlowAnchor,
-  pruneProjectFlowAnchors,
-  unlinkFlowAnchor,
-} from "./flowAnchors";
-import { clearProjectTaskTransitions } from "./taskTransitionsStorage";
 type ProjectsQuery = {
   page?: number;
   limit?: number;
@@ -103,7 +80,7 @@ let sectionLeakProbe: Promise<boolean> | null = null;
 
 const toIsoDate = (value: string) => {
   if (!value) return null;
-  return `${value}T00:00:00.000Z`;
+  return calendarDateToUtcIso(value, false) || null;
 };
 
 const pickDefined = <T,>(next: T | undefined, previous: T | undefined, fallback: T): T =>
@@ -177,6 +154,10 @@ type TasksQuery = {
   limit?: number;
   /** When true, GET /project-tasks returns tasks that have no predecessors. */
   withoutDependencies?: boolean;
+  /** When set, GET /project-tasks filters by Completed. */
+  completed?: boolean;
+  /** Keep the page order from GET /project-tasks. */
+  preserveApiOrder?: boolean;
 };
 
 const toTaskCommandBody = (payload: TaskFormPayload) => {
@@ -216,14 +197,16 @@ export const listProjectTasks = async (query: TasksQuery = {}) => {
   if (query.projectId) params.ProjectId = query.projectId;
   if (query.projectSectionId) params.ProjectSectionId = query.projectSectionId;
   if (query.withoutDependencies) params.WithoutDependencies = true;
+  if (query.completed !== undefined) params.Completed = query.completed;
 
   const response = await api.get("/project-tasks", { params });
   const meta = unwrapPagedMeta(response.data);
-  const records = sortTasksByPriority(
-    unwrapPage<Record<string, unknown>>(response.data)
-      .map((item) => normalizeTaskListItem(item, query.projectId ?? ""))
-      .filter((item): item is ProjectTask => Boolean(item)),
-  );
+  const mapped = unwrapPage<Record<string, unknown>>(response.data)
+    .map((item) => normalizeTaskListItem(item, query.projectId ?? ""))
+    .filter((item): item is ProjectTask => Boolean(item));
+  const records = query.preserveApiOrder
+    ? mapped
+    : sortTasksByPriority(mapped);
 
   return {
     records,
@@ -285,18 +268,35 @@ export const listProjectTaskDependencies = async (projectId: string) => {
   return { records };
 };
 
-/** Tasks + predecessor edges for the project flow graph. */
+const restrictGraphToTaskIds = (
+  tasks: ProjectTask[],
+  allowedIds: Set<string>,
+) =>
+  tasks
+    .filter((task) => allowedIds.has(task.id))
+    .map((task) => {
+      const dependsOnTaskIds = task.dependsOnTaskIds.filter((id) =>
+        allowedIds.has(id),
+      );
+      return {
+        ...task,
+        dependsOnTaskIds,
+        dependencyCount: dependsOnTaskIds.length,
+      };
+    });
+
+/** Incomplete tasks + predecessor edges for the project flow graph. */
 export const getProjectTaskGraph = async (
   projectId: string,
   seedTasks: ProjectTask[] = [],
 ): Promise<ProjectTask[]> => {
-  const [edgesResult, isolatedResult] = await Promise.allSettled([
+  const [edgesResult, incompleteResult] = await Promise.allSettled([
     listProjectTaskDependencies(projectId),
     fetchAllPages(
       (page, limit) =>
         listProjectTasks({
           projectId,
-          withoutDependencies: true,
+          completed: false,
           page,
           limit,
         }),
@@ -309,62 +309,21 @@ export const getProjectTaskGraph = async (
   }
 
   const edges = edgesResult.value.records;
-  const isolatedTasks =
-    isolatedResult.status === "fulfilled" ? isolatedResult.value : [];
-
-  const knownIds = new Set([
-    ...seedTasks.map((task) => task.id),
-    ...isolatedTasks.map((task) => task.id),
-  ]);
-  edges.forEach((edge) => {
-    if (edge.task?.id) knownIds.add(edge.task.id);
-    if (edge.predecessor?.id) knownIds.add(edge.predecessor.id);
-  });
-
-  const missingIds = [
-    ...new Set(edges.flatMap((edge) => [edge.taskId, edge.predecessorId])),
-  ].filter((id) => id && !knownIds.has(id));
-
-  let listedTasks = seedTasks;
-  if (missingIds.length) {
-    listedTasks = await fetchAllPages(
-      (page, limit) => listProjectTasks({ projectId, page, limit }),
-      100,
-    );
-  }
+  const incompleteTasks =
+    incompleteResult.status === "fulfilled" ? incompleteResult.value : seedTasks;
+  const incompleteIds = new Set(incompleteTasks.map((task) => task.id));
 
   return sortTasksByPriority(
-    mergeProjectTaskGraph({
-      projectId,
-      edges,
-      isolatedTasks,
-      seedTasks: listedTasks,
-    }),
-  );
-};
-
-const enrichTasksWithDetails = async (
-  tasks: ProjectTask[],
-  projectId: string,
-): Promise<ProjectTask[]> => {
-  if (!tasks.length) return [];
-
-  const details = await Promise.all(
-    tasks.map((task) =>
-      getProjectTaskById(task.id, projectId).catch(() => null),
+    restrictGraphToTaskIds(
+      mergeProjectTaskGraph({
+        projectId,
+        edges,
+        isolatedTasks: incompleteTasks,
+        seedTasks: incompleteTasks,
+      }),
+      incompleteIds,
     ),
   );
-
-  return tasks.map((task, index) => {
-    const detail = details[index];
-    if (!detail) return task;
-    return {
-      ...task,
-      ...detail,
-      number: task.number || index + 1,
-      projectId: projectId || detail.projectId,
-    };
-  });
 };
 
 const attachApiTasks = async (project: Project): Promise<Project> => {
@@ -377,68 +336,11 @@ const attachApiTasks = async (project: Project): Promise<Project> => {
     return {
       ...project,
       tasks: sortTasksByPriority(records),
-      tasksCount: Math.max(project.tasksCount ?? 0, meta.totalItems || records.length),
+      tasksCount: project.tasksCount ?? (Number.isFinite(meta.totalItems) ? meta.totalItems : undefined),
     };
   } catch {
     return { ...project, tasks: project.tasks ?? [] };
   }
-};
-
-const attachSectionDependencies = (
-  projectId: string,
-  sections: ProjectSection[],
-): ProjectSection[] => {
-  const depsMap = getProjectSectionDeps(projectId);
-  const withDeps = sections.map((section) => ({
-    ...section,
-    dependsOnSectionIds: depsMap[section.id] ?? section.dependsOnSectionIds ?? [],
-  }));
-
-  return withDeps.map((section) => ({
-    ...section,
-    dependsOnSectionIds: sanitizeSectionDependsOn({
-      sectionId: section.id,
-      dependsOnSectionIds: section.dependsOnSectionIds,
-      sections: withDeps,
-    }),
-  }));
-};
-
-const persistSectionDependencies = (
-  projectId: string,
-  sectionId: string,
-  dependsOnSectionIds: string[] | undefined,
-  sections: ProjectSection[],
-  dependencyEdgeLabels?: Record<string, string>,
-) => {
-  if (dependsOnSectionIds === undefined) return;
-
-  const base = sections.some((section) => section.id === sectionId)
-    ? sections
-    : [
-        ...sections,
-        {
-          id: sectionId,
-          projectId,
-          name: "",
-          displayOrder: 0,
-          isFinalSection: false,
-          dependsOnSectionIds: [],
-        },
-      ];
-
-  const cleaned = sanitizeSectionDependsOn({
-    sectionId,
-    dependsOnSectionIds,
-    sections: base,
-  });
-  setSectionDependsOn(projectId, sectionId, cleaned);
-  setIncomingSectionEdgeLabels(
-    projectId,
-    sectionId,
-    dependencyEdgeLabels ?? {},
-    cleaned,
-  );
 };
 
 export const getProjects = async ({ page = 1, limit = 10, name }: ProjectsQuery = {}) => {
@@ -485,66 +387,26 @@ export const getProjectById = async (id: string) => {
       project.sections = [];
     }
   }
-  project.sectionsCount = project.sections.length;
-  project.sections = attachSectionDependencies(id, project.sections);
-
-  try {
-    const membersResponse = await api.get(`/projects/${id}/members`, {
-      params: { Page: 1, Limit: 1 },
-    });
-    const meta = unwrapPagedMeta(membersResponse.data);
-    if (meta.totalItems) {
-      project.membersCount = meta.totalItems;
-    }
-  } catch {
-    // members count is optional for display
-  }
-
   return attachApiTasks(project);
 };
 
-/** Lightweight stats — no per-project detail fan-out. */
+/** List-page totals only from APIs that actually return a count. */
 export const getProjectStats = async (): Promise<ProjectStats> => {
   const { records, meta } = await getProjects({ page: 1, limit: 100 });
-  const projectIds = records.map((project) => project.id);
-  const sectionsCount = projectIds.reduce(
-    (sum, id) => sum + getOwnedSectionIds(id).length,
-    0,
-  );
+  const stats: ProjectStats = {
+    projectsCount: meta.totalItems || records.length,
+  };
 
-  let tasksCount = 0;
-  let assignedEmployeesCount = 0;
   try {
     const tasksResult = await listProjectTasks({ page: 1, limit: 1 });
-    tasksCount = tasksResult.meta.totalItems || 0;
+    if (Number.isFinite(tasksResult.meta.totalItems)) {
+      stats.tasksCount = tasksResult.meta.totalItems;
+    }
   } catch {
-    tasksCount = records.reduce((sum, project) => sum + (project.tasksCount ?? 0), 0);
+    // GET /projects has no tasksCount; skip the card rather than inventing 0.
   }
 
-  try {
-    const memberTotals = await Promise.all(
-      projectIds.slice(0, 20).map(async (id) => {
-        try {
-          const response = await api.get(`/projects/${id}/members`, {
-            params: { Page: 1, Limit: 1 },
-          });
-          return unwrapPagedMeta(response.data).totalItems || 0;
-        } catch {
-          return 0;
-        }
-      }),
-    );
-    assignedEmployeesCount = memberTotals.reduce((sum, count) => sum + count, 0);
-  } catch {
-    assignedEmployeesCount = 0;
-  }
-
-  return {
-    projectsCount: meta.totalItems || records.length,
-    tasksCount,
-    sectionsCount,
-    assignedEmployeesCount,
-  };
+  return stats;
 };
 
 export const getTaskStats = async (projectId: string): Promise<TaskStats> => {
@@ -589,10 +451,6 @@ export const deleteProject = async (id: string) => {
   const response = await api.delete(`/projects/${id}`);
   assertMutationSuccess(response.data, "فشل حذف المشروع.");
   clearSectionOwnership(id);
-  clearProjectFlowAnchors(id);
-  clearProjectSectionDeps(id);
-  clearProjectSectionEdgeLabels(id);
-  clearProjectTaskTransitions(id);
   return { success: true as const };
 };
 
@@ -676,15 +534,7 @@ export const getProjectSections = async (projectId: string) => {
     }
   }
 
-  pruneProjectSectionDeps(
-    projectId,
-    scoped.map((section) => section.id),
-  );
-  pruneProjectSectionEdgeLabels(
-    projectId,
-    scoped.map((section) => section.id),
-  );
-  return attachSectionDependencies(projectId, scoped);
+  return scoped;
 };
 
 export const getSectionById = async (projectId: string, sectionId: string) => {
@@ -787,22 +637,6 @@ export const deleteSection = async (projectId: string, sectionId: string) => {
   const response = await api.delete(`/projects/${projectId}/sections/${sectionId}`);
   assertMutationSuccess(response.data, "فشل حذف القسم.");
   unregisterSectionOwnership(projectId, sectionId);
-  removeSectionFromDeps(projectId, sectionId);
-  removeSectionFromEdgeLabels(projectId, sectionId);
-
-  try {
-    const { records } = await listProjectTasks({
-      projectId,
-      page: 1,
-      limit: 100,
-    });
-    pruneProjectFlowAnchors(
-      projectId,
-      records.map((task) => task.id),
-    );
-  } catch {
-    // flow anchors are best-effort
-  }
 
   return getProjectById(projectId);
 };
@@ -938,7 +772,7 @@ export const getAllInvitations = async (query: InvitationsQuery = {}) => {
   return dedupeInvitationsById(merged);
 };
 
-const listMyInvitationsPage = async (page = 1, limit = 50) => {
+export const getMyInvitationsPage = async (page = 1, limit = 50) => {
   const response = await api.get("/projects/invitations/my", {
     params: { Page: page, Limit: limit },
   });
@@ -961,7 +795,7 @@ const listMyInvitationsPage = async (page = 1, limit = 50) => {
 /** Incoming invitations for the signed-in employee. */
 export const getMyInvitations = async () => {
   const records = await fetchAllPages(
-    (page, limit) => listMyInvitationsPage(page, limit),
+    (page, limit) => getMyInvitationsPage(page, limit),
     50,
   );
   return dedupeInvitationsById(records);
@@ -1060,21 +894,6 @@ export const updateTask = async (
 export const deleteTask = async (projectId: string, taskId: string) => {
   const response = await api.delete(`/project-tasks/${taskId}`);
   assertMutationSuccess(response.data, "فشل حذف المهمة.");
-
-  try {
-    const { records } = await listProjectTasks({
-      projectId,
-      page: 1,
-      limit: 100,
-    });
-    pruneProjectFlowAnchors(
-      projectId,
-      records.map((task) => task.id),
-    );
-  } catch {
-    // ignore
-  }
-
   return getProjectById(projectId);
 };
 
@@ -1084,19 +903,6 @@ export const linkTaskDependency = async (
   toTaskId: string,
 ) => {
   const project = await getProjectById(projectId);
-  const taskIds = project.tasks.map((task) => task.id);
-
-  if (isFlowTerminalId(fromTaskId) || isFlowTerminalId(toTaskId)) {
-    if (fromTaskId === FLOW_START_ID && toTaskId === FLOW_END_ID) {
-      throw new Error("Cannot link start directly to end");
-    }
-    if (fromTaskId === FLOW_END_ID || toTaskId === FLOW_START_ID) {
-      throw new Error("Invalid start/end direction");
-    }
-    linkFlowAnchor(projectId, fromTaskId, toTaskId, taskIds);
-    return getProjectById(projectId);
-  }
-
   const target = project.tasks.find((task) => task.id === toTaskId);
   if (!target || !project.tasks.some((task) => task.id === fromTaskId)) {
     throw new Error("Invalid task dependency");
@@ -1123,11 +929,6 @@ export const unlinkTaskDependency = async (
   fromTaskId: string,
   toTaskId: string,
 ) => {
-  if (isFlowTerminalId(fromTaskId) || isFlowTerminalId(toTaskId)) {
-    unlinkFlowAnchor(projectId, fromTaskId, toTaskId);
-    return getProjectById(projectId);
-  }
-
   const project = await getProjectById(projectId);
   const target = project.tasks.find((task) => task.id === toTaskId);
   if (!target) return project;

@@ -22,8 +22,10 @@ type EmployeeTableProps = {
   onPageChange: (page: number) => void;
   onEmployeeClick: (employee: Employee) => void;
   onEmployeeEdit?: (employee: Employee) => void;
-  onToggleArchive: (employee: Employee) => void;
+  onArchive: (employee: Employee) => void;
+  onUnarchive: (employee: Employee) => void;
   onBulkArchive?: () => void;
+  onBulkUnarchive?: () => void;
   onBulkEdit?: () => void;
   onClearSelection?: () => void;
   archiveView?: "active" | "archived";
@@ -40,8 +42,10 @@ export function EmployeeTable({
   onPageChange,
   onEmployeeClick,
   onEmployeeEdit,
-  onToggleArchive,
+  onArchive,
+  onUnarchive,
   onBulkArchive,
+  onBulkUnarchive,
   onBulkEdit,
   onClearSelection,
   archiveView = "active",
@@ -80,25 +84,24 @@ export function EmployeeTable({
               {t("common.edit")}
             </button>
           ) : null}
-          {onBulkArchive ? (
+          {!isArchivedView && onBulkArchive ? (
             <button
               type="button"
               onClick={onBulkArchive}
-              className={[
-                "inline-flex h-9 items-center gap-1.5 rounded-lg border bg-hr-surface px-3 text-sm font-medium transition",
-                isArchivedView
-                  ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900/50 dark:hover:bg-emerald-950/30"
-                  : "border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-900/50 dark:hover:bg-amber-950/30",
-              ].join(" ")}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-200 bg-hr-surface px-3 text-sm font-medium text-amber-700 transition hover:bg-amber-50 dark:border-amber-900/50 dark:hover:bg-amber-950/30"
             >
-              {isArchivedView ? (
-                <ArchiveRestore className="size-4" />
-              ) : (
-                <Archive className="size-4" />
-              )}
-              {isArchivedView
-                ? t("employees.bulk.unarchive")
-                : t("employees.bulk.archive")}
+              <Archive className="size-4" />
+              {t("employees.bulk.archive")}
+            </button>
+          ) : null}
+          {isArchivedView && onBulkUnarchive ? (
+            <button
+              type="button"
+              onClick={onBulkUnarchive}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-hr-surface px-3 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-900/50 dark:hover:bg-emerald-950/30"
+            >
+              <ArchiveRestore className="size-4" />
+              {t("employees.bulk.unarchive")}
             </button>
           ) : null}
           {onClearSelection ? (
@@ -270,30 +273,33 @@ export function EmployeeTable({
                           <Pencil className="size-4" />
                         </button>
                       )}
-                      <button
-                        type="button"
-                        className="hr-icon-btn text-hr-muted hover:text-amber-600"
-                        aria-label={
-                          employee.isArchived
-                            ? t("common.unarchiveItem", { name: employee.name })
-                            : t("common.archiveItem", { name: employee.name })
-                        }
-                        title={
-                          employee.isArchived
-                            ? t("employees.archive.unarchiveLabel")
-                            : t("employees.archive.archiveLabel")
-                        }
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onToggleArchive(employee);
-                        }}
-                      >
-                        {employee.isArchived ? (
+                      {employee.isArchived ? (
+                        <button
+                          type="button"
+                          className="hr-icon-btn text-hr-muted hover:text-emerald-600"
+                          aria-label={t("common.unarchiveItem", { name: employee.name })}
+                          title={t("employees.archive.unarchiveLabel")}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onUnarchive(employee);
+                          }}
+                        >
                           <ArchiveRestore className="size-4" />
-                        ) : (
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="hr-icon-btn text-hr-muted hover:text-amber-600"
+                          aria-label={t("common.archiveItem", { name: employee.name })}
+                          title={t("employees.archive.archiveLabel")}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onArchive(employee);
+                          }}
+                        >
                           <Archive className="size-4" />
-                        )}
-                      </button>
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

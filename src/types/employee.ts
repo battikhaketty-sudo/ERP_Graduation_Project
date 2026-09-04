@@ -1,7 +1,5 @@
 import type { UserAccount } from "./user";
 
-export type WorkRole = "Test" | "Front_end" | "UI_UX" | "Back_end";
-
 export type EmployeeResumeLine = {
   id: string;
   title: string;
@@ -21,6 +19,8 @@ export type EmployeeResumeSkill = {
   name: string;
   type: string;
   level: string;
+  /** GET employee/resume skill `progress`. */
+  progress?: number;
 };
 
 export type Employee = {
@@ -31,7 +31,6 @@ export type Employee = {
   /** WorkInfo.WorkMobileNumber */
   workPhone?: string;
   email: string;
-  role: WorkRole;
   address: string;
   avatar: string;
   rowNumber?: number;
@@ -47,6 +46,9 @@ export type Employee = {
   contractTypeName?: string;
   managerId?: string;
   managerName?: string;
+  /** GET /employees workingScheduleId, GET /employees/{id} workInfo.workingScheduleId */
+  workingScheduleId?: string;
+  workingScheduleName?: string;
   joiningDate?: string;
   contractEndDate?: string;
   salary?: number;

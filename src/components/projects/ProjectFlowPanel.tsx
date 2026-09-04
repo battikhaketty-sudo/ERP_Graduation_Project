@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "../../i18n";
 import { getProjectTaskGraph } from "../../services/projects";
+import { isTaskCompletedByFinalSection } from "../../services/projects/taskDependencies";
 import type { Project, ProjectTask, TaskStats } from "../../types/project";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { cardSurfaceClass } from "../ui/formStyles";
@@ -30,12 +31,16 @@ export function ProjectFlowPanel({
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [filter] = useState<TaskFlowFilter>("all");
-  const [graphTasks, setGraphTasks] = useState<ProjectTask[]>(project.tasks);
+  const [graphTasks, setGraphTasks] = useState<ProjectTask[]>(
+    project.tasks.filter(
+      (task) => !isTaskCompletedByFinalSection(task, project.sections),
+    ),
+  );
   const [graphLoading, setGraphLoading] = useState(true);
   const [graphError, setGraphError] = useState<string | null>(null);
 
   const graphReloadKey = `${project.id}:${project.tasksCount ?? project.tasks.length}:${project.tasks
-    .map((task) => `${task.id}:${task.title}:${task.dependencyCount ?? 0}`)
+    .map((task) => `${task.id}:${task.sectionId}:${task.title}:${task.dependencyCount ?? 0}`)
     .join("|")}`;
 
   useEffect(() => {
@@ -46,10 +51,20 @@ export function ProjectFlowPanel({
       setGraphError(null);
       try {
         const tasks = await getProjectTaskGraph(project.id, project.tasks);
-        if (!cancelled) setGraphTasks(tasks);
+        if (!cancelled) {
+          setGraphTasks(
+            tasks.filter(
+              (task) => !isTaskCompletedByFinalSection(task, project.sections),
+            ),
+          );
+        }
       } catch (err) {
         if (!cancelled) {
-          setGraphTasks(project.tasks);
+          setGraphTasks(
+            project.tasks.filter(
+              (task) => !isTaskCompletedByFinalSection(task, project.sections),
+            ),
+          );
           setGraphError(
             getThrownErrorMessage(err, t("projects.detail.flow.loadError")),
           );

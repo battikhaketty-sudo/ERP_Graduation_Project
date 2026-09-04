@@ -1,11 +1,22 @@
 import api from "../api";
-import type { EmployeeResumeLine, EmployeeResumeSkill } from "../../types/employee";
+import type {
+  Employee,
+  EmployeeResumeLine,
+  EmployeeResumeSkill,
+} from "../../types/employee";
+import {
+  mapResumeLines,
+  mapResumeSkills,
+  readResumeId,
+} from "../employees/employee.mapper";
 import {
   assertSuccess,
   unwrapData,
   unwrapEntity,
+  unwrapPage,
 } from "../../utils/apiResponse";
 import { RESUME_LINE_TYPE_BY_API, ResumeLineTypeApi } from "../backendEnums";
+import { calendarDateToUtcIso, formatSyriaDate } from "../../utils/syriaTime";
 
 export type ResumeLineTypeOption = {
   id: number;
@@ -27,8 +38,10 @@ export type ResumeSkillPayload = {
 
 const toIsoOrNull = (value?: string | null) => {
   if (!value?.trim()) return null;
-  const date = new Date(value.includes("T") ? value : `${value}T12:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    return calendarDateToUtcIso(value, false) || null;
+  }
+  return calendarDateToUtcIso(formatSyriaDate(value) || value, false) || null;
 };
 
 const normalizeLineType = (item: Record<string, unknown>): ResumeLineTypeOption => ({
@@ -57,6 +70,56 @@ export const getResumeLineTypes = async (): Promise<ResumeLineTypeOption[]> => {
 export const getResumeById = async (resumeId: string) => {
   const response = await api.get(`/resumes/${resumeId}`);
   return unwrapEntity<Record<string, unknown>>(response.data);
+};
+
+const resumeRecordFromPayload = (raw: Record<string, unknown>) =>
+  (raw.resumeInfo ?? raw.ResumeInfo ?? raw) as Record<string, unknown>;
+
+/** GET /resumes?EmployeeName= — find an existing resume id. No create endpoint exists. */
+export const findResumeIdByEmployee = async (
+  employeeId: string,
+  employeeName?: string,
+) => {
+  const params: Record<string, string | number> = { Page: 1, Limit: 50 };
+  if (employeeName?.trim()) params.EmployeeName = employeeName.trim();
+  const response = await api.get("/resumes", { params });
+  const items = unwrapPage<Record<string, unknown>>(response.data);
+  const match =
+    items.find(
+      (item) =>
+        String(item.employeeId ?? item.EmployeeId ?? "").trim() === employeeId,
+    ) ?? null;
+  return readResumeId(match?.id, match?.Id) || "";
+};
+
+/** Load lines/skills from GET /resumes/{id}. */
+export const hydrateEmployeeResume = async (
+  employee: Employee,
+): Promise<Employee> => {
+  let resumeId = employee.resumeId?.trim() || "";
+  if (!resumeId) {
+    try {
+      resumeId = await findResumeIdByEmployee(employee.id, employee.name);
+    } catch {
+      return employee;
+    }
+  }
+  if (!resumeId) return employee;
+
+  try {
+    const raw = await getResumeById(resumeId);
+    const source = resumeRecordFromPayload(raw);
+    const lines = mapResumeLines(source);
+    const skills = mapResumeSkills(source);
+    return {
+      ...employee,
+      resumeId: readResumeId(source.id, source.Id, resumeId) || resumeId,
+      resumeLines: lines.length ? lines : employee.resumeLines ?? [],
+      resumeSkills: skills.length ? skills : employee.resumeSkills ?? [],
+    };
+  } catch {
+    return { ...employee, resumeId };
+  }
 };
 
 export const addResumeLine = async (resumeId: string, payload: ResumeLinePayload) => {

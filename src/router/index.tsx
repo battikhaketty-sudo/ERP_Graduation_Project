@@ -1,6 +1,6 @@
-import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
+import { createBrowserRouter, Navigate, Outlet, useSearchParams } from "react-router-dom";
 import { guestLoader, requireAuthLoader, rootAuthLoader } from "../auth/loaders";
-import { ROUTES } from "../constants/routes";
+import { hrDepartmentsPath, ROUTES } from "../constants/routes";
 import { AppLayout } from "../layouts/AppLayout";
 import { AccessManagementPage } from "../pages/AccessManagementPage";
 import { DashboardPage } from "../pages/DashboardPage";
@@ -14,6 +14,14 @@ import { ConfirmEmailPage } from "../pages/ConfirmEmailPage";
 import { ProfilePage } from "../pages/ProfilePage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { bindAppRouter } from "./navigation";
+
+function DepartmentsEntry() {
+  const [searchParams] = useSearchParams();
+  if (!searchParams.get("id")) {
+    return <Navigate to={hrDepartmentsPath} replace />;
+  }
+  return <DepartmentsPage />;
+}
 
 export const router = createBrowserRouter([
   {
@@ -48,7 +56,7 @@ export const router = createBrowserRouter([
           { index: true, element: <DashboardPage /> },
           { path: ROUTES.projects, element: <ProjectsPage /> },
           { path: ROUTES.employees, element: <EmployeesPage /> },
-          { path: ROUTES.departments, element: <DepartmentsPage /> },
+          { path: ROUTES.departments, element: <DepartmentsEntry /> },
           { path: ROUTES.access, element: <AccessManagementPage /> },
           { path: ROUTES.hr, element: <HrPage /> },
           { path: ROUTES.profile, element: <ProfilePage /> },

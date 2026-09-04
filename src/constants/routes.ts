@@ -13,3 +13,6 @@ export const ROUTES = {
 } as const;
 
 export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];
+
+/** Department management lives under HR, not as a sidebar page. */
+export const hrDepartmentsPath = `${ROUTES.hr}?section=departments`;

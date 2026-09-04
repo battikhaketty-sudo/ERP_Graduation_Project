@@ -71,6 +71,8 @@ import { Pagination } from "../components/Pagination";
 import { usePreferences } from "../context/PreferencesContext";
 import { useTranslation } from "../i18n";
 import { departmentPath, employeePath } from "../constants/entityPaths";
+import { AddDepartmentModal } from "../components/departments/AddDepartmentModal";
+import type { DepartmentFormPayload } from "../types/department";
 
 type HrSection =
   | "contracts"
@@ -80,8 +82,7 @@ type HrSection =
   | "skills"
   | "addAttendanceModal"
   | "editAttendanceModal"
-  | "editDepartmentModal"
-  | "addDepartmentModal";
+  | "editDepartmentModal";
 
 const attendanceStatusClasses: Record<string, string> = {
   مقبول: STATUS_BADGE_CLASS.success,
@@ -294,8 +295,7 @@ export function HrPage() {
   );
   const [editContractName, setEditContractName] = useState("");
   const [departmentForm, setDepartmentForm] = useState(emptyDepartmentForm);
-  const [addDepartmentForm, setAddDepartmentForm] =
-    useState(emptyDepartmentForm);
+  const [isAddDepartmentOpen, setIsAddDepartmentOpen] = useState(false);
   const [departmentSearch, setDepartmentSearch] = useState("");
   const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<
     Set<string>
@@ -310,6 +310,9 @@ export function HrPage() {
     Array<{ id: string; name: string }>
   >([]);
   const [attendanceForm, setAttendanceForm] = useState(emptyAttendanceForm);
+  const [attendanceEmployeeError, setAttendanceEmployeeError] = useState<
+    string | null
+  >(null);
   const [editAttendanceForm, setEditAttendanceForm] = useState(
     emptyEditAttendanceForm,
   );
@@ -485,6 +488,9 @@ export function HrPage() {
     if (section === "skills") {
       setActiveSection("skills");
     }
+    if (section === "departments") {
+      setActiveSection("departments");
+    }
     if (searchParams.get("schedule")) {
       setActiveSection("workSchedules");
     }
@@ -507,7 +513,6 @@ export function HrPage() {
     const needsEmployees =
       activeSection === "addAttendanceModal" ||
       activeSection === "departments" ||
-      activeSection === "addDepartmentModal" ||
       activeSection === "editDepartmentModal";
 
     if (!needsEmployees) {
@@ -529,7 +534,6 @@ export function HrPage() {
 
     if (
       activeSection !== "departments" &&
-      activeSection !== "addDepartmentModal" &&
       activeSection !== "editDepartmentModal"
     ) {
       return;
@@ -845,54 +849,54 @@ export function HrPage() {
     setContractModal(null);
   };
 
-  const handleSaveDepartment = async (mode: "add" | "edit") => {
-    const form = mode === "add" ? addDepartmentForm : departmentForm;
+  const handleAddDepartment = async (payload: DepartmentFormPayload) => {
+    try {
+      await addDepartment(payload);
+      setApiNotice(null);
+      setIsAddDepartmentOpen(false);
+      await loadDepartments(departmentPage);
+      showToast(t("departments.toasts.addSuccess"), "success");
+    } catch (err) {
+      const message = getThrownErrorMessage(
+        err,
+        t("hr.departmentsSection.errors.add"),
+      );
+      setApiNotice(message);
+      showToast(message, "error");
+      throw { message };
+    }
+  };
 
-    if (!form.name.trim()) {
+  const handleSaveDepartment = async () => {
+    if (!departmentForm.name.trim()) {
       setApiNotice(t("hr.departmentsSection.errors.nameRequired"));
       return;
     }
 
-    if (!form.managerId.trim()) {
+    if (!departmentForm.managerId.trim()) {
       setApiNotice(t("hr.departmentsSection.errors.managerRequired"));
       return;
     }
 
     const payload = {
-      name: form.name.trim(),
-      managerId: form.managerId.trim(),
-      parentId: form.parentId.trim() || undefined,
-      description: form.description.trim(),
+      name: departmentForm.name.trim(),
+      managerId: departmentForm.managerId.trim(),
+      parentId: departmentForm.parentId.trim() || undefined,
+      description: departmentForm.description.trim(),
     };
 
     setDepartmentSaving(true);
     try {
-      if (mode === "edit" && editingDepartmentId) {
-        await updateDepartment(editingDepartmentId, payload);
-        await loadDepartments(departmentPage);
-      } else {
-        await addDepartment(payload);
-        await loadDepartments(departmentPage);
-      }
-
+      if (!editingDepartmentId) return;
+      await updateDepartment(editingDepartmentId, payload);
+      await loadDepartments(departmentPage);
       setApiNotice(null);
-
-      if (mode === "edit") {
-        setDepartmentForm(emptyDepartmentForm);
-        setEditingDepartmentId(null);
-      } else {
-        setAddDepartmentForm(emptyDepartmentForm);
-      }
-
+      setDepartmentForm(emptyDepartmentForm);
+      setEditingDepartmentId(null);
       setActiveSection("departments");
     } catch (err) {
       setApiNotice(
-        getThrownErrorMessage(
-          err,
-          mode === "edit"
-            ? t("hr.departmentsSection.errors.save")
-            : t("hr.departmentsSection.errors.add"),
-        ),
+        getThrownErrorMessage(err, t("hr.departmentsSection.errors.save")),
       );
     } finally {
       setDepartmentSaving(false);
@@ -936,14 +940,21 @@ export function HrPage() {
   };
 
   const handleAddAttendance = async () => {
-    if (!attendanceForm.employeeId.trim()) return;
+    if (!attendanceForm.employeeId.trim()) {
+      setAttendanceEmployeeError(t("hr.attendance.errors.employeeRequired"));
+      return;
+    }
+    setAttendanceEmployeeError(null);
 
     const checkin = dateTimeInputToIso(attendanceForm.checkInAt);
     const checkout = attendanceForm.checkOutAt.trim()
       ? dateTimeInputToIso(attendanceForm.checkOutAt)
       : undefined;
 
-    if (!checkin) return;
+    if (!checkin || (attendanceForm.checkOutAt.trim() && !checkout)) {
+      setApiNotice(t("hr.attendance.errors.invalidDateTime"));
+      return;
+    }
 
     const shiftError = validateAttendanceShift(
       attendanceForm.checkInAt,
@@ -970,6 +981,7 @@ export function HrPage() {
     }
 
     setAttendanceForm(emptyAttendanceForm);
+    setAttendanceEmployeeError(null);
     setActiveSection("attendance");
   };
 
@@ -1115,7 +1127,10 @@ export function HrPage() {
       ? dateTimeInputToIso(editAttendanceForm.checkOutAt)
       : undefined;
 
-    if (!checkin) return;
+    if (!checkin || (editAttendanceForm.checkOutAt.trim() && !checkout)) {
+      setApiNotice(t("hr.attendance.errors.invalidDateTime"));
+      return;
+    }
 
     const shiftError = validateAttendanceShift(
       editAttendanceForm.checkInAt,
@@ -1333,6 +1348,7 @@ export function HrPage() {
             type="button"
             onClick={() => {
               setApiNotice(null);
+              setAttendanceEmployeeError(null);
               setActiveSection("addAttendanceModal");
             }}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-hr-accent-bg px-4 text-sm font-medium text-hr-accent-text transition hover:opacity-90"
@@ -1501,8 +1517,7 @@ export function HrPage() {
         addLabel={t("hr.departmentsSection.addLabel")}
         onAddClick={() => {
           setApiNotice(null);
-          setAddDepartmentForm(emptyDepartmentForm);
-          setActiveSection("addDepartmentModal");
+          setIsAddDepartmentOpen(true);
         }}
       >
         <div className="relative w-full max-w-xs sm:min-w-[240px]">
@@ -1519,42 +1534,43 @@ export function HrPage() {
       <div className="overflow-hidden rounded-lg border border-hr-border">
         <table className="w-full table-fixed text-sm">
           <colgroup>
-            <col className="w-10" />
-            <col className="w-12" />
+            <col className="w-[4%]" />
+            <col className="w-[5%]" />
             <col className="w-[12%]" />
-            <col className="w-[11%]" />
-            <col className="w-[14%]" />
             <col className="w-[13%]" />
-            <col />
-            <col className="w-16" />
+            <col className="w-[13%]" />
+            <col className="w-[12%]" />
+            <col className="w-[14%]" />
+            <col className="w-[19%]" />
+            <col className="w-[8%]" />
           </colgroup>
           <thead className="bg-hr-table-head text-xs text-hr-muted">
             <tr>
-              <th className="px-2 py-3 text-center font-medium">
+              <th className="px-1.5 py-3 text-center font-medium">
                 {t("table.columns.select")}
               </th>
-              <th className="px-2 py-3 text-center font-medium">
+              <th className="px-1.5 py-3 text-center font-medium">
                 {t("table.columns.index")}
               </th>
-              <th className="px-2 py-3 text-center font-medium">
+              <th className="px-1.5 py-3 text-center font-medium">
                 {t("table.columns.id")}
               </th>
-              <th className="px-2 py-3 text-start font-medium">
+              <th className="px-1.5 py-3 text-start font-medium">
                 {t("hr.departmentsSection.columns.name")}
               </th>
-              <th className="px-2 py-3 text-start font-medium">
+              <th className="px-1.5 py-3 text-start font-medium">
                 {t("hr.departmentsSection.columns.parentName")}
               </th>
-              <th className="px-2 py-3 text-center font-medium">
+              <th className="px-1.5 py-3 text-center font-medium">
                 {t("hr.departmentsSection.columns.managerId")}
               </th>
-              <th className="px-2 py-3 text-start font-medium">
+              <th className="px-1.5 py-3 text-start font-medium">
                 {t("hr.departmentsSection.columns.managerName")}
               </th>
-              <th className="px-2 py-3 text-start font-medium">
+              <th className="px-1.5 py-3 text-start font-medium">
                 {t("hr.departmentsSection.columns.description")}
               </th>
-              <th className="px-3 py-3 text-center font-medium">
+              <th className="px-1.5 py-3 text-center font-medium">
                 <button
                   type="button"
                   aria-label={t("common.delete")}
@@ -1575,7 +1591,7 @@ export function HrPage() {
                 key={item.id}
                 className={idx % 2 ? "bg-hr-table-head" : "bg-hr-surface"}
               >
-                <td className="px-3 py-3 text-center">
+                <td className="px-1.5 py-3 text-center">
                   <input
                     type="checkbox"
                     className="size-4 accent-hr-primary"
@@ -1583,27 +1599,27 @@ export function HrPage() {
                     onChange={() => toggleDepartmentSelection(item.id)}
                   />
                 </td>
-                <td className="px-3 py-3 text-center text-hr-muted">
+                <td className="px-1.5 py-3 text-center text-hr-muted">
                   <TableRowIndex
                     index={idx}
                     page={departmentPage}
                     pageSize={10}
                   />
                 </td>
-                <td className="px-2 py-3 text-center">
+                <td className="overflow-hidden px-1.5 py-3 text-center">
                   <CopyableIdCell
                     value={item.id}
                     to={departmentPath(item.id)}
                   />
                 </td>
                 <td
-                  className="truncate px-2 py-3 text-hr-text"
+                  className="truncate px-1.5 py-3 text-hr-text"
                   title={item.name}
                 >
                   <EntityLink to={departmentPath(item.id)}>{item.name}</EntityLink>
                 </td>
                 <td
-                  className="truncate px-2 py-3 text-hr-text"
+                  className="truncate px-1.5 py-3 text-hr-text"
                   title={item.parentName || undefined}
                 >
                   {item.parentId ? (
@@ -1615,7 +1631,7 @@ export function HrPage() {
                   )}
                 </td>
                 <td
-                  className="truncate px-2 py-3 text-center text-hr-text"
+                  className="overflow-hidden px-1.5 py-3 text-center text-hr-text"
                   title={item.managerId || undefined}
                 >
                   {item.managerId ? (
@@ -1628,7 +1644,7 @@ export function HrPage() {
                   )}
                 </td>
                 <td
-                  className="truncate px-2 py-3 text-hr-text"
+                  className="truncate px-1.5 py-3 text-hr-text"
                   title={item.managerName || undefined}
                 >
                   <EntityLink to={employeePath(item.managerId)}>
@@ -1636,12 +1652,12 @@ export function HrPage() {
                   </EntityLink>
                 </td>
                 <td
-                  className="line-clamp-2 break-words px-2 py-3 text-hr-text"
+                  className="truncate px-1.5 py-3 text-hr-text"
                   title={item.description || undefined}
                 >
                   {truncateText(item.description, 50)}
                 </td>
-                <td className="px-3 py-3">
+                <td className="px-1.5 py-3">
                   <div className="flex items-center justify-center gap-3">
                     <button
                       type="button"
@@ -1665,7 +1681,7 @@ export function HrPage() {
             ))}
             {!departments.length && (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-hr-muted">
+                <td colSpan={9} className="px-3 py-8 text-center text-hr-muted">
                   {t("hr.departmentsSection.empty")}
                 </td>
               </tr>
@@ -2044,19 +2060,22 @@ export function HrPage() {
               label={t("hr.attendance.modals.employee")}
               required
               hint={t("hr.attendance.modals.employeeHint")}
+              error={attendanceEmployeeError ?? undefined}
             >
               <SearchableSelect
                 value={attendanceForm.employeeId}
-                onChange={(value) =>
+                onChange={(value) => {
+                  setAttendanceEmployeeError(null);
                   setAttendanceForm((prev) => ({
                     ...prev,
                     employeeId: value,
-                  }))
-                }
+                  }));
+                }}
                 options={mapNamedOptions(employeeOptions, {
                   description: (employee) => employee.id,
                 })}
                 placeholder={t("hr.attendance.modals.selectEmployee")}
+                hasError={Boolean(attendanceEmployeeError)}
               />
             </FormField>
             <div className="mb-6">
@@ -2275,7 +2294,7 @@ export function HrPage() {
             <div className="mt-8 flex justify-center gap-3">
               <button
                 type="button"
-                onClick={() => handleSaveDepartment("edit")}
+                onClick={() => void handleSaveDepartment()}
                 disabled={departmentSaving}
                 className="rounded-lg bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
               >
@@ -2295,108 +2314,11 @@ export function HrPage() {
         </div>
       )}
 
-      {activeSection === "addDepartmentModal" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div
-            className="relative w-full max-w-2xl rounded-xl bg-hr-surface p-8 shadow-card"
-            dir={dir}
-          >
-            <ModalTitleBar
-              title={t("hr.departmentsSection.modals.addTitle")}
-              onClose={closeTo("departments")}
-            />
-            {apiNotice && (
-              <p className={`mb-4 ${alertErrorClass}`}>{apiNotice}</p>
-            )}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div>
-                <label className="mb-2 block text-sm text-hr-text">
-                  {t("hr.departmentsSection.columns.name")}
-                </label>
-                <input
-                  value={addDepartmentForm.name}
-                  onChange={(e) =>
-                    setAddDepartmentForm((prev) => ({
-                      ...prev,
-                      name: e.target.value,
-                    }))
-                  }
-                  className="h-11 w-full rounded-lg border border-hr-border px-3 outline-none focus:border-hr-primary"
-                />
-              </div>
-              <FormField
-                label={t("hr.departmentsSection.modals.parent")}
-                hint={t("common.optional")}
-              >
-                <SearchableSelect
-                  value={addDepartmentForm.parentId}
-                  onChange={(value) =>
-                    setAddDepartmentForm((prev) => ({
-                      ...prev,
-                      parentId: value,
-                    }))
-                  }
-                  options={mapNamedOptions(departmentOptions)}
-                  placeholder={t("hr.departmentsSection.modals.noParent")}
-                />
-              </FormField>
-              <FormField
-                label={t("hr.departmentsSection.modals.manager")}
-                hint={t("hr.departmentsSection.modals.managerHint")}
-              >
-                <SearchableSelect
-                  value={addDepartmentForm.managerId}
-                  onChange={(value) =>
-                    setAddDepartmentForm((prev) => ({
-                      ...prev,
-                      managerId: value,
-                    }))
-                  }
-                  options={mapNamedOptions(employeeOptions, {
-                    description: (employee) => employee.id,
-                  })}
-                  placeholder={t("hr.departmentsSection.modals.selectManager")}
-                />
-              </FormField>
-              <div className="sm:col-span-3">
-                <label className="mb-2 block text-sm text-hr-text">
-                  {t("hr.departmentsSection.modals.description")}
-                </label>
-                <textarea
-                  value={addDepartmentForm.description}
-                  onChange={(e) =>
-                    setAddDepartmentForm((prev) => ({
-                      ...prev,
-                      description: e.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-hr-border p-3 outline-none focus:border-hr-primary"
-                  rows={4}
-                />
-              </div>
-            </div>
-            <div className="mt-8 flex justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => handleSaveDepartment("add")}
-                disabled={departmentSaving}
-                className="rounded-lg bg-hr-primary px-8 py-2.5 text-sm font-bold text-white disabled:opacity-60"
-              >
-                {departmentSaving
-                  ? t("common.adding")
-                  : t("hr.departmentsSection.modals.addSubmit")}
-              </button>
-              <button
-                type="button"
-                onClick={closeTo("departments")}
-                className={cancelBtnClass}
-              >
-                {t("common.cancel")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AddDepartmentModal
+        isOpen={isAddDepartmentOpen}
+        onClose={() => setIsAddDepartmentOpen(false)}
+        onSubmit={handleAddDepartment}
+      />
 
       {skillModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

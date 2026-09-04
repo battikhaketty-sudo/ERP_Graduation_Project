@@ -65,12 +65,7 @@ import { getCurrentActorIds, getCurrentUserEmail, getCurrentUserName } from "../
 
 type ActiveTab = "projects" | "invitations";
 
-const emptyStats: ProjectStats = {
-  projectsCount: 0,
-  tasksCount: 0,
-  sectionsCount: 0,
-  assignedEmployeesCount: 0,
-};
+const emptyStats: ProjectStats = {};
 
 export function ProjectsPage() {
   const { confirm } = useConfirmDialog();

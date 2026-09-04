@@ -13,6 +13,11 @@ import {
 } from "../utils/apiResponse";
 import { extractRowNumber } from "../utils/tableRowNumber";
 import { fetchAllPages } from "../utils/fetchAllPages";
+import {
+  formatSyriaDateTime,
+  nowSyriaDateInput,
+  syriaDateToUtcIso,
+} from "../utils/syriaTime";
 import { ATTENDENCE_STATUS_BY_API } from "./backendEnums";
 
 export type { AttendanceFilters, AttendancePayload, AttendanceRecord } from "../types/attendance";
@@ -20,18 +25,7 @@ export type { ContractType } from "../types/contract";
 export type { Department, DepartmentFilters, DepartmentFormPayload } from "../types/department";
 export type { SkillGroup, SkillLevel } from "../types/skill";
 
-const formatDateTime = (value?: string | null) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("ar-SY", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+const formatDateTime = (value?: string | null) => formatSyriaDateTime(value);
 
 const readNumericField = (item: Record<string, unknown>, ...keys: string[]) => {
   for (const key of keys) {
@@ -318,33 +312,14 @@ export const deleteDepartment = async (id: string) => {
 
 const formatDateTimeParam = (value?: string, endOfDay = false) => {
   if (!value?.trim()) return undefined;
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return endOfDay ? `${value}T23:59:59.999Z` : `${value}T00:00:00.000Z`;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  if (endOfDay) {
-    date.setUTCHours(23, 59, 59, 999);
-  } else {
-    date.setUTCHours(0, 0, 0, 0);
-  }
-
-  return date.toISOString();
+  return syriaDateToUtcIso(value, endOfDay) || value;
 };
 
 export const getTodayApiRange = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const date = `${year}-${month}-${day}`;
-
+  const date = nowSyriaDateInput();
   return {
-    from: `${date}T00:00:00.000Z`,
-    to: `${date}T23:59:59.999Z`,
+    from: syriaDateToUtcIso(date, false),
+    to: syriaDateToUtcIso(date, true),
   };
 };
 
@@ -384,8 +359,17 @@ export const addAttendence = async (data: {
   checkout?: string;
 }) => {
   const res = await api.post("/attendences", data);
-  const entity = unwrapEntity<Record<string, unknown>>(res.data);
-  return normalizeAttendance(entity);
+  assertSuccess(res.data);
+  const raw = unwrapData(res.data);
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return normalizeAttendance(raw as Record<string, unknown>);
+  }
+  return normalizeAttendance({
+    id: typeof raw === "string" ? raw : "",
+    employeeId: data.employeeId,
+    checkin: data.checkin,
+    checkout: data.checkout,
+  });
 };
 
 export const updateAttendence = async (

@@ -50,8 +50,3 @@ export const updateUserRoles = async (userId: string, roleIds: string[]) => {
   const response = await api.put(`/users/${userId}/roles`, { roleIds: ids });
   assertMutationSuccess(response.data, "فشل تحديث أدوار المستخدم.");
 };
-
-export const deleteUser = async (id: string) => {
-  const response = await api.delete(`/users/${id}`);
-  assertMutationSuccess(response.data, "فشل حذف المستخدم.");
-};

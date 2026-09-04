@@ -10,39 +10,32 @@ export function AccessStatsCards({ stats }: AccessStatsCardsProps) {
 
   const cards = [
     {
-      key: "membersCount",
-      label: t("access.stats.membersCount"),
-      value: stats.membersCount,
+      key: "usersCount",
+      label: t("access.stats.usersCount"),
+      value: stats.usersCount,
       border: "border-[#5BB8E8]",
       text: "text-[#2F80ED]",
     },
     {
-      key: "tasksCount",
-      label: t("access.stats.tasksCount"),
-      value: stats.tasksCount,
+      key: "rolesCount",
+      label: t("access.stats.rolesCount"),
+      value: stats.rolesCount,
       border: "border-[#7ED321]",
       text: "text-[#5BA818]",
     },
     {
-      key: "departmentsCount",
-      label: t("access.stats.departmentsCount"),
-      value: stats.departmentsCount,
+      key: "permissionsCount",
+      label: t("access.stats.permissionsCount"),
+      value: stats.permissionsCount,
       border: "border-[#F5A623]",
       text: "text-[#E8940A]",
-    },
-    {
-      key: "pendingInvitationsCount",
-      label: t("access.stats.pendingInvitationsCount"),
-      value: stats.pendingInvitationsCount,
-      border: "border-[#FF6B6B]",
-      text: "text-[#E04545]",
     },
   ];
 
   return (
     <section className="mb-5">
       <h2 className="mb-3 text-sm font-semibold text-hr-muted">{t("access.statsTitle")}</h2>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {cards.map((card) => (
           <div
             key={card.key}

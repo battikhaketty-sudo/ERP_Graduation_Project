@@ -21,13 +21,14 @@ import {
   taskPriorityFromApi,
 } from "./project.enums";
 import { extractRowNumber } from "../../utils/tableRowNumber";
+import {
+  formatSyriaDate,
+  formatSyriaDateTime,
+  nowSyriaDateInput,
+} from "../../utils/syriaTime";
 import { readApiBoolean } from "../../utils/readIsFixed";
-import { buildTaskStatsFromTasks } from "./taskStorage";
 
-const formatDate = (value?: string | null) => {
-  if (!value) return "";
-  return value.slice(0, 10);
-};
+const formatDate = (value?: string | null) => formatSyriaDate(value);
 
 const readId = (...candidates: unknown[]): string => {
   for (const candidate of candidates) {
@@ -36,6 +37,15 @@ const readId = (...candidates: unknown[]): string => {
     if (value) return value;
   }
   return "";
+};
+
+const readOptionalCount = (...candidates: unknown[]): number | undefined => {
+  for (const candidate of candidates) {
+    if (candidate == null || candidate === "") continue;
+    const value = Number(candidate);
+    if (Number.isFinite(value)) return value;
+  }
+  return undefined;
 };
 
 export const normalizeSection = (
@@ -60,7 +70,6 @@ export const normalizeSection = (
       typeof item.createdAtUtc === "string" ? item.createdAtUtc : null,
     ),
     isFinalSection: readApiBoolean(item, "isFinalSection", "IsFinalSection"),
-    dependsOnSectionIds: [],
   };
 };
 
@@ -85,13 +94,21 @@ export const filterProjectSections = (
 export const normalizeMember = (item: Record<string, unknown>): ProjectMember | null => {
   const employeeId = readId(item.employeeId, item.EmployeeId);
   const userId = readId(item.userId, item.UserId);
-  const memberId = readId(item.memberId, item.MemberId, item.id, item.Id);
-  const assignmentId = memberId || employeeId || userId;
-  if (!assignmentId) return null;
+  const memberId = readId(
+    item.memberId,
+    item.MemberId,
+    item.projectMemberId,
+    item.ProjectMemberId,
+    item.id,
+    item.Id,
+  );
+  const id = memberId || employeeId || userId;
+  if (!id) return null;
 
   return {
-    id: assignmentId,
-    employeeId: employeeId || assignmentId,
+    id,
+    memberId: memberId || id,
+    employeeId: employeeId || id,
     userId: userId || undefined,
     employeeName: String(
       item.employeeName ?? item.EmployeeName ?? "-",
@@ -119,9 +136,13 @@ export const normalizeMember = (item: Record<string, unknown>): ProjectMember | 
 export const isActiveProjectMember = (member: ProjectMember) => !member.leftAt?.trim();
 
 export const memberLookupIds = (member: ProjectMember) =>
-  [member.id, member.employeeId, member.userId].filter(
+  [member.memberId, member.id, member.employeeId, member.userId].filter(
     (value): value is string => Boolean(value),
   );
+
+/** Task `assignments` must be project member IDs, never employee/user IDs. */
+export const assignmentMemberId = (member: ProjectMember) =>
+  member.memberId || member.id;
 
 export const toActiveAssigneeOptions = (members: ProjectMember[]) => {
   const options: Array<{ id: string; name: string }> = [];
@@ -129,7 +150,7 @@ export const toActiveAssigneeOptions = (members: ProjectMember[]) => {
 
   for (const member of members) {
     if (!isActiveProjectMember(member)) continue;
-    const id = member.userId || member.employeeId || member.id;
+    const id = assignmentMemberId(member);
     if (!id || seen.has(id)) continue;
     seen.add(id);
     for (const lookupId of memberLookupIds(member)) seen.add(lookupId);
@@ -161,7 +182,7 @@ export const assigneesFromMembers = (
       (item) => isActiveProjectMember(item) && memberMatchesAssignment(item, assignment),
     );
     if (!member) continue;
-    const sendId = assignment.memberId || member.userId || member.id;
+    const sendId = assignment.memberId || assignmentMemberId(member);
     if (!sendId || seen.has(sendId)) continue;
     seen.add(sendId);
     for (const lookupId of memberLookupIds(member)) seen.add(lookupId);
@@ -184,15 +205,10 @@ export const normalizeProjectListItem = (item: Record<string, unknown>): Project
     name: String(item.name ?? "Untitled").slice(0, 200),
     managerId: String(item.managerId ?? ""),
     managerName: String(item.managerName ?? "-").slice(0, 200),
-    assignedEmployeeId: "",
-    assignedEmployeeName: "-",
     description: String(item.description ?? "").slice(0, 5000),
     startDate: formatDate(typeof item.startDate === "string" ? item.startDate : null),
     endDate: formatDate(typeof item.endDate === "string" ? item.endDate : null),
     status: projectStatusFromApi(item.status),
-    budget: 0,
-    rating: 0,
-    goals: [],
     sections: [],
     tasks: [],
   };
@@ -219,20 +235,15 @@ export const normalizeProjectDetail = (item: Record<string, unknown>): Project =
     name: String(item.name ?? "Untitled").slice(0, 200),
     managerId: String(item.managerId ?? ""),
     managerName: String(item.managerName ?? "-").slice(0, 200),
-    assignedEmployeeId: "",
-    assignedEmployeeName: "-",
     description: String(item.description ?? "").slice(0, 5000),
     startDate: formatDate(typeof item.startDate === "string" ? item.startDate : null),
     endDate: formatDate(typeof item.endDate === "string" ? item.endDate : null),
     status: projectStatusFromApi(item.status),
-    budget: 0,
-    rating: 0,
-    goals: [],
     sections,
     tasks: [],
-    tasksCount: Number(item.tasksCount ?? 0),
-    sectionsCount: Number(item.sectionsCount ?? sections.length),
-    membersCount: Number(item.membersCount ?? 0),
+    tasksCount: readOptionalCount(item.tasksCount, item.TasksCount),
+    sectionsCount: readOptionalCount(item.sectionsCount, item.SectionsCount),
+    membersCount: readOptionalCount(item.membersCount, item.MembersCount),
     createdAt: formatDate(typeof item.createdAtUtc === "string" ? item.createdAtUtc : null),
   };
 };
@@ -320,44 +331,46 @@ export const buildProjectStats = (
   projects: Project[],
   totalProjects: number,
 ): ProjectStats => {
-  const assignees = new Set<string>();
+  const stats: ProjectStats = { projectsCount: totalProjects };
+  const tasks = projects.reduce<number | undefined>((sum, project) => {
+    if (project.tasksCount == null) return sum;
+    return (sum ?? 0) + project.tasksCount;
+  }, undefined);
+  if (tasks != null) stats.tasksCount = tasks;
+  return stats;
+};
 
-  const totals = projects.reduce(
-    (acc, project) => {
-      acc.tasks += project.tasksCount ?? project.tasks.length;
-      acc.sections += project.sectionsCount ?? project.sections.length;
-      if (project.assignedEmployeeId) assignees.add(project.assignedEmployeeId);
-      acc.members += project.membersCount ?? 0;
-      return acc;
-    },
-    { tasks: 0, sections: 0, members: 0 },
+export const buildTaskStatsFromTasks = (
+  tasks: ProjectTask[],
+  sections: Array<Pick<ProjectSection, "id" | "isFinalSection">> = [],
+): TaskStats => {
+  const today = nowSyriaDateInput();
+  const completedSectionIds = new Set(
+    sections.filter((section) => section.isFinalSection).map((section) => section.id),
   );
+  let late = 0;
+
+  tasks.forEach((task) => {
+    if (completedSectionIds.has(task.sectionId)) return;
+    if (task.dueDate && task.dueDate < today) late += 1;
+  });
 
   return {
-    projectsCount: totalProjects,
-    tasksCount: totals.tasks,
-    sectionsCount: totals.sections,
-    assignedEmployeesCount: Math.max(assignees.size, totals.members),
+    total: tasks.length,
+    late,
   };
 };
 
 export const buildTaskStats = (project: Project): TaskStats =>
   buildTaskStatsFromTasks(project.tasks, project.sections);
 
-export const buildProjectDetailStats = (
-  project: Project,
-  taskStats: TaskStats,
-): ProjectDetailStats => ({
-  membersCount: project.membersCount ?? 0,
-  tasksCount: project.tasksCount ?? project.tasks.length,
-  sectionsCount: project.sectionsCount ?? project.sections.length,
-  lateTasksCount: taskStats.late,
+export const buildProjectDetailStats = (project: Project): ProjectDetailStats => ({
+  membersCount: project.membersCount,
+  tasksCount: project.tasksCount,
+  sectionsCount: project.sectionsCount,
 });
 
-const formatDateTime = (value?: string | null) => {
-  if (!value) return "";
-  return value.slice(0, 10);
-};
+const formatDateTime = (value?: string | null) => formatSyriaDateTime(value, "");
 
 export const normalizeTaskListItem = (
   item: Record<string, unknown>,
@@ -392,14 +405,14 @@ export const normalizeTaskListItem = (
       0,
       Number(item.estimatedHours ?? item.EstimatedHours ?? 0) || 0,
     ),
-    startDate: formatDateTime(
+    startDate: formatDate(
       typeof item.startDate === "string"
         ? item.startDate
         : typeof item.StartDate === "string"
           ? item.StartDate
           : null,
     ),
-    dueDate: formatDateTime(
+    dueDate: formatDate(
       typeof item.dueDate === "string"
         ? item.dueDate
         : typeof item.DueDate === "string"
@@ -501,7 +514,7 @@ export const normalizeTaskDetail = (
   const base = normalizeTaskListItem(item, fallbackProjectId);
   if (!base) return null;
 
-  const startDate = formatDateTime(
+  const startDate = formatDate(
     typeof item.startDateUtc === "string"
       ? item.startDateUtc
       : typeof item.StartDateUtc === "string"
@@ -510,7 +523,7 @@ export const normalizeTaskDetail = (
           ? item.startDate
           : null,
   );
-  const dueDate = formatDateTime(
+  const dueDate = formatDate(
     typeof item.dueDateUtc === "string"
       ? item.dueDateUtc
       : typeof item.DueDateUtc === "string"

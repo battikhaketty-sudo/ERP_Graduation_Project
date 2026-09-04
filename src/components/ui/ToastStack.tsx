@@ -39,7 +39,7 @@ export function ToastStack() {
             role="status"
           >
             <Icon className="mt-0.5 size-4 shrink-0" />
-            <p className="flex-1 font-medium">{toast.message}</p>
+            <p className="flex-1 whitespace-pre-wrap font-medium">{toast.message}</p>
             <button
               type="button"
               onClick={() => dismissToast(toast.id)}

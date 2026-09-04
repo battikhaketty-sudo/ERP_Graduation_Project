@@ -1,5 +1,7 @@
-import { Upload } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "../../i18n";
+import { readImageFile, revokeImagePreview } from "../../utils/readImageFile";
+import { ImageFileButton } from "../ui/ImageFileButton";
 import { EmployeeField } from "./employee-ui";
 
 type EmployeeIdImageFieldProps = {
@@ -14,21 +16,32 @@ export function EmployeeIdImageField({
   onChange,
 }: EmployeeIdImageFieldProps) {
   const { t } = useTranslation();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleFile = async (file: File) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await readImageFile(file);
+      if (!result.ok) {
+        setError(
+          result.error === "tooLarge"
+            ? t("employees.errors.photoTooLarge")
+            : t("employees.errors.photoInvalid"),
+        );
+        return;
+      }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      onChange((reader.result as string) || "");
-    };
-    reader.readAsDataURL(file);
-    event.target.value = "";
+      revokeImagePreview(value);
+      onChange(result.dataUrl);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <EmployeeField label={label}>
+    <EmployeeField label={label} error={error ?? undefined}>
       <div className="flex flex-col items-center gap-3">
         {value ? (
           <img
@@ -38,19 +51,22 @@ export function EmployeeIdImageField({
           />
         ) : (
           <div className="flex h-36 w-full max-w-[240px] items-center justify-center rounded-2xl border border-dashed border-hr-border bg-hr-hover text-sm text-hr-muted">
-            {t("employees.detail.idImageEmpty")}
+            {loading ? t("common.loading") : t("employees.detail.idImageEmpty")}
           </div>
         )}
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-hr-border bg-hr-surface px-4 py-2 text-sm font-medium text-hr-text transition hover:border-hr-primary">
-          <Upload className="size-4" />
-          {value ? t("employees.detail.changeIdImage") : t("employees.detail.uploadIdImage")}
-          <input
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            onChange={handleFileChange}
-          />
-        </label>
+        <ImageFileButton
+          label={
+            loading
+              ? t("common.loading")
+              : value
+                ? t("employees.detail.changeIdImage")
+                : t("employees.detail.uploadIdImage")
+          }
+          disabled={loading}
+          onFile={(file) => {
+            void handleFile(file);
+          }}
+        />
       </div>
     </EmployeeField>
   );

@@ -20,7 +20,7 @@ export const emptyEmployeeSkillRow = (): EmployeeSkillRow => ({
 });
 
 export const isEmployeeSkillRowComplete = (row: EmployeeSkillRow) =>
-  Boolean(row.typeId && row.skillId && row.levelId);
+  Boolean(row.skillId && row.levelId && (row.typeId || row.name));
 
 export const toResumeSkillPayload = (row: EmployeeSkillRow) => ({
   id: row.resumeSkillId,
@@ -53,10 +53,20 @@ export const resumeSkillsToRows = (
     const group =
       skillGroups.find((entry) =>
         entry.skills.some(
-          (item) => (item.id ?? item.name) === skill.skillId || item.name === skill.name,
+          (item) =>
+            (item.id && item.id === skill.skillId) ||
+            item.name === skill.skillId ||
+            (skill.name && item.name === skill.name),
         ),
       ) ??
       skillGroups.find((entry) => entry.name === skill.type);
+
+    const matchedSkill = group?.skills.find(
+      (item) =>
+        (item.id && item.id === skill.skillId) ||
+        item.name === skill.skillId ||
+        (skill.name && item.name === skill.name),
+    );
 
     const levelId =
       skill.skillLevelId ||
@@ -67,8 +77,8 @@ export const resumeSkillsToRows = (
       resumeSkillId: skill.id,
       typeId: group?.id ?? "",
       type: group?.name ?? skill.type,
-      skillId: skill.skillId || "",
-      name: skill.name,
+      skillId: matchedSkill?.id || skill.skillId || "",
+      name: matchedSkill?.name || skill.name,
       levelId,
       level: skill.level,
     };

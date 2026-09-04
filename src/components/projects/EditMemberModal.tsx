@@ -4,6 +4,7 @@ import { useProjectLabels } from "../../hooks/useProjectLabels";
 import { useTranslation } from "../../i18n";
 import { employeePath } from "../../constants/entityPaths";
 import type { ProjectMember } from "../../types/project";
+import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { alertErrorClass, cancelBtnClass, ModalCloseButton, ModalTitleBar } from "../ui/modalStyles";
 import { EntityLink } from "../ui/EntityLink";
 import { inputClass, modalCardClass, modalOverlayClass } from "./project-ui";
@@ -44,9 +45,7 @@ export function EditMemberModal({ isOpen, member, onClose, onSubmit }: EditMembe
       onClose();
     } catch (err) {
       setError(
-        err && typeof err === "object" && "message" in err
-          ? String(err.message)
-          : t("projects.modals.editMember.errors.updateFailed"),
+        getThrownErrorMessage(err, t("projects.modals.editMember.errors.updateFailed")),
       );
     } finally {
       setSaving(false);

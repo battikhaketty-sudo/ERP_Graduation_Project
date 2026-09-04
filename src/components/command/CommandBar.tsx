@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ROUTES } from "../../constants/routes";
+import { hrDepartmentsPath, ROUTES } from "../../constants/routes";
 import { useCommandBar } from "../../context/CommandBarContext";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useTranslation } from "../../i18n";
@@ -41,7 +41,7 @@ export function CommandBar() {
       {
         id: "nav-departments",
         label: t("command.navDepartments"),
-        route: ROUTES.departments,
+        route: hrDepartmentsPath,
         keywords: ["قسم", "department"],
         icon: Building2,
       },

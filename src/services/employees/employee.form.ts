@@ -4,6 +4,8 @@ import {
   getBirthDateIssue,
   normalizeBirthDateValue,
 } from "../../utils/employeeDates";
+import { getImageFileForUpload } from "../../utils/readImageFile";
+import { calendarDateToUtcIso } from "../../utils/syriaTime";
 import { toApiGender } from "./employee.mapper";
 
 /** Convert a data-URL to a File without relying on fetch(data:) quirks. */
@@ -34,15 +36,25 @@ const dataUrlToFile = (dataUrl: string, fileNameBase: string) => {
   return new File([bytes], `${fileNameBase}.${extension}`, { type: mime });
 };
 
-const appendImageIfDataUrl = async (
+const appendImageIfLocal = (
   formData: FormData,
   fieldNames: string[],
   value: string | undefined,
   fileNameBase: string,
 ) => {
-  if (!value?.startsWith("data:")) return;
+  if (!value) return;
+
+  if (value.startsWith("blob:")) {
+    const file = getImageFileForUpload(value);
+    if (!file) return;
+    for (const fieldName of fieldNames) {
+      formData.append(fieldName, file);
+    }
+    return;
+  }
+
+  if (!value.startsWith("data:")) return;
   const file = dataUrlToFile(value, fileNameBase);
-  // ASP.NET binders differ — send the documented nested name plus a flat alias.
   for (const fieldName of fieldNames) {
     formData.append(fieldName, file);
   }
@@ -74,6 +86,7 @@ export const buildEmployeeFormData = async (
 
   formData.append("WorkInfo.DepartmentId", data.departmentId || "");
   formData.append("WorkInfo.ManagerId", data.managerId || "");
+  formData.append("WorkInfo.WorkingScheduleId", data.workingScheduleId || "");
   formData.append("WorkInfo.ContractTypeId", data.contractTypeId || "");
   formData.append(
     "WorkInfo.WorkMobileNumber",
@@ -83,32 +96,32 @@ export const buildEmployeeFormData = async (
   formData.append("WorkInfo.Salary", String(data.salary ?? 0));
 
   if (data.joiningDate && data.contractEndDate) {
-    const from = new Date(data.joiningDate);
-    const to = new Date(data.contractEndDate);
-    if (!Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime())) {
-      const start = from.getTime() <= to.getTime() ? from : to;
-      const end = from.getTime() <= to.getTime() ? to : from;
-      formData.append("WorkInfo.ContractTimeRangeFrom", start.toISOString());
-      formData.append("WorkInfo.ContractTimeRangeTo", end.toISOString());
+    const from = calendarDateToUtcIso(data.joiningDate, false);
+    const to = calendarDateToUtcIso(data.contractEndDate, true);
+    if (from && to) {
+      const start = from <= to ? from : to;
+      const end = from <= to ? to : from;
+      formData.append("WorkInfo.ContractTimeRangeFrom", start);
+      formData.append("WorkInfo.ContractTimeRangeTo", end);
     }
   }
 
   formData.append("CitizenshipInfo.Nationality", data.nationality?.trim() ?? "");
   formData.append("CitizenshipInfo.IdentificationNo", data.idNumber?.trim() ?? "");
 
-  await appendImageIfDataUrl(
+  appendImageIfLocal(
     formData,
     ["PersonalInfo.ProfileImage", "ProfileImage"],
     data.avatar,
     "avatar",
   );
-  await appendImageIfDataUrl(
+  appendImageIfLocal(
     formData,
     ["CitizenshipInfo.IdCardFrontImage", "IdCardFrontImage"],
     data.idCardFrontImage,
     "id-front",
   );
-  await appendImageIfDataUrl(
+  appendImageIfLocal(
     formData,
     ["CitizenshipInfo.IdCardBackImage", "IdCardBackImage"],
     data.idCardBackImage,

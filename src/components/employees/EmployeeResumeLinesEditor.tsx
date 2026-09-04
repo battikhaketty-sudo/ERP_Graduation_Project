@@ -12,6 +12,7 @@ type EmployeeResumeLinesEditorProps = {
   lineTypes: ResumeLineTypeOption[];
   loading?: boolean;
   disabled?: boolean;
+  errors?: Record<string, string>;
 };
 
 export const createEmptyResumeLine = (
@@ -32,6 +33,7 @@ export function EmployeeResumeLinesEditor({
   lineTypes,
   loading = false,
   disabled = false,
+  errors = {},
 }: EmployeeResumeLinesEditorProps) {
   const { t } = useTranslation();
 
@@ -76,6 +78,7 @@ export function EmployeeResumeLinesEditor({
                 label={t("employees.detail.resumeLineFields.title")}
                 required
                 htmlFor={`resume-line-title-${index}`}
+                error={errors[`resumeLineTitle-${index}`]}
               >
                 <input
                   id={`resume-line-title-${index}`}
@@ -89,7 +92,11 @@ export function EmployeeResumeLinesEditor({
                 />
               </EmployeeField>
 
-              <EmployeeField label={t("employees.detail.resumeLineFields.type")} required>
+              <EmployeeField
+                label={t("employees.detail.resumeLineFields.type")}
+                required
+                error={errors[`resumeLineType-${index}`]}
+              >
                 <SearchableSelect
                   value={line.type ? String(line.type) : ""}
                   disabled={locked}
@@ -108,7 +115,11 @@ export function EmployeeResumeLinesEditor({
                 />
               </EmployeeField>
 
-              <EmployeeField label={t("employees.detail.resumeLineFields.fromDate")} required>
+              <EmployeeField
+                label={t("employees.detail.resumeLineFields.fromDate")}
+                required
+                error={errors[`resumeLineFrom-${index}`]}
+              >
                 <ManualDateInput
                   value={line.fromDate || ""}
                   disabled={locked}
@@ -117,7 +128,10 @@ export function EmployeeResumeLinesEditor({
                 />
               </EmployeeField>
 
-              <EmployeeField label={t("employees.detail.resumeLineFields.toDate")}>
+              <EmployeeField
+                label={t("employees.detail.resumeLineFields.toDate")}
+                error={errors[`resumeLineTo-${index}`]}
+              >
                 <ManualDateInput
                   value={line.toDate || ""}
                   disabled={locked}
