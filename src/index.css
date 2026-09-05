@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 :root {
   color-scheme: light;
   --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
@@ -57,11 +58,9 @@ html[lang="en"] {
 @layer base {
   html {
     @apply antialiased;
-    direction: rtl;
   }
 
   body {
-
     @apply bg-hr-bg font-sans text-hr-text transition-colors duration-200;
   }
 }
@@ -76,11 +75,11 @@ html[lang="en"] {
   }
 
   .hr-modal {
-    @apply flex max-h-[92vh] w-full flex-col overflow-hidden rounded-2xl bg-hr-surface shadow-card;
+    @apply flex w-full flex-col rounded-2xl bg-hr-surface shadow-card;
   }
 
   .hr-modal-body {
-    @apply flex-1 overflow-y-auto px-6 py-5 text-start;
+    @apply overflow-visible px-6 py-5 text-start;
   }
 
   .hr-modal-header {
@@ -116,7 +115,7 @@ html[lang="en"] {
   }
 
   .hr-alert-error {
-    @apply rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300;
+    @apply whitespace-pre-wrap rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300;
   }
 
   .hr-alert-success {
@@ -223,4 +222,3 @@ html[lang="en"] {
     @apply transition-colors duration-200;
   }
 }
-

@@ -1,3 +1,5 @@
+import { calendarDateToUtcIso } from "./syriaTime";
+
 /** Manual date entry helpers — prefers day-first (DDMMYYYY / DD/MM/YYYY). */
 
 const pad = (value: number) => String(value).padStart(2, "0");
@@ -8,6 +10,14 @@ export const formatDateDisplay = (iso?: string | null): string => {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
   if (!match) return "";
   return `${match[3]}/${match[2]}/${match[1]}`;
+};
+
+export const expandTwoDigitYear = (yy: number, now = new Date()) => {
+  const current = now.getFullYear();
+  const century = Math.floor(current / 100) * 100;
+  let year = century + yy;
+  if (year > current + 5) year -= 100;
+  return year;
 };
 
 export const toIsoDate = (year: number, month: number, day: number): string | null => {
@@ -26,15 +36,6 @@ export const toIsoDate = (year: number, month: number, day: number): string | nu
     return null;
   }
   return `${year}-${pad(month)}-${pad(day)}`;
-};
-
-const expandTwoDigitYear = (yy: number, now = new Date()) => {
-  const current = now.getFullYear();
-  const century = Math.floor(current / 100) * 100;
-  let year = century + yy;
-  // If more than 5 years in the future, treat as previous century.
-  if (year > current + 5) year -= 100;
-  return year;
 };
 
 /**
@@ -100,15 +101,10 @@ export const isIsoInRange = (
   return true;
 };
 
-/** YYYY-MM-DD as the last millisecond of that local calendar day, in UTC. */
+/** YYYY-MM-DD as the last millisecond of that calendar day, in UTC. */
 export const toEndOfLocalDayIso = (isoDate: string): string | null => {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate.trim());
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const end = new Date(year, month - 1, day, 23, 59, 59, 999);
-  return Number.isNaN(end.getTime()) ? null : end.toISOString();
+  const iso = calendarDateToUtcIso(isoDate, true);
+  return iso || null;
 };
 
 export const isEndOfLocalDayPast = (isoDate: string, now = new Date()) => {

@@ -57,7 +57,8 @@ src/
 │   └── projects/     # Project & invitation management
 ├── pages/            # Route-level pages
 ├── layouts/          # App shell
-├── context/          # React context (auth)
+├── context/          # UI context (toast, preferences, dialogs)
+├── auth/             # Session loaders and route guards
 └── utils/            # API response helpers
 ```
 
@@ -68,11 +69,11 @@ src/
 - **Forms with files**: Employee create/update uses `FormData`; the Axios interceptor removes `Content-Type` so the browser sets the multipart boundary.
 - **Delete employee**: Backend exposes `POST /employees/{id}/archive` (no HTTP DELETE).
 - **Reference data**: Modals use `useReferenceOptions` to load departments, contract types, and/or employees on demand.
-- **Project management**: Core module at `/projects` with projects, invitations, tasks, and sections. Data persists in `localStorage` until backend APIs are available.
+- **Project management**: `/projects` uses the live REST API for projects, invitations, tasks, and sections.
 
 ## Authentication
 
-Login stores JWT in `localStorage`. Protected routes require an active session (`ProtectedRoute` + `AuthContext`).
+Login stores the JWT in `localStorage`. Route loaders in `src/auth` require an active session before rendering protected pages.
 
 ## API Documentation
 

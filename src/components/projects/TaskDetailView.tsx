@@ -8,6 +8,7 @@ import {
 import { getProjectTaskById } from "../../services/projects";
 import type { Project, ProjectTask, ProjectTaskDetail } from "../../types/project";
 import { getThrownErrorMessage } from "../../utils/apiResponse";
+import { formatSyriaDateTime } from "../../utils/syriaTime";
 import { DetailBackButton } from "../ui/DetailBackButton";
 import { StatusBanner } from "../ui/StatusBanner";
 import { cardSurfaceClass, subtlePanelClass } from "../ui/formStyles";
@@ -25,7 +26,7 @@ type TaskDetailViewProps = {
 };
 
 const dependencyTypeKey = (type: string) =>
-  `projects.taskDetail.dependencyTypes.${type}` as any;
+  `projects.taskDetail.dependencyTypes.${type}` as const;
 
 export function TaskDetailView({
   project,
@@ -369,7 +370,7 @@ export function TaskDetailView({
                     </td>
                     <td className="px-3 py-3 text-center">
                       {transition.createdAtUtc
-                        ? transition.createdAtUtc.slice(0, 10)
+                        ? formatSyriaDateTime(transition.createdAtUtc)
                         : t("common.dash")}
                     </td>
                   </tr>

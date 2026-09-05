@@ -5,17 +5,13 @@ import { useProjectLabels } from "../../hooks/useProjectLabels";
 import { useModalAutoFocus } from "../../hooks/useModalAutoFocus";
 import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { useTranslation } from "../../i18n";
-import {
-  canAdvanceProjectStatus,
-  getAllProjectMembers,
-  PROJECT_STATUS_ORDER,
-  projectStatusRank,
-} from "../../services/projects";
+import { PROJECT_STATUS_ORDER } from "../../services/projects";
 import type {
   Project,
   ProjectFormPayload,
   ProjectStatus,
 } from "../../types/project";
+import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { mapEmployeeOptions } from "../../utils/selectOptions";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { ManualDateInput } from "../ui/ManualDateInput";
@@ -64,7 +60,6 @@ export function AddProjectModal({
     endDate: "",
     status: "not_started" as ProjectStatus,
   });
-  const [membersCount, setMembersCount] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstFieldRef = useModalAutoFocus<HTMLInputElement>(isOpen);
@@ -81,60 +76,9 @@ export function AddProjectModal({
       endDate: project?.endDate ?? "",
       status: project?.status ?? "not_started",
     });
-    setMembersCount(project?.membersCount ?? 0);
-  }, [isOpen, project]);
-
-  useEffect(() => {
-    if (!isOpen || !project?.id) return;
-    let cancelled = false;
-    void getAllProjectMembers(project.id)
-      .then((members) => {
-        if (!cancelled) setMembersCount(members.length);
-      })
-      .catch(() => {
-        if (!cancelled) setMembersCount(project.membersCount ?? 0);
-      });
-    return () => {
-      cancelled = true;
-    };
   }, [isOpen, project]);
 
   if (!isOpen) return null;
-
-  const baselineStatus = project?.status ?? "not_started";
-
-  const isStatusSelectable = (status: ProjectStatus) => {
-    if (!isEditing) return status === "not_started";
-    return canAdvanceProjectStatus(baselineStatus, status);
-  };
-
-  const handleStatusSelect = (status: ProjectStatus) => {
-    if (!isEditing) {
-      if (status !== "not_started") {
-        setError(t("projects.modals.addProject.errors.statusLockedOnCreate"));
-        return;
-      }
-      setForm((prev) => ({ ...prev, status }));
-      setError(null);
-      return;
-    }
-
-    if (!canAdvanceProjectStatus(baselineStatus, status)) {
-      setError(t("projects.modals.addProject.errors.statusNoRegression"));
-      return;
-    }
-
-    if (
-      projectStatusRank(status) > projectStatusRank("not_started") &&
-      membersCount <= 0
-    ) {
-      setError(t("projects.modals.addProject.errors.statusNeedsMembers"));
-      return;
-    }
-
-    setForm((prev) => ({ ...prev, status }));
-    setError(null);
-  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -144,18 +88,6 @@ export function AddProjectModal({
     }
     if (!form.managerId) {
       setError(t("projects.modals.addProject.errors.managerRequired"));
-      return;
-    }
-    if (isEditing && !canAdvanceProjectStatus(baselineStatus, form.status)) {
-      setError(t("projects.modals.addProject.errors.statusNoRegression"));
-      return;
-    }
-    if (
-      isEditing &&
-      projectStatusRank(form.status) > projectStatusRank("not_started") &&
-      membersCount <= 0
-    ) {
-      setError(t("projects.modals.addProject.errors.statusNeedsMembers"));
       return;
     }
 
@@ -176,9 +108,7 @@ export function AddProjectModal({
       onClose();
     } catch (err) {
       setError(
-        err && typeof err === "object" && "message" in err
-          ? String(err.message)
-          : t("projects.modals.addProject.errors.saveFailed"),
+        getThrownErrorMessage(err, t("projects.modals.addProject.errors.saveFailed")),
       );
     } finally {
       setSaving(false);
@@ -315,28 +245,22 @@ export function AddProjectModal({
             <label className="mb-2 block text-sm font-bold text-hr-text">
               {t("projects.modals.addProject.fields.status")}
             </label>
-            <p className="mb-3 text-xs text-hr-muted">
-              {isEditing
-                ? t("projects.modals.addProject.statusForwardHint")
-                : t("projects.modals.addProject.statusCreateHint")}
-            </p>
             <div className="grid grid-cols-3 gap-2">
               {PROJECT_STATUS_ORDER.map((status) => {
-                const selectable = isStatusSelectable(status);
                 const selected = form.status === status;
                 return (
                   <button
                     key={status}
                     type="button"
-                    aria-disabled={!selectable}
-                    onClick={() => handleStatusSelect(status)}
+                    onClick={() => {
+                      setForm((prev) => ({ ...prev, status }));
+                      setError(null);
+                    }}
                     className={[
                       "rounded-xl border px-3 py-3 text-sm font-medium transition",
                       selected
                         ? "border-hr-primary bg-hr-nav-active text-hr-primary"
-                        : selectable
-                          ? "border-hr-border bg-hr-surface text-hr-muted hover:border-hr-primary/40"
-                          : "cursor-not-allowed border-hr-border/60 bg-hr-hover/40 text-hr-muted/50",
+                        : "border-hr-border bg-hr-surface text-hr-muted hover:border-hr-primary/40",
                     ].join(" ")}
                   >
                     {projectStatusLabel(status)}

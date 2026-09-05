@@ -10,6 +10,7 @@ import {
 export type EnumOption = {
   id: number;
   name: string;
+  apiName?: string;
 };
 
 export type WorkingSchedule = {
@@ -44,10 +45,129 @@ export type WorkingPeriodInput = {
   timeTo: string;
 };
 
-const normalizeEnum = (item: Record<string, unknown>): EnumOption => ({
-  id: Number(item.id ?? 0),
-  name: String(item.name ?? ""),
-});
+/** .NET DayOfWeek: Sunday=0 … Saturday=6. GET periods send these as strings. */
+const DAY_ALIAS_TO_ID: Record<string, number> = {
+  sunday: 0,
+  sun: 0,
+  الأحد: 0,
+  "0": 0,
+  monday: 1,
+  mon: 1,
+  الإثنين: 1,
+  الاثنين: 1,
+  "1": 1,
+  tuesday: 2,
+  tue: 2,
+  الثلاثاء: 2,
+  "2": 2,
+  wednesday: 3,
+  wed: 3,
+  الأربعاء: 3,
+  "3": 3,
+  thursday: 4,
+  thu: 4,
+  الخميس: 4,
+  "4": 4,
+  friday: 5,
+  fri: 5,
+  الجمعة: 5,
+  "5": 5,
+  saturday: 6,
+  sat: 6,
+  السبت: 6,
+  "6": 6,
+};
+
+const PERIOD_ALIAS_TO_ID: Record<string, number> = {
+  working: 1,
+  work: 1,
+  عمل: 1,
+  "1": 1,
+  break: 2,
+  راحة: 2,
+  "2": 2,
+};
+
+const readEnumSource = (value: unknown): unknown => {
+  if (Array.isArray(value)) return readEnumSource(value[0]);
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    return obj.id ?? obj.Id ?? obj.value ?? obj.Value ?? obj.name ?? obj.Name;
+  }
+  return value;
+};
+
+const readAliasKey = (value: unknown) => String(value ?? "").trim().toLowerCase();
+
+const isNumericEnumId = (value: unknown) => {
+  if (typeof value === "number") return Number.isInteger(value);
+  return typeof value === "string" && /^-?\d+$/.test(value.trim());
+};
+
+export const resolveDayOfWeek = (value: unknown): number => {
+  const source = readEnumSource(value);
+  if (typeof source === "number" && Number.isInteger(source) && source >= 0 && source <= 6) {
+    return source;
+  }
+  if (isNumericEnumId(source)) {
+    const numeric = Number(source);
+    if (numeric >= 0 && numeric <= 6) return numeric;
+  }
+  return DAY_ALIAS_TO_ID[readAliasKey(source)] ?? 0;
+};
+
+export const resolvePeriodType = (value: unknown, fallback = 1): number => {
+  const source = readEnumSource(value);
+  if (typeof source === "number" && (source === 1 || source === 2)) {
+    return source;
+  }
+  if (isNumericEnumId(source)) {
+    const numeric = Number(source);
+    if (numeric === 1 || numeric === 2) return numeric;
+  }
+  return PERIOD_ALIAS_TO_ID[readAliasKey(source)] ?? fallback;
+};
+
+const FALLBACK_DAYS: EnumOption[] = [
+  { id: 0, name: "Sunday", apiName: "Sunday" },
+  { id: 1, name: "Monday", apiName: "Monday" },
+  { id: 2, name: "Tuesday", apiName: "Tuesday" },
+  { id: 3, name: "Wednesday", apiName: "Wednesday" },
+  { id: 4, name: "Thursday", apiName: "Thursday" },
+  { id: 5, name: "Friday", apiName: "Friday" },
+  { id: 6, name: "Saturday", apiName: "Saturday" },
+];
+
+const FALLBACK_PERIODS: EnumOption[] = [
+  { id: 1, name: "Working", apiName: "Working" },
+  { id: 2, name: "Break", apiName: "Break" },
+];
+
+const uniqueEnumOptions = (options: EnumOption[]) => {
+  const seen = new Map<number, EnumOption>();
+  for (const option of options) {
+    if (!Number.isFinite(option.id) || seen.has(option.id)) continue;
+    seen.set(option.id, option);
+  }
+  return [...seen.values()].sort((left, right) => left.id - right.id);
+};
+
+const normalizeEnum = (item: Record<string, unknown>): EnumOption => {
+  const apiName = String(item.name ?? item.Name ?? item.label ?? item.Label ?? "");
+  const rawId = readEnumSource(item.id ?? item.Id ?? item.value ?? item.Value ?? apiName);
+  const fromName =
+    DAY_ALIAS_TO_ID[readAliasKey(apiName)] ??
+    PERIOD_ALIAS_TO_ID[readAliasKey(apiName)] ??
+    DAY_ALIAS_TO_ID[readAliasKey(rawId)] ??
+    PERIOD_ALIAS_TO_ID[readAliasKey(rawId)];
+  const id = isNumericEnumId(rawId) ? Number(rawId) : (fromName ?? Number.NaN);
+
+  return {
+    id,
+    name: apiName || String(rawId ?? ""),
+    apiName: apiName || String(rawId ?? ""),
+  };
+};
 
 const normalizeSchedule = (item: Record<string, unknown>): WorkingSchedule => ({
   id: String(item.id ?? crypto.randomUUID()),
@@ -58,16 +178,22 @@ const normalizeSchedule = (item: Record<string, unknown>): WorkingSchedule => ({
   averageWorkingHoursPerDay: Number(item.averageWorkingHoursPerDay ?? 0),
 });
 
-const normalizePeriod = (item: Record<string, unknown>): WorkingPeriod => ({
-  id: String(item.id ?? ""),
-  name: String(item.name ?? ""),
-  day: Number(item.day ?? 0),
-  dayName: String(item.day ?? item.dayName ?? ""),
-  period: Number(item.period ?? 0),
-  periodName: String(item.period ?? item.periodName ?? ""),
-  timeFrom: String(item.timeFrom ?? ""),
-  timeTo: String(item.timeTo ?? ""),
-});
+const normalizePeriod = (item: Record<string, unknown>): WorkingPeriod => {
+  const rawDay = item.day ?? item.Day ?? item.dayName ?? item.DayName;
+  const rawPeriod = item.period ?? item.Period ?? item.periodName ?? item.PeriodName;
+  const day = resolveDayOfWeek(rawDay);
+  const period = resolvePeriodType(rawPeriod);
+  return {
+    id: String(item.id ?? item.Id ?? ""),
+    name: String(item.name ?? item.Name ?? ""),
+    day,
+    dayName: String(readEnumSource(rawDay) ?? ""),
+    period,
+    periodName: String(readEnumSource(rawPeriod) ?? ""),
+    timeFrom: String(item.timeFrom ?? item.TimeFrom ?? ""),
+    timeTo: String(item.timeTo ?? item.TimeTo ?? ""),
+  };
+};
 
 export const getWorkingSchedules = async (
   filters: {
@@ -160,24 +286,50 @@ export const deleteWorkingPeriod = async (
 };
 
 const unwrapEnumList = (payload: unknown) => {
+  const fromArray = (rows: unknown[]) =>
+    rows
+      .map((item) => normalizeEnum(item as Record<string, unknown>))
+      .filter((item) => Number.isFinite(item.id));
+
   if (Array.isArray(payload)) {
-    return payload.map((item) =>
-      normalizeEnum(item as Record<string, unknown>),
-    );
+    return fromArray(payload);
   }
-  const data = unwrapData<Record<string, unknown>[]>(payload);
-  if (!Array.isArray(data)) return [];
-  return data.map((item) => normalizeEnum(item));
+  const data = unwrapData<unknown>(payload);
+  if (Array.isArray(data)) {
+    return fromArray(data);
+  }
+  if (data && typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    for (const key of ["page", "Page", "items", "Items"]) {
+      const rows = obj[key];
+      if (Array.isArray(rows)) return fromArray(rows);
+    }
+  }
+  return [];
 };
 
 export const getPeriodTypes = async () => {
-  const res = await api.get("/constants/period-types");
-  return unwrapEnumList(res.data);
+  try {
+    const res = await api.get("/constants/period-types");
+    const periods = uniqueEnumOptions(unwrapEnumList(res.data)).filter(
+      (item) => item.id === 1 || item.id === 2,
+    );
+    return periods.length === 2 ? periods : FALLBACK_PERIODS;
+  } catch {
+    return FALLBACK_PERIODS;
+  }
 };
 
 export const getDaysOfWeek = async () => {
-  const res = await api.get("/constants/days-of-week");
-  return unwrapEnumList(res.data);
+  try {
+    const res = await api.get("/constants/days-of-week");
+    const days = uniqueEnumOptions(unwrapEnumList(res.data)).filter(
+      (item) => item.id >= 0 && item.id <= 6,
+    );
+    return days.length === 7 ? days : FALLBACK_DAYS;
+  } catch {
+    return FALLBACK_DAYS;
+  }
 };
 
 export const apiTimeToLabel = (value: string) => {

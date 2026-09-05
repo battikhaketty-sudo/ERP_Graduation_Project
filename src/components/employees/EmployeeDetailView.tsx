@@ -1,14 +1,18 @@
-import { Loader, Upload, UserRound } from "lucide-react";
+import { Loader, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePreferences } from "../../context/PreferencesContext";
 import { useTranslation } from "../../i18n";
 import { DetailBackButton } from "../ui/DetailBackButton";
 import type { Employee, EmployeeResumeLine, EmployeeResumeSkill } from "../../types/employee";
-import { getEmployeeById, updateEmployee } from "../../services/employeeApi";
+import { getEmployeeById, getEmployees, updateEmployee } from "../../services/employeeApi";
 import { getAllRoles } from "../../services/roles";
 import { getUserById, updateUserRoles } from "../../services/users";
+import { REFERENCE_DATA_LIMIT } from "../../constants/defaults";
 import { getContractTypes, getDepartments } from "../../services/hrApi";
+import { getWorkingSchedules } from "../../services/workingScheduleApi";
+import { ROUTES } from "../../constants/routes";
 import {
+  findResumeIdByEmployee,
   getResumeLineTypes,
   syncEmployeeResume,
   type ResumeLineTypeOption,
@@ -29,13 +33,15 @@ import {
   afterValidationPaint,
   focusAndScrollToFirstError,
 } from "../../utils/formUx";
-import { mapNamedOptions } from "../../utils/selectOptions";
+import { mapEmployeeOptions, mapNamedOptions } from "../../utils/selectOptions";
+import { readImageFile, revokeImagePreview } from "../../utils/readImageFile";
 import { departmentPath, employeePath } from "../../constants/entityPaths";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
 import { CopyableIdCell } from "../ui/CopyableIdCell";
 import { EntityLink } from "../ui/EntityLink";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { ManualDateInput } from "../ui/ManualDateInput";
+import { ImageFileButton } from "../ui/ImageFileButton";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { EmployeeIdImageField } from "./EmployeeIdImageField";
 import { EmployeeResumeLinesEditor } from "./EmployeeResumeLinesEditor";
@@ -63,7 +69,8 @@ import {
 type EmployeeDetailViewProps = {
   employee: Employee;
   onBack: () => void;
-  onToggleArchive: (employee: Employee) => void;
+  onArchive: (employee: Employee) => void;
+  onUnarchive: (employee: Employee) => void;
   onUpdate: (employee: Employee) => void;
 };
 
@@ -81,7 +88,8 @@ const accountUserId = (employee: Pick<Employee, "id" | "userId">) =>
 export function EmployeeDetailView({
   employee,
   onBack,
-  onToggleArchive,
+  onArchive,
+  onUnarchive,
   onUpdate,
 }: EmployeeDetailViewProps) {
   const { t } = useTranslation();
@@ -103,7 +111,13 @@ export function EmployeeDetailView({
   const [departmentOptions, setDepartmentOptions] = useState<
     Array<{ id: string; name: string; managerId: string; managerName?: string }>
   >([]);
+  const [employeeOptions, setEmployeeOptions] = useState<
+    Array<{ id: string; name: string; email?: string; userId?: string }>
+  >([]);
   const [contractTypeOptions, setContractTypeOptions] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [scheduleOptions, setScheduleOptions] = useState<
     Array<{ id: string; name: string }>
   >([]);
   const [availableRoles, setAvailableRoles] = useState<AppRole[]>([]);
@@ -139,10 +153,12 @@ export function EmployeeDetailView({
       getEmployeeById(employee.id),
       getDepartments({ page: 1, limit: 100 }),
       getContractTypes(1, 100),
+      getEmployees(1, REFERENCE_DATA_LIMIT),
+      getWorkingSchedules({ page: 1, limit: REFERENCE_DATA_LIMIT }),
       getAllRoles().catch(() => [] as AppRole[]),
       getUserById(userId).catch(() => null),
     ])
-      .then(([detail, departmentsResult, contractTypes, roles, userAccount]) => {
+      .then(([detail, departmentsResult, contractTypes, employeesResult, schedulesResult, roles, userAccount]) => {
         if (cancelled) return;
         setEditData((prev) => {
           // Keep an unsaved local photo preview if the reload has no server image yet.
@@ -152,7 +168,6 @@ export function EmployeeDetailView({
               : "";
           return {
             ...detail,
-            isArchived: employee.isArchived ?? detail.isArchived,
             userAccount: userAccount ?? undefined,
             avatar: detail.avatar || pendingLocalPhoto || "",
           };
@@ -182,12 +197,34 @@ export function EmployeeDetailView({
             managerName: department.managerName,
           })),
         );
+        setEmployeeOptions(
+          (employeesResult.data || []).map((item) => ({
+            id: item.id,
+            name: item.name,
+            email: item.email,
+            userId: item.userId,
+          })),
+        );
         setContractTypeOptions(
           contractTypes.map((contractType) => ({
             id: contractType.id,
             name: contractType.name,
           })),
         );
+        const loadedSchedules = schedulesResult.records.map((schedule) => ({
+          id: schedule.id,
+          name: schedule.name,
+        }));
+        if (
+          detail.workingScheduleId &&
+          !loadedSchedules.some((item) => item.id === detail.workingScheduleId)
+        ) {
+          loadedSchedules.unshift({
+            id: detail.workingScheduleId,
+            name: detail.workingScheduleName || detail.workingScheduleId,
+          });
+        }
+        setScheduleOptions(loadedSchedules);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -306,13 +343,22 @@ export function EmployeeDetailView({
     setFieldErrors((prev) => ({ ...prev, birthDate: message || "" }));
   };
 
+  const tabForField = (key: string): TabType => {
+    if (key.startsWith("resume")) return "resume";
+    if (key === "workPhone" || key === "salary" || key === "wage") return "work";
+    if (key === "idNumber") return "citizenship";
+    return "personal";
+  };
+
   const validateBeforeSave = () => {
     const nextErrors: Record<string, string> = {};
+    const phone = editData.phone?.trim();
+    const workPhone = editData.workPhone?.trim();
 
-    if (editData.phone?.trim() && !isValidPhone(editData.phone)) {
+    if (phone && phone !== "-" && !isValidPhone(phone)) {
       nextErrors.phone = t("employees.errors.phoneInvalid");
     }
-    if (editData.workPhone?.trim() && !isValidPhone(editData.workPhone)) {
+    if (workPhone && workPhone !== "-" && !isValidPhone(workPhone)) {
       nextErrors.workPhone = t("employees.errors.phoneInvalid");
     }
     if (!isValidDecimal(editData.salary)) {
@@ -329,7 +375,6 @@ export function EmployeeDetailView({
     );
     if (birthMessage) {
       nextErrors.birthDate = birthMessage;
-      setActiveTab("personal");
     }
 
     const incompleteSkill = skillRows.some(
@@ -338,8 +383,7 @@ export function EmployeeDetailView({
         !isEmployeeSkillRowComplete(row),
     );
     if (incompleteSkill) {
-      nextErrors.resumeSkills = t("employees.modal.skills.selectCategoryFirst");
-      setActiveTab("resume");
+      nextErrors.resumeSkills = t("employees.modal.skills.incompleteRow");
     }
 
     const hasDuplicateSkill = skillRows.some((row, index) => {
@@ -353,7 +397,6 @@ export function EmployeeDetailView({
     });
     if (hasDuplicateSkill) {
       nextErrors.resumeSkills = t("employees.modal.skills.duplicateSkill");
-      setActiveTab("resume");
     }
 
     for (const [index, line] of (editData.resumeLines ?? []).entries()) {
@@ -379,28 +422,15 @@ export function EmployeeDetailView({
         );
       }
     }
-    if (
-      Object.keys(nextErrors).some((key) => key.startsWith("resumeLine")) ||
-      nextErrors.resumeSkills
-    ) {
-      setActiveTab("resume");
-    }
-
-    const resumeTouched =
-      (editData.resumeLines?.length ?? 0) > 0 ||
-      draftResumeSkills.length > 0 ||
-      resumeBaselineRef.current.lines.length > 0 ||
-      resumeBaselineRef.current.skills.length > 0;
-    if (resumeTouched && !editData.resumeId) {
-      nextErrors.resumeId = t("employees.detail.resumeMissingId");
-      setActiveTab("resume");
-    }
-
     setFieldErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
+    const firstErrorKey = Object.keys(nextErrors)[0];
+    if (firstErrorKey) {
+      setActiveTab(tabForField(firstErrorKey));
+      setError(nextErrors[firstErrorKey] || t("employees.errors.fixHighlighted"));
       afterValidationPaint(() => focusAndScrollToFirstError());
       return false;
     }
+    setError(null);
     return true;
   };
 
@@ -448,20 +478,40 @@ export function EmployeeDetailView({
         resumeLines: resumeDraft.lines,
       });
 
-      if (editData.resumeId) {
+      const needsResumeSync =
+        resumeDraft.lines.length > 0 ||
+        resumeDraft.skills.length > 0 ||
+        resumeBaselineRef.current.lines.length > 0 ||
+        resumeBaselineRef.current.skills.length > 0;
+      let resumeId = editData.resumeId || updated.resumeId;
+      if (needsResumeSync && !resumeId) {
+        resumeId = await findResumeIdByEmployee(editData.id, editData.name);
+      }
+      if (needsResumeSync && !resumeId) {
+        throw { message: t("employees.detail.resumeMissingId") };
+      }
+      if (resumeId && needsResumeSync) {
         await syncEmployeeResume(
-          editData.resumeId,
+          resumeId,
           resumeBaselineRef.current,
           resumeDraft,
         );
       }
+      if (resumeId && resumeId !== editData.resumeId) {
+        setEditData((prev) => ({ ...prev, resumeId }));
+      }
 
-      const refreshed = await getEmployeeById(editData.id).catch(() => updated);
+      let refreshed = await getEmployeeById(editData.id).catch(() => updated);
+      if (!refreshed.resumeSkills?.length && resumeDraft.skills.length) {
+        refreshed = { ...refreshed, resumeSkills: resumeDraft.skills };
+      }
+      if (!refreshed.resumeLines?.length && resumeDraft.lines.length) {
+        refreshed = { ...refreshed, resumeLines: resumeDraft.lines };
+      }
       resumeBaselineRef.current = {
         lines: refreshed.resumeLines ?? [],
         skills: refreshed.resumeSkills ?? [],
       };
-      setResumeHydrationKey((key) => key + 1);
 
       let userAccount = editData.userAccount;
       try {
@@ -498,6 +548,7 @@ export function EmployeeDetailView({
         avatar: keptLocalPhoto,
       };
       setEditData(merged);
+      setResumeHydrationKey((key) => key + 1);
       if (rolesChanged) {
         setSelectedRoleIds(nextRoleIds);
         setInitialRoleIds(nextRoleIds);
@@ -548,9 +599,41 @@ export function EmployeeDetailView({
     );
   };
 
-  const selectedDepartment = departmentOptions.find(
-    (department) => department.id === editData.departmentId,
-  );
+  const managerChoices = useMemo(() => {
+    const selfIds = new Set(
+      [editData.id, editData.userId].map((value) => value?.trim()).filter(Boolean) as string[],
+    );
+    const choices = employeeOptions.filter(
+      (item) => !selfIds.has(item.id) && !(item.userId && selfIds.has(item.userId)),
+    );
+    const currentId = editData.managerId?.trim();
+    if (
+      currentId &&
+      !choices.some((item) => item.id === currentId || item.userId === currentId)
+    ) {
+      choices.unshift({
+        id: currentId,
+        name: editData.managerName || currentId,
+      });
+    }
+    return choices;
+  }, [
+    editData.id,
+    editData.managerId,
+    editData.managerName,
+    editData.userId,
+    employeeOptions,
+  ]);
+
+  const selectedManagerId = useMemo(() => {
+    const currentId = editData.managerId?.trim() ?? "";
+    if (!currentId) return "";
+    return (
+      managerChoices.find(
+        (item) => item.id === currentId || item.userId === currentId,
+      )?.id || currentId
+    );
+  }, [editData.managerId, managerChoices]);
 
   return (
     <main
@@ -591,7 +674,7 @@ export function EmployeeDetailView({
         )}
 
         <div className="px-5 pt-4">
-          <div className={EMPLOYEE_TABS_CLASS.bar}>
+          <div className={`${EMPLOYEE_TABS_CLASS.bar} shrink-0`}>
             {tabs.map((tab) => (
               <button
                 key={tab.value}
@@ -696,8 +779,6 @@ export function EmployeeDetailView({
                           ...prev,
                           departmentId: value,
                           department: department?.name,
-                          managerId: department?.managerId,
-                          managerName: department?.managerName,
                         }));
                       }}
                       options={mapNamedOptions(departmentOptions)}
@@ -712,18 +793,59 @@ export function EmployeeDetailView({
                       </EntityLink>
                     ) : null}
                   </EmployeeField>
-                  <EmployeeField label={t("employees.detail.fields.manager")}>
-                    <div className={`${readOnlyClass} flex items-center`}>
+                  <EmployeeField
+                    label={t("employees.detail.fields.manager")}
+                    hint={t("employees.detail.fields.managerHint")}
+                  >
+                    <SearchableSelect
+                      value={selectedManagerId}
+                      onChange={(value) => {
+                        const manager = managerChoices.find((item) => item.id === value);
+                        setEditData((prev) => ({
+                          ...prev,
+                          managerId: value,
+                          managerName: manager?.name,
+                        }));
+                      }}
+                      options={mapEmployeeOptions(managerChoices)}
+                      placeholder={t("employees.detail.placeholders.selectManager")}
+                    />
+                    {selectedManagerId ? (
                       <EntityLink
-                        to={employeePath(
-                          selectedDepartment?.managerId || editData.managerId,
-                        )}
+                        to={employeePath(selectedManagerId)}
+                        className="mt-1 inline-block text-xs"
                       >
-                        {selectedDepartment?.managerName ||
-                          editData.managerName ||
-                          t("common.dash")}
+                        {t("common.view")}
                       </EntityLink>
-                    </div>
+                    ) : null}
+                  </EmployeeField>
+                  <EmployeeField
+                    label={t("employees.detail.fields.workSchedule")}
+                    hint={t("employees.detail.fields.workScheduleHint")}
+                  >
+                    <SearchableSelect
+                      value={editData.workingScheduleId || ""}
+                      onChange={(value) => {
+                        const schedule = scheduleOptions.find(
+                          (item) => item.id === value,
+                        );
+                        setEditData((prev) => ({
+                          ...prev,
+                          workingScheduleId: value,
+                          workingScheduleName: schedule?.name,
+                        }));
+                      }}
+                      options={mapNamedOptions(scheduleOptions)}
+                      placeholder={t("employees.detail.placeholders.selectWorkSchedule")}
+                    />
+                    {editData.workingScheduleId ? (
+                      <EntityLink
+                        to={`${ROUTES.hr}?schedule=${encodeURIComponent(editData.workingScheduleId)}`}
+                        className="mt-1 inline-block text-xs"
+                      >
+                        {t("common.view")}
+                      </EntityLink>
+                    ) : null}
                   </EmployeeField>
                   <EmployeeField label={t("employees.detail.fields.contractType")} hint={t("employees.detail.fields.contractTypeHint")}>
                     <SearchableSelect
@@ -887,7 +1009,8 @@ export function EmployeeDetailView({
                       lines={editData.resumeLines ?? []}
                       lineTypes={lineTypes}
                       loading={lineTypesLoading}
-                      disabled={saving || !editData.resumeId}
+                      disabled={saving}
+                      errors={fieldErrors}
                       onChange={(lines) =>
                         setEditData((prev) => ({ ...prev, resumeLines: lines }))
                       }
@@ -907,7 +1030,7 @@ export function EmployeeDetailView({
                       skills={skillRows}
                       onChange={setSkillRows}
                       skillGroups={skillGroups}
-                      loading={skillsLoading || saving || !editData.resumeId}
+                      loading={skillsLoading || saving}
                       error={skillsError}
                     />
                   </div>
@@ -927,9 +1050,9 @@ export function EmployeeDetailView({
                   className="h-[180px] w-[170px] rounded-2xl border border-hr-border object-cover"
                   onError={(event) => {
                     const current = editData.avatar || "";
-                    // Never wipe a local preview the user just chose.
-                    if (current.startsWith("data:")) return;
-                    // If a remote URL fails, fall back to initials only.
+                    if (current.startsWith("data:") || current.startsWith("blob:")) {
+                      return;
+                    }
                     (event.currentTarget as HTMLImageElement).style.display = "none";
                     setEditData((prev) =>
                       prev.avatar === current ? { ...prev, avatar: "" } : prev,
@@ -944,47 +1067,30 @@ export function EmployeeDetailView({
                   className="h-[180px] w-[170px] rounded-2xl border border-hr-border object-cover text-4xl"
                 />
               )}
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-hr-border bg-hr-surface px-4 py-2 text-sm font-medium text-hr-text transition hover:border-hr-primary">
-                <Upload className="size-4" />
-                {t("employees.detail.changePhoto")}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  className="sr-only"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    if (!file.type.startsWith("image/")) {
-                      setError(t("employees.errors.photoInvalid"));
-                      event.target.value = "";
-                      return;
-                    }
-                    if (file.size > 5 * 1024 * 1024) {
-                      setError(t("employees.errors.photoTooLarge"));
-                      event.target.value = "";
+              <ImageFileButton
+                label={t("employees.detail.changePhoto")}
+                onFile={(file) => {
+                  void (async () => {
+                    const result = await readImageFile(file);
+                    if (!result.ok) {
+                      setError(
+                        result.error === "tooLarge"
+                          ? t("employees.errors.photoTooLarge")
+                          : t("employees.errors.photoInvalid"),
+                      );
                       return;
                     }
                     setError(null);
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      const result = typeof reader.result === "string" ? reader.result : "";
-                      if (!result) {
-                        setError(t("employees.errors.photoInvalid"));
-                        return;
-                      }
-                      setEditData((prev) => ({
+                    setEditData((prev) => {
+                      revokeImagePreview(prev.avatar);
+                      return {
                         ...prev,
-                        avatar: result,
-                      }));
-                    };
-                    reader.onerror = () => {
-                      setError(t("employees.errors.photoInvalid"));
-                    };
-                    reader.readAsDataURL(file);
-                    event.target.value = "";
-                  }}
-                />
-              </label>
+                        avatar: result.dataUrl,
+                      };
+                    });
+                  })();
+                }}
+              />
             </div>
           </div>
         )}
@@ -992,26 +1098,30 @@ export function EmployeeDetailView({
         <div className={detailFooterClass}>
           <button
             type="button"
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={saving || loading}
             className="inline-flex h-11 min-w-[150px] items-center justify-center gap-2 rounded-xl bg-hr-primary px-6 text-sm font-bold text-white transition hover:bg-hr-primary-hover disabled:opacity-60"
           >
             {saving && <Loader className="size-4 animate-spin" />}
             {t("employees.detail.saveChanges")}
           </button>
-          <button
-            type="button"
-            onClick={() => onToggleArchive(editData)}
-            className={`h-11 min-w-[120px] rounded-xl px-6 text-sm font-bold text-white transition ${
-              editData.isArchived
-                ? "bg-emerald-600 hover:bg-emerald-700"
-                : "bg-amber-600 hover:bg-amber-700"
-            }`}
-          >
-            {editData.isArchived
-              ? t("employees.archive.unarchiveLabel")
-              : t("employees.archive.archiveLabel")}
-          </button>
+          {editData.isArchived ? (
+            <button
+              type="button"
+              onClick={() => onUnarchive(editData)}
+              className="h-11 min-w-[120px] rounded-xl bg-emerald-600 px-6 text-sm font-bold text-white transition hover:bg-emerald-700"
+            >
+              {t("employees.archive.unarchiveLabel")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onArchive(editData)}
+              className="h-11 min-w-[120px] rounded-xl bg-amber-600 px-6 text-sm font-bold text-white transition hover:bg-amber-700"
+            >
+              {t("employees.archive.archiveLabel")}
+            </button>
+          )}
         </div>
       </section>
 

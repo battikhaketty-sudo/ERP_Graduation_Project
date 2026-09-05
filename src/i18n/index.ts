@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { usePreferences } from "../context/PreferencesContext";
 import type { Locale } from "../utils/preferencesStorage";
+import { parseApiUtcDate, SYRIA_OFFSET_MS } from "../utils/syriaTime";
 import { ar } from "./locales/ar";
 import { en } from "./locales/en";
 import type { TranslationKey } from "./types";
@@ -58,8 +59,18 @@ export function useTranslation() {
 
   const formatDate = useCallback(
     (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => {
-      const date = value instanceof Date ? value : new Date(value);
-      return new Intl.DateTimeFormat(locale === "ar" ? "ar-SY" : "en-US", options).format(date);
+      const date =
+        value instanceof Date
+          ? value
+          : typeof value === "number"
+            ? new Date(value)
+            : parseApiUtcDate(String(value));
+      if (!date) return "";
+      const syria = new Date(date.getTime() + SYRIA_OFFSET_MS);
+      return new Intl.DateTimeFormat(locale === "ar" ? "ar-SY" : "en-US", {
+        ...options,
+        timeZone: "UTC",
+      }).format(syria);
     },
     [locale],
   );

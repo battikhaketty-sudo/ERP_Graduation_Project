@@ -2,7 +2,6 @@ import { Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "../../i18n";
 import { employeePath } from "../../constants/entityPaths";
-import { getSectionFlowGate } from "../../services/projects/sectionDependencies";
 import { listProjectTasks, sortTasksByPriority } from "../../services/projects";
 import type { Project, ProjectSection, ProjectTask } from "../../types/project";
 import { accentBtnClass } from "../ui/formStyles";
@@ -18,10 +17,6 @@ type ProjectKanbanBoardProps = {
   onAddTask: () => void;
   onSectionClick?: (section: ProjectSection) => void;
   onTaskClick?: (task: ProjectTask) => void;
-};
-
-const gateBadgeClass: Record<string, string> = {
-  ready: "bg-sky-500/15 text-sky-500",
 };
 
 function TaskCard({
@@ -222,8 +217,6 @@ function KanbanColumn({
     return () => observer.disconnect();
   }, [hasMore, loadPage, loading, page]);
 
-  const gate = getSectionFlowGate(section, new Map([[section.id, section]]), tasks);
-
   return (
     <div className="flex min-h-0 flex-col rounded-xl bg-hr-table-head p-3">
       <button
@@ -241,14 +234,6 @@ function KanbanColumn({
               {t("projects.detail.sectionFlow.finalSectionBadge")}
             </span>
           ) : null}
-        </span>
-        <span
-          className={[
-            "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium",
-            gateBadgeClass[gate],
-          ].join(" ")}
-        >
-          {t(`projects.detail.sectionFlow.gate.${gate}`)}
         </span>
       </button>
       <div

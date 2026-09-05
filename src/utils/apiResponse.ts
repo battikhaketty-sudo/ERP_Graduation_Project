@@ -23,8 +23,12 @@ const API_ERROR_MESSAGES: Record<string, string> = {
   "SkillType.Error.Name.Duplicate": "اسم نوع المهارة موجود مسبقاً.",
   "ContractType.Error.Name.Duplicate": "اسم نوع العقد موجود مسبقاً.",
   "Department.Error.Name.Duplicate": "اسم القسم موجود مسبقاً.",
+  "Department.Error.CycleInHierarchy":
+    "لا يمكن اختيار هذا القسم الأب لأنه يسبب حلقة في التسلسل الهرمي.",
   "WorkingSchedule.Error.Name.Duplicate": "اسم جدول العمل موجود مسبقاً.",
   "WorkingSchedule.Error.InvalidPeriod": "فترة العمل غير صالحة. تأكد من الأوقات والأيام.",
+  "WorkingSchedule.Error.Periods.Overlap":
+    "فترات العمل متداخلة في نفس اليوم. غيّر اليوم أو الوقت حتى لا تتقاطع الفترات.",
   "Project.Error.Name.Duplicate": "اسم المشروع موجود مسبقاً.",
   "Project.Error.NotFound": "المشروع غير موجود.",
   "ProjectInvitation.Error.NotFound": "الدعوة غير موجودة.",
@@ -83,8 +87,20 @@ const API_ERROR_MESSAGES: Record<string, string> = {
     "لا يمكنك تنفيذ هذه العملية. حسابك لا يملك الصلاحية المطلوبة.",
   "Auth.Error.Forbidden":
     "لا يمكنك تنفيذ هذه العملية. حسابك لا يملك الصلاحية المطلوبة.",
+  "Authorization.Error.Unauthorized":
+    "غير مصرّح لك. سجّلي الدخول ثم أعيدي المحاولة.",
   "Authorization.Error.Forbidden":
     "لا يمكنك تنفيذ هذه العملية. حسابك لا يملك الصلاحية المطلوبة.",
+  "Authorization.Error.HasNoPermission.OwnScope":
+    "ليس لديك صلاحية لتعديل بياناتك.",
+  "Authorization.Error.HasNoPermission.OtherScope":
+    "ليس لديك صلاحية لتعديل بيانات مستخدم آخر.",
+  "Authorization.Error.HasNoPermission.DepartmentScope":
+    "ليس لديك صلاحية لتعديل بيانات مستخدم في نفس قسمك.",
+  "Authorization.Error.HasNoPermission.OtherDepartmentScope":
+    "ليس لديك صلاحية لتعديل بيانات مستخدم في قسم آخر.",
+  "Authorization.Error.NotOwner":
+    "لا يمكنك تنفيذ هذه العملية لأنك لست المالك.",
   HigherRoleLevelRequired:
     "رتبتك الحالية أقل من المطلوب لهذه العملية. تحتاج دوراً أعلى.",
   HeigherRoleLevelRequired:
@@ -97,6 +113,14 @@ const API_ERROR_MESSAGES: Record<string, string> = {
     "رتبتك الحالية أقل من المطلوب لهذه العملية. تحتاج دوراً أعلى.",
   "Authorization.Error.HeigherRoleLevelRequired":
     "رتبتك الحالية أقل من المطلوب لهذه العملية. تحتاج دوراً أعلى.",
+  "Authorization.Error.HeigherRoleLevelOrManagerRequired":
+    "رتبتك الحالية غير كافية. تحتاج دوراً أعلى أو أن تكون المدير لتنفيذ هذه العملية.",
+  "Authorization.Error.HigherRoleLevelOrManagerRequired":
+    "رتبتك الحالية غير كافية. تحتاج دوراً أعلى أو أن تكون المدير لتنفيذ هذه العملية.",
+  "Authorization.Error.ProjectManagerOrMemberRequired":
+    "السيرفر يرفض تعديل المهمة لأن حسابك الحالي ليس مدير هذا المشروع ولا عضواً مقبولاً فيه. فتح المشروع أو رؤية اسم في قائمة الأعضاء لا يكفي — لازم الموظف المرتبط بنفس حساب الدخول يكون عضواً (دعوة ثم قبول) بدور مدير أو عضو.",
+  "Authorization.Error.ProjectManagerRequired":
+    "السيرفر يرفض هذه العملية لأن حسابك الحالي ليس مدير هذا المشروع.",
 };
 
 const looksLikeErrorCode = (value: string) =>
@@ -105,122 +129,29 @@ const looksLikeErrorCode = (value: string) =>
 const lookupMappedMessage = (code: string) => {
   const trimmed = code.trim();
   if (!trimmed) return "";
-  if (API_ERROR_MESSAGES[trimmed]) return API_ERROR_MESSAGES[trimmed];
-
-  const parts = trimmed.split(".");
-  if (parts.length >= 4) {
-    const shortened = `${parts[0]}.${parts[1]}.${parts[parts.length - 1]}`;
-    if (API_ERROR_MESSAGES[shortened]) return API_ERROR_MESSAGES[shortened];
-  }
-
-  return "";
+  return API_ERROR_MESSAGES[trimmed] || "";
 };
 
-const humanizeErrorCode = (code: string) => {
-  const mapped = lookupMappedMessage(code);
-  if (mapped) return mapped;
+const GENERIC_ASPNET_TITLES = new Set([
+  "bad request",
+  "one or more validation errors occurred.",
+  "an error occurred while processing your request.",
+]);
 
-  if (code.includes("Email") && (code.includes("Duplicate") || code.includes("Exists"))) {
-    return "البريد الإلكتروني مستخدم مسبقاً. قد يكون لموظف موجود أو مؤرشف — استخدم بريداً مختلفاً.";
+const readProvidedErrorText = (value: unknown): string => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || looksLikeMarkup(trimmed)) return "";
+    if (GENERIC_ASPNET_TITLES.has(trimmed.toLowerCase())) return "";
+    const prefixed = trimmed.match(/^(?:خطأ من السيرفر:\s*)(.+)$/);
+    return (prefixed?.[1]?.trim() || trimmed).slice(0, 4000);
   }
-  if (
-    code.includes("CannotRemoveManager") ||
-    code.includes("CannotDeleteProjectManager") ||
-    (code.startsWith("Project") &&
-      code.includes("Manager") &&
-      (code.includes("Remove") || code.includes("Delete") || code.includes("Cannot")))
-  ) {
-    return "لا يمكن حذف مدير المشروع. عيّن مديراً آخر أولاً ثم أعد المحاولة.";
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => readProvidedErrorText(item))
+      .filter(Boolean)
+      .join(" | ");
   }
-  if (
-    !code.startsWith("Project") &&
-    (code.includes("Employee.Error.Manager") ||
-      code.includes("Manager.NotFound") ||
-      code.includes("ManagerId.NotFound"))
-  ) {
-    return "مدير القسم غير صالح. تأكد أن القسم له مدير معيّن.";
-  }
-  if (code.includes("Department")) {
-    return "القسم المحدد غير موجود.";
-  }
-  if (code.includes("ContractType")) {
-    return "نوع العقد المحدد غير موجود.";
-  }
-  if (code.includes("ContractTimeRange")) {
-    return "تاريخ نهاية العقد يجب أن يكون بعد تاريخ البداية.";
-  }
-  if (
-    code.includes("saving the entity changes") ||
-    code.includes("inner exception") ||
-    code.includes("DbUpdateException")
-  ) {
-    return "فشل حفظ الموظف في قاعدة البيانات. جرّب بريداً إلكترونياً جديداً لم يُستخدم من قبل، وتأكد أن القسم له مدير صالح.";
-  }
-  if (code.includes("Invitation") && (code.includes("Expir") || code.includes("Past"))) {
-    return "تاريخ انتهاء الدعوة يجب أن يكون في المستقبل. جرّبي الغد أو تاريخاً لاحقاً.";
-  }
-  if (
-    code.includes("Invitation") &&
-    (code.includes("AlreadyInvited") || code.includes("AlreadyExists") || code.includes("Duplicate"))
-  ) {
-    return "لا يمكن إرسال الدعوة: توجد دعوة معلّقة لهذا الموظف.";
-  }
-  if (code.includes("AlreadyMember") || (code.includes("Member") && code.includes("Already"))) {
-    return "لا يمكن دعوة هذا الموظف لأنه عضو في مشروع مسبقاً. النظام يسمح بعضوية مشروع واحد فقط.";
-  }
-  if (code.includes("Invitation") && (code.includes("Already") || code.includes("Exists"))) {
-    return "لا يمكن إرسال الدعوة: هذا الموظف لديه عضوية أو دعوة مسجّلة مسبقاً.";
-  }
-  if (code.includes("Invitation")) {
-    return "تعذر إرسال الدعوة. تحقق من البيانات ثم أعد المحاولة.";
-  }
-  if (code.includes("Otp") && (code.includes("NotActive") || code.includes("Activation"))) {
-    return "هذا الحساب غير مفعّل بعد. أكّد بريدك الإلكتروني أولاً ثم أعد تعيين كلمة المرور.";
-  }
-  if (code.includes("Otp")) {
-    return "رمز التحقق غير صحيح أو منتهٍ. اطلب رمزاً جديداً.";
-  }
-  if (code.includes("Password")) {
-    return "كلمة المرور لا تستوفي متطلبات النظام.";
-  }
-  if (
-    code.includes("HigherRoleLevel") ||
-    code.includes("HeigherRoleLevel") ||
-    code.includes("RoleLevelRequired")
-  ) {
-    return "رتبتك الحالية أقل من المطلوب لهذه العملية. تحتاج دوراً أعلى.";
-  }
-  if (code.includes("Forbidden")) {
-    return "لا يمكنك تنفيذ هذه العملية. حسابك لا يملك الصلاحية المطلوبة.";
-  }
-  if (code.includes("Internal") || code.includes("Server")) {
-    return "خطأ داخلي في السيرفر. تحقق من اكتمال البيانات.";
-  }
-  return "تعذر إكمال العملية. تحقق من البيانات ثم أعد المحاولة.";
-};
-
-const friendlyFromText = (value: unknown) => {
-  if (typeof value !== "string") return "";
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  const prefixed = trimmed.match(/^(?:خطأ من السيرفر:\s*)(.+)$/);
-  const candidate = prefixed?.[1]?.trim() || trimmed;
-  const mapped = lookupMappedMessage(candidate);
-  if (mapped) return mapped;
-  if (looksLikeErrorCode(candidate)) return humanizeErrorCode(candidate);
-
-  if (candidate.startsWith("{")) {
-    try {
-      const parsed = JSON.parse(candidate) as Record<string, unknown>;
-      const code = String(parsed.code ?? parsed.Code ?? "").trim();
-      if (code) {
-        return lookupMappedMessage(code) || (looksLikeErrorCode(code) ? humanizeErrorCode(code) : "");
-      }
-    } catch {
-      return "";
-    }
-  }
-
   return "";
 };
 
@@ -277,55 +208,45 @@ export const formatApiErrorMessage = (payload: unknown, fallback = "فشل تن�
   const envelope = parseErrorPayload(payload);
   if (!envelope) return fallback;
 
-  const code = String(envelope.code ?? envelope.Code ?? "");
-  const fromCode = friendlyFromText(code);
-  if (fromCode) return fromCode;
+  const code = String(envelope.code ?? envelope.Code ?? "").trim();
+  const mappedCode = lookupMappedMessage(code);
+  if (mappedCode) return mappedCode;
 
-  const validationMessages = extractValidationMessages(envelope.errors ?? envelope.Errors);
-  if (validationMessages.length > 0) {
-    return validationMessages.join(" | ");
-  }
+  const nested =
+    envelope.data && typeof envelope.data === "object"
+      ? (envelope.data as Record<string, unknown>)
+      : envelope.Data && typeof envelope.Data === "object"
+        ? (envelope.Data as Record<string, unknown>)
+        : null;
 
-  if (code.includes("Duplicate")) {
-    return "هذا الاسم موجود مسبقاً.";
-  }
-
-  if (code.includes("NotFound")) {
-    return "العنصر المطلوب غير موجود.";
-  }
-
-  if (code.includes("ReferencedByOtherEntities") || code.includes("Deletion.YouCannotDelete")) {
-    return "لا يمكن الحذف لأن العنصر مرتبط ببيانات أخرى.";
-  }
-
-  const detail = envelope.detail ?? envelope.Detail;
-  const fromDetail = friendlyFromText(detail);
-  if (fromDetail) return fromDetail;
-  if (typeof detail === "string" && detail.trim()) {
-    return detail;
-  }
-
-  const title = envelope.title ?? envelope.Title;
-  const fromTitle = friendlyFromText(title);
-  if (fromTitle) return fromTitle;
-  if (typeof title === "string" && title.trim() && title !== "Bad Request") {
-    return title;
-  }
-
-  const fromMessage =
-    friendlyFromText(envelope.message) || friendlyFromText(envelope.Message);
-  if (fromMessage) return fromMessage;
-
-  if (typeof envelope.message === "string" && envelope.message.trim()) {
-    return envelope.message;
-  }
-
-  if (typeof envelope.Message === "string" && envelope.Message.trim()) {
-    return envelope.Message;
-  }
+  const provided =
+    readProvidedErrorText(envelope.message) ||
+    readProvidedErrorText(envelope.Message) ||
+    readProvidedErrorText(envelope.detail) ||
+    readProvidedErrorText(envelope.Detail) ||
+    readProvidedErrorText(envelope.error) ||
+    readProvidedErrorText(envelope.Error) ||
+    readProvidedErrorText(envelope.errorMessage) ||
+    readProvidedErrorText(envelope.ErrorMessage) ||
+    readProvidedErrorText(nested?.message) ||
+    readProvidedErrorText(nested?.Message) ||
+    readProvidedErrorText(envelope.title) ||
+    readProvidedErrorText(envelope.Title);
 
   if (code) {
-    return humanizeErrorCode(code);
+    if (provided && !looksLikeErrorCode(provided)) return provided;
+    return code;
+  }
+
+  if (provided) {
+    return lookupMappedMessage(provided) || provided;
+  }
+
+  const validationMessages = extractValidationMessages(
+    envelope.errors ?? envelope.Errors ?? nested?.errors ?? nested?.Errors,
+  );
+  if (validationMessages.length > 0) {
+    return validationMessages.join(" | ");
   }
 
   return fallback;
@@ -386,10 +307,69 @@ export const getThrownRawApiText = (err: unknown) => {
   return "";
 };
 
-export const getThrownApiDisplay = (err: unknown, fallback = "فشل تنفيذ العملية.") =>
-  getThrownErrorMessage(err, fallback);
+const parseRawApiObject = (rawApi: string): Record<string, unknown> | null => {
+  try {
+    const parsed = JSON.parse(rawApi) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
 
-export const getThrownErrorMessage = (err: unknown, fallback = "فشل تنفيذ العملية.") => {
+/** Original backend code + message, kept beside the Arabic mapping. */
+export const getThrownBackendText = (err: unknown) => {
+  const code = getThrownErrorCode(err);
+  const rawApi = getThrownRawApiText(err);
+  const parsed = rawApi ? parseRawApiObject(rawApi) : null;
+  const backendMessage = parsed
+    ? readProvidedErrorText(parsed.message) ||
+      readProvidedErrorText(parsed.Message) ||
+      readProvidedErrorText(parsed.detail) ||
+      readProvidedErrorText(parsed.Detail) ||
+      readProvidedErrorText(parsed.error) ||
+      readProvidedErrorText(parsed.Error) ||
+      readProvidedErrorText(parsed.errorMessage) ||
+      readProvidedErrorText(parsed.ErrorMessage)
+    : "";
+
+  const lines: string[] = [];
+  if (backendMessage) lines.push(backendMessage);
+  if (code && code !== backendMessage) lines.push(code);
+
+  if (parsed) {
+    for (const item of extractValidationMessages(
+      parsed.errors ?? parsed.Errors,
+    )) {
+      if (!lines.includes(item)) lines.push(item);
+    }
+  }
+
+  if (!lines.length && rawApi && !looksLikeMarkup(rawApi)) {
+    lines.push(rawApi);
+  }
+
+  return lines.join("\n");
+};
+
+const joinFriendlyAndBackend = (friendly: string, backend: string) => {
+  const mapped = friendly.trim();
+  const fromApi = backend
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && line !== mapped && !mapped.includes(line));
+  if (!fromApi.length) return mapped;
+  if (!mapped) return fromApi.join("\n");
+  return `${mapped}\n\n${fromApi.join("\n")}`;
+};
+
+const resolveFriendlyMessage = (err: unknown, fallback: string) => {
+  const code = getThrownErrorCode(err);
+  const mappedCode = code ? lookupMappedMessage(code) : "";
+  if (mappedCode) return mappedCode;
+
   const raw =
     err instanceof Error
       ? err.message
@@ -397,10 +377,23 @@ export const getThrownErrorMessage = (err: unknown, fallback = "فشل تنفي�
         ? (err as { message?: unknown }).message
         : undefined;
 
-  if (typeof raw !== "string" || !raw.trim()) return fallback;
-  if (looksLikeMarkup(raw)) return API_UNAVAILABLE_MESSAGE;
-  return friendlyFromText(raw) || raw;
+  if (typeof raw === "string" && raw.trim()) {
+    if (looksLikeMarkup(raw)) return API_UNAVAILABLE_MESSAGE;
+    const mappedRaw = lookupMappedMessage(raw);
+    if (mappedRaw) return mappedRaw;
+    if (code && looksLikeErrorCode(raw) && raw.trim() !== code) return code;
+    return raw.trim();
+  }
+
+  if (code) return code;
+  return fallback;
 };
+
+export const getThrownErrorMessage = (err: unknown, fallback = "فشل تنفيذ العملية.") =>
+  joinFriendlyAndBackend(resolveFriendlyMessage(err, fallback), getThrownBackendText(err));
+
+export const getThrownApiDisplay = (err: unknown, fallback = "فشل تنفيذ العملية.") =>
+  getThrownErrorMessage(err, fallback);
 
 export const getThrownErrorCode = (err: unknown) => {
   if (err && typeof err === "object" && "code" in err) {

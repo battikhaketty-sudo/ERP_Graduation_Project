@@ -1,5 +1,6 @@
 import type { UserAccount, UserRoleAssignment } from "../../types/user";
 import { readIsFixed } from "../../utils/readIsFixed";
+import { formatSyriaDate } from "../../utils/syriaTime";
 
 export const normalizeUserRoleAssignment = (
   item: Record<string, unknown>,
@@ -38,7 +39,7 @@ export const normalizeUser = (item: Record<string, unknown>): UserAccount => {
     emailConfirmed: Boolean(item.emailConfirmed ?? false),
     createdAtUtc:
       typeof item.createdAtUtc === "string"
-        ? item.createdAtUtc.slice(0, 10)
+        ? formatSyriaDate(item.createdAtUtc) || undefined
         : undefined,
     roles,
     rolesCount,

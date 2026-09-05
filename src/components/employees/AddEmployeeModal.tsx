@@ -3,7 +3,6 @@ import {
   AlertCircle,
   CheckCircle,
   Loader,
-  Upload,
 } from "lucide-react";
 import { DEFAULT_EMPLOYEE_PASSWORD } from "../../constants/defaults";
 import { usePreferences } from "../../context/PreferencesContext";
@@ -26,15 +25,17 @@ import {
   afterValidationPaint,
   focusAndScrollToFirstError,
 } from "../../utils/formUx";
-import { mapNamedOptions } from "../../utils/selectOptions";
+import { mapEmployeeOptions, mapNamedOptions } from "../../utils/selectOptions";
+import { readImageFile, revokeImagePreview } from "../../utils/readImageFile";
 import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { PasswordInput } from "../ui/PasswordInput";
 import { ManualDateInput } from "../ui/ManualDateInput";
+import { ImageFileButton } from "../ui/ImageFileButton";
 import {
   alertErrorClass,
   alertSuccessClass,
-  cancelBtnLgClass,
+  cancelBtnClass,
   modalBodyClass,
   modalFooterClass,
   ModalCloseButton,
@@ -44,7 +45,6 @@ import {
   EmployeeField,
   StepBadge,
   inputClass,
-  readOnlyClass,
 } from "./employee-ui";
 import { EmployeeAvatar } from "./EmployeeAvatar";
 import { EmployeeIdImageField } from "./EmployeeIdImageField";
@@ -59,6 +59,8 @@ const emptyAddEmployeeForm = () => ({
   gender: "",
   nationality: "",
   departmentId: "",
+  managerId: "",
+  workingScheduleId: "",
   joiningDate: "",
   contractEndDate: "",
   salary: "",
@@ -104,12 +106,15 @@ export function AddEmployeeModal({
   const {
     departments: departmentOptions,
     contractTypes: contractTypeOptions,
+    employees: employeeOptions,
+    workingSchedules: scheduleOptions,
     loading: optionsLoading,
     error: optionsError,
   } = useReferenceOptions(isOpen, {
     departments: true,
     contractTypes: true,
-    employees: false,
+    employees: true,
+    workingSchedules: true,
   });
 
   const [formData, setFormData] = useState(emptyAddEmployeeForm);
@@ -121,7 +126,12 @@ export function AddEmployeeModal({
     setSubmitError(null);
     setSubmitSuccess(false);
     setErrors({});
-    setFormData(emptyAddEmployeeForm());
+    setFormData((previous) => {
+      revokeImagePreview(previous.avatar);
+      revokeImagePreview(previous.idCardFrontImage);
+      revokeImagePreview(previous.idCardBackImage);
+      return emptyAddEmployeeForm();
+    });
   }, [isOpen]);
 
   useEffect(() => {
@@ -242,13 +252,16 @@ export function AddEmployeeModal({
         (department) => department.id === formData.departmentId,
       );
 
+      const selectedManager = employeeOptions.find(
+        (item) => item.id === formData.managerId,
+      );
+
       await onSubmit({
         name: formData.fullName.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim(),
         workPhone: formData.workPhone.trim() || formData.phone.trim(),
         password: formData.password,
-        role: "Front_end",
         address: `${formData.nationality || "-"} - ${selectedDepartment?.name || "-"}`,
         avatar: formData.avatar,
         birthDate: formData.birthDate,
@@ -257,8 +270,12 @@ export function AddEmployeeModal({
         department: selectedDepartment?.name,
         departmentId: formData.departmentId,
         contractTypeId: formData.contractTypeId,
-        managerId: selectedDepartment?.managerId,
-        managerName: selectedDepartment?.managerName,
+        managerId: formData.managerId,
+        managerName: selectedManager?.name,
+        workingScheduleId: formData.workingScheduleId,
+        workingScheduleName: scheduleOptions.find(
+          (schedule) => schedule.id === formData.workingScheduleId,
+        )?.name,
         joiningDate: formData.joiningDate,
         contractEndDate: formData.contractEndDate,
         salary: formData.salary ? Number(formData.salary) : undefined,
@@ -282,15 +299,12 @@ export function AddEmployeeModal({
 
   if (!isOpen) return null;
 
-  const selectedDepartment = departmentOptions.find(
-    (department) => department.id === formData.departmentId,
-  );
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="hr-modal relative max-w-4xl" dir={dir}>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60">
+      <div className="flex min-h-full items-start justify-center p-4 sm:items-center">
+        <div className="hr-modal relative my-4 max-w-4xl" dir={dir}>
         <ModalCloseButton onClick={onClose} disabled={isSubmitting} />
-        <div className="border-b border-hr-border px-6 py-5 pe-12 text-center">
+        <div className="shrink-0 border-b border-hr-border px-6 py-5 pe-12 text-center">
           <h2 className="text-2xl font-bold text-hr-primary">{t("employees.modal.title")}</h2>
         </div>
 
@@ -308,7 +322,7 @@ export function AddEmployeeModal({
           </div>
         )}
 
-        <div className={EMPLOYEE_TABS_CLASS.bar}>
+        <div className={`${EMPLOYEE_TABS_CLASS.bar} shrink-0`}>
           {tabs.map((tab) => (
             <button
               key={tab.value}
@@ -324,7 +338,7 @@ export function AddEmployeeModal({
         <form
           id="add-employee-form"
           onSubmit={handleSubmit}
-          className={modalBodyClass}
+          className={`${modalBodyClass} min-h-[20rem]`}
         >
           {activeTab === "personal" && (
             <div className="space-y-5">
@@ -468,16 +482,22 @@ export function AddEmployeeModal({
                 <EmployeeIdImageField
                   label={t("employees.detail.fields.idFrontImage")}
                   value={formData.idCardFrontImage}
-                  onChange={(idCardFrontImage) =>
-                    setFormData((prev) => ({ ...prev, idCardFrontImage }))
-                  }
+                  onChange={(idCardFrontImage) => {
+                    setFormData((prev) => {
+                      revokeImagePreview(prev.idCardFrontImage);
+                      return { ...prev, idCardFrontImage };
+                    });
+                  }}
                 />
                 <EmployeeIdImageField
                   label={t("employees.detail.fields.idBackImage")}
                   value={formData.idCardBackImage}
-                  onChange={(idCardBackImage) =>
-                    setFormData((prev) => ({ ...prev, idCardBackImage }))
-                  }
+                  onChange={(idCardBackImage) => {
+                    setFormData((prev) => {
+                      revokeImagePreview(prev.idCardBackImage);
+                      return { ...prev, idCardBackImage };
+                    });
+                  }}
                 />
               </div>
 
@@ -499,59 +519,33 @@ export function AddEmployeeModal({
                     className="h-[180px] w-[170px] rounded-2xl border border-hr-border object-cover text-4xl"
                   />
                 )}
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-hr-border bg-hr-surface px-4 py-2 text-sm font-medium text-hr-text transition hover:border-hr-primary">
-                  <Upload className="size-4" />
-                  {formData.avatar
-                    ? t("employees.detail.changePhoto")
-                    : t("employees.modal.uploadPhotoHint")}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/gif"
-                    className="sr-only"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      if (!file.type.startsWith("image/")) {
+                <ImageFileButton
+                  label={
+                    formData.avatar
+                      ? t("employees.detail.changePhoto")
+                      : t("employees.modal.uploadPhotoHint")
+                  }
+                  onFile={(file) => {
+                    void (async () => {
+                      const result = await readImageFile(file);
+                      if (!result.ok) {
                         setErrors((prev) => ({
                           ...prev,
-                          photo: t("employees.errors.photoInvalid"),
+                          photo:
+                            result.error === "tooLarge"
+                              ? t("employees.errors.photoTooLarge")
+                              : t("employees.errors.photoInvalid"),
                         }));
-                        event.target.value = "";
                         return;
                       }
-                      if (file.size > 5 * 1024 * 1024) {
-                        setErrors((prev) => ({
-                          ...prev,
-                          photo: t("employees.errors.photoTooLarge"),
-                        }));
-                        event.target.value = "";
-                        return;
-                      }
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        const result =
-                          typeof reader.result === "string" ? reader.result : "";
-                        if (!result) {
-                          setErrors((prev) => ({
-                            ...prev,
-                            photo: t("employees.errors.photoInvalid"),
-                          }));
-                          return;
-                        }
-                        setFormData((prev) => ({ ...prev, avatar: result }));
-                        setErrors((prev) => ({ ...prev, photo: "" }));
-                      };
-                      reader.onerror = () => {
-                        setErrors((prev) => ({
-                          ...prev,
-                          photo: t("employees.errors.photoInvalid"),
-                        }));
-                      };
-                      reader.readAsDataURL(file);
-                      event.target.value = "";
-                    }}
-                  />
-                </label>
+                      setFormData((prev) => {
+                        revokeImagePreview(prev.avatar);
+                        return { ...prev, avatar: result.dataUrl };
+                      });
+                      setErrors((prev) => ({ ...prev, photo: "" }));
+                    })();
+                  }}
+                />
                 {errors.photo ? (
                   <p className="text-sm text-red-500">{errors.photo}</p>
                 ) : null}
@@ -588,11 +582,36 @@ export function AddEmployeeModal({
                   />
                 </EmployeeField>
 
-                <EmployeeField label={t("employees.modal.fields.manager")}>
-                  <input
-                    value={selectedDepartment?.managerName || t("common.dash")}
-                    readOnly
-                    className={readOnlyClass}
+                <EmployeeField
+                  label={t("employees.modal.fields.manager")}
+                  hint={t("employees.modal.fields.managerHint")}
+                >
+                  <SearchableSelect
+                    value={formData.managerId}
+                    onChange={(value) =>
+                      setFormData((prev) => ({ ...prev, managerId: value }))
+                    }
+                    options={mapEmployeeOptions(employeeOptions)}
+                    placeholder={t("employees.modal.placeholders.selectManager")}
+                    loading={optionsLoading}
+                  />
+                </EmployeeField>
+
+                <EmployeeField
+                  label={t("employees.modal.fields.workSchedule")}
+                  hint={t("employees.modal.fields.workScheduleHint")}
+                >
+                  <SearchableSelect
+                    value={formData.workingScheduleId}
+                    onChange={(value) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        workingScheduleId: value,
+                      }))
+                    }
+                    options={mapNamedOptions(scheduleOptions)}
+                    placeholder={t("employees.modal.placeholders.selectWorkSchedule")}
+                    loading={optionsLoading}
                   />
                 </EmployeeField>
 
@@ -717,7 +736,7 @@ export function AddEmployeeModal({
             type="submit"
             form="add-employee-form"
             disabled={isSubmitting}
-            className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-hr-primary text-sm font-bold text-white transition hover:bg-hr-primary-hover disabled:opacity-60"
+            className="inline-flex h-11 min-w-[10rem] items-center justify-center gap-2 rounded-xl bg-hr-primary px-6 text-sm font-bold text-white transition hover:bg-hr-primary-hover disabled:opacity-60"
           >
             {isSubmitting && <Loader className="size-4 animate-spin" />}
             {isSubmitting ? t("employees.modal.submitting") : t("employees.modal.submit")}
@@ -726,11 +745,12 @@ export function AddEmployeeModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className={cancelBtnLgClass}
+            className={`${cancelBtnClass} inline-flex h-11 min-w-[10rem] items-center justify-center`}
           >
             {t("common.cancel")}
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

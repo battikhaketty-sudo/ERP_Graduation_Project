@@ -8,6 +8,7 @@ import { getEmployees } from "../../services/employees";
 import { REFERENCE_DATA_LIMIT } from "../../constants/defaults";
 import {
   assigneesFromMembers,
+  assignmentMemberId,
   isActiveProjectMember,
   memberLookupIds,
   toActiveAssigneeOptions,
@@ -23,14 +24,16 @@ import type {
   TaskPriority,
   TaskTransition,
 } from "../../types/project";
-import { wouldCreateCycle } from "../../services/projects/taskDependencies";
 import {
   filterIncompleteTasksForPredecessors,
   isTaskCompletedByFinalSection,
-} from "../../services/projects/sectionDependencies";
+  wouldCreateCycle,
+} from "../../services/projects/taskDependencies";
 import { getCurrentActorIds } from "../../utils/accessToken";
 import { sanitizeDecimalInput } from "../../utils/inputConstraints";
 import { mapNamedOptions } from "../../utils/selectOptions";
+import { getThrownErrorMessage } from "../../utils/apiResponse";
+import { formatSyriaDate, nowSyriaDateInput } from "../../utils/syriaTime";
 import {
   alertErrorClass,
   cancelBtnClass,
@@ -79,12 +82,10 @@ const priorityButtonClass: Record<TaskPriority, string> = {
 
 const toDateInputValue = (value?: string) => {
   if (!value?.trim()) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
-  return date.toISOString().slice(0, 10);
+  return formatSyriaDate(value) || value.slice(0, 10);
 };
 
-const todayInputValue = () => new Date().toISOString().slice(0, 10);
+const todayInputValue = () => nowSyriaDateInput();
 
 const clampToProjectStart = (date: string, projectStartDate?: string) => {
   const projectStart = toDateInputValue(projectStartDate);
@@ -109,8 +110,8 @@ const keepProjectAssignees = (
       (item) => isActiveProjectMember(item) && memberLookupIds(item).includes(id),
     );
     if (!member) continue;
-    const sendId = member.userId || member.id;
-    if (seen.has(sendId)) continue;
+    const sendId = assignmentMemberId(member);
+    if (!sendId || seen.has(sendId)) continue;
     seen.add(sendId);
     result.push({ id: sendId, name: member.employeeName || sendId });
   }
@@ -440,13 +441,21 @@ export function AddTaskModal({
     }
     setSaving(true);
     try {
-      const validAssignees = assignees.filter((assignee) =>
-        projectMembers.some(
-          (member) =>
-            isActiveProjectMember(member) &&
-            (member.id === assignee.id || memberLookupIds(member).includes(assignee.id)),
-        ),
-      );
+      const validAssignees = assignees
+        .map((assignee) => {
+          const member = projectMembers.find(
+            (item) =>
+              isActiveProjectMember(item) &&
+              (item.id === assignee.id ||
+                memberLookupIds(item).includes(assignee.id)),
+          );
+          if (!member) return null;
+          return {
+            id: assignmentMemberId(member),
+            name: member.employeeName || assignee.name,
+          };
+        })
+        .filter((item): item is AssigneeOption => Boolean(item?.id));
       await onSubmit({
         title: form.title,
         description: form.description,
@@ -471,11 +480,12 @@ export function AddTaskModal({
       onClose();
     } catch (err) {
       setError(
-        err && typeof err === "object" && "message" in err
-          ? String(err.message)
-          : isEditing
+        getThrownErrorMessage(
+          err,
+          isEditing
             ? t("projects.modals.addTask.errors.saveFailed")
             : t("projects.modals.addTask.errors.addFailed"),
+        ),
       );
     } finally {
       setSaving(false);

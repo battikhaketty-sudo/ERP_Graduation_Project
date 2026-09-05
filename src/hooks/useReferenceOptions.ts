@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { REFERENCE_DATA_LIMIT } from "../constants/defaults";
 import { getContractTypes, getDepartments } from "../services/hrApi";
 import { getEmployees } from "../services/employees";
+import { getWorkingSchedules } from "../services/workingScheduleApi";
 
 export type DepartmentOption = {
   id: string;
@@ -26,12 +27,14 @@ type ReferenceScope = {
   departments?: boolean;
   contractTypes?: boolean;
   employees?: boolean;
+  workingSchedules?: boolean;
 };
 
 type ReferenceOptionsState = {
   departments: DepartmentOption[];
   contractTypes: SelectOption[];
   employees: EmployeeOption[];
+  workingSchedules: SelectOption[];
   loading: boolean;
   error: string | null;
 };
@@ -40,6 +43,7 @@ const emptyState: ReferenceOptionsState = {
   departments: [],
   contractTypes: [],
   employees: [],
+  workingSchedules: [],
   loading: false,
   error: null,
 };
@@ -66,6 +70,7 @@ export function useReferenceOptions(enabled: boolean, scope: ReferenceScope = {}
   const loadDepartments = scope.departments ?? true;
   const loadContractTypes = scope.contractTypes ?? true;
   const loadEmployees = scope.employees ?? true;
+  const loadWorkingSchedules = scope.workingSchedules ?? false;
 
   const [state, setState] = useState<ReferenceOptionsState>(emptyState);
 
@@ -87,6 +92,10 @@ export function useReferenceOptions(enabled: boolean, scope: ReferenceScope = {}
 
     if (loadEmployees) {
       requests.push(getEmployees(1, REFERENCE_DATA_LIMIT));
+    }
+
+    if (loadWorkingSchedules) {
+      requests.push(getWorkingSchedules({ page: 1, limit: REFERENCE_DATA_LIMIT }));
     }
 
     Promise.all(requests)
@@ -132,6 +141,16 @@ export function useReferenceOptions(enabled: boolean, scope: ReferenceScope = {}
           );
         }
 
+        if (loadWorkingSchedules) {
+          const schedulesResult = results[index++] as Awaited<
+            ReturnType<typeof getWorkingSchedules>
+          >;
+          nextState.workingSchedules = schedulesResult.records.map((schedule) => ({
+            id: schedule.id,
+            name: schedule.name,
+          }));
+        }
+
         setState(nextState);
       })
       .catch(() => {
@@ -147,7 +166,7 @@ export function useReferenceOptions(enabled: boolean, scope: ReferenceScope = {}
     return () => {
       cancelled = true;
     };
-  }, [enabled, loadContractTypes, loadDepartments, loadEmployees]);
+  }, [enabled, loadContractTypes, loadDepartments, loadEmployees, loadWorkingSchedules]);
 
   return state;
 }

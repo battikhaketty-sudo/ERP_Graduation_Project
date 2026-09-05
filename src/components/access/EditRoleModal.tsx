@@ -1,4 +1,4 @@
-import { RefreshCw, Search, Trash2, Wand2 } from "lucide-react";
+import { RefreshCw, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConfirmDialog } from "../../context/ConfirmDialogContext";
 import { useFormValidation } from "../../hooks/useFormValidation";
@@ -46,14 +46,6 @@ const emptyForm: RoleFormPayload = {
 
 const PERM_PAGE_SIZE = 8;
 const DESCRIPTION_MAX = 500;
-
-const sampleForm = (): RoleFormPayload => ({
-  name: "دور تجريبي",
-  description: "دور للاختبار — يمكن حذفه لاحقاً",
-  isDefault: false,
-  level: 5,
-  permissionIds: [],
-});
 
 export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: EditRoleModalProps) {
   const { t } = useTranslation();
@@ -229,15 +221,6 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
     }));
   };
 
-  const fillSampleData = () => {
-    setForm((current) => ({
-      ...sampleForm(),
-      permissionIds: current.permissionIds ?? [],
-    }));
-    clearField("name");
-    clearField("level");
-  };
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!validateAll()) return;
@@ -325,18 +308,6 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
           onClose={onClose}
           disabled={isBusy}
           variant="bordered"
-          trailing={
-            import.meta.env.DEV && mode === "add" ? (
-              <button
-                type="button"
-                onClick={fillSampleData}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-hr-primary/40 px-3 py-1.5 text-xs font-medium text-hr-primary transition hover:bg-hr-primary/5"
-              >
-                <Wand2 className="size-3.5" />
-                {t("form.fillSample")}
-              </button>
-            ) : undefined
-          }
         />
 
         <div className={`${modalBodyClass} min-h-0`}>
@@ -497,7 +468,7 @@ export function EditRoleModal({ mode, roleId, onClose, onSaved, onDeleted }: Edi
 
             <div className={tablePanelClass}>
               <div className={tableScrollClass}>
-                <table className="w-full min-w-[640px] border-collapse text-sm">
+                <table className="w-full table-fixed border-collapse text-sm">
                   <thead className="bg-hr-table-head text-hr-muted">
                     <tr>
                       <th className="px-3 py-3 text-center font-medium">

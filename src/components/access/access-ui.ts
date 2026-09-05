@@ -6,4 +6,4 @@ export const yesNoBadgeClass = (value: boolean) =>
 export const tablePanelClass =
   "min-w-0 overflow-hidden rounded-2xl border border-hr-border bg-hr-surface shadow-card";
 
-export const tableScrollClass = "min-w-0 max-w-full overflow-x-auto";
+export const tableScrollClass = "min-w-0 max-w-full overflow-hidden";

@@ -27,6 +27,8 @@ import {
   getWorkingScheduleById,
   getWorkingSchedules,
   labelToApiTime,
+  resolveDayOfWeek,
+  resolvePeriodType,
   type EnumOption,
   type WorkingPeriodInput,
   type WorkingSchedule,
@@ -35,30 +37,28 @@ import {
 } from "../services/workingScheduleApi";
 import { getThrownErrorMessage } from "../utils/apiResponse";
 
-const DAY_I18N_KEYS = [
-  "sunday",
-  "monday",
-  "tuesday",
-  "wednesday",
-  "thursday",
-  "friday",
-  "saturday",
-] as const;
+const DAY_I18N_KEYS: Record<number, string> = {
+  0: "sunday",
+  1: "monday",
+  2: "tuesday",
+  3: "wednesday",
+  4: "thursday",
+  5: "friday",
+  6: "saturday",
+};
 
 const PERIOD_I18N_KEYS: Record<number, "work" | "break"> = {
   1: "work",
   2: "break",
 };
 
-const resolveEnumId = (value: unknown, options: EnumOption[], fallback = 0) => {
-  const numeric = Number(value);
-  if (!Number.isNaN(numeric) && options.some((option) => option.id === numeric)) {
-    return numeric;
+const uniqueEnumOptions = (options: EnumOption[]) => {
+  const seen = new Map<number, EnumOption>();
+  for (const option of options) {
+    if (!Number.isFinite(option.id) || seen.has(option.id)) continue;
+    seen.set(option.id, option);
   }
-
-  const label = String(value ?? "");
-  const match = options.find((option) => option.name === label);
-  return match?.id ?? options[0]?.id ?? fallback;
+  return [...seen.values()].sort((left, right) => left.id - right.id);
 };
 
 const periodHours = (row: PeriodRow) => {
@@ -185,7 +185,7 @@ export function WorkSchedulePanel({
 
   const translateDayOptions = useCallback(
     (days: EnumOption[]) =>
-      days.map((day) => ({
+      uniqueEnumOptions(days).map((day) => ({
         ...day,
         name: t(`hr.workSchedule.days.${DAY_I18N_KEYS[day.id] ?? "sunday"}`),
       })),
@@ -194,9 +194,11 @@ export function WorkSchedulePanel({
 
   const translatePeriodOptions = useCallback(
     (periods: EnumOption[]) =>
-      periods.map((period) => ({
+      uniqueEnumOptions(periods).map((period) => ({
         ...period,
-        name: t(`hr.workSchedule.periodTypes.${PERIOD_I18N_KEYS[period.id] ?? "work"}`),
+        name: t(
+          `hr.workSchedule.periodTypes.${PERIOD_I18N_KEYS[period.id] ?? "work"}`,
+        ),
       })),
     [t],
   );
@@ -347,8 +349,8 @@ export function WorkSchedulePanel({
                 localId: crypto.randomUUID(),
                 id: period.id,
                 name: period.name,
-                day: resolveEnumId(period.day, days),
-                period: resolveEnumId(period.period, periods, 1),
+                day: period.day,
+                period: period.period,
                 timeFrom: apiTimeToInputValue(period.timeFrom, DEFAULT_TIME_FROM),
                 timeTo: apiTimeToInputValue(period.timeTo, DEFAULT_TIME_TO),
               }))
@@ -387,10 +389,16 @@ export function WorkSchedulePanel({
   };
 
   const addPeriodRow = () => {
-    setPeriodRows((prev) => [
-      ...prev,
-      createPeriodRow(dayOptions, periodOptions, defaultPeriodName),
-    ]);
+    setPeriodRows((prev) => {
+      const usedDays = new Set(prev.map((row) => row.day));
+      const nextDay =
+        dayOptions.find((day) => !usedDays.has(day.id)) ??
+        dayOptions[prev.length % Math.max(dayOptions.length, 1)];
+      return [
+        ...prev,
+        createPeriodRow(dayOptions, periodOptions, defaultPeriodName, nextDay?.id),
+      ];
+    });
     setPeriodPage(Math.max(1, Math.ceil((periodRows.length + 1) / PERIOD_PAGE_SIZE)));
   };
 
@@ -477,9 +485,8 @@ export function WorkSchedulePanel({
     <TableToolbar
       addLabel={t("hr.workSchedule.addLabel")}
       onAddClick={() => openScheduleInUrl("new")}
-      addClassName="inline-flex shrink-0 items-center gap-2 rounded-lg bg-hr-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-hr-primary-hover"
     >
-        <div className="relative w-full max-w-md sm:min-w-[260px]">
+      <div className="relative w-full max-w-xs sm:min-w-[240px]">
         <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-hr-muted" />
         <input
           type="search"
@@ -552,8 +559,8 @@ export function WorkSchedulePanel({
             </button>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-hr-border">
-            <table className="min-w-[900px] w-full text-sm">
+          <div className="overflow-hidden rounded-lg border border-hr-border">
+            <table className="w-full table-fixed text-sm">
               <thead className="bg-hr-table-head text-hr-muted">
                 <tr>
                   <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>
@@ -588,20 +595,22 @@ export function WorkSchedulePanel({
                         onChange={(e) => updatePeriodRow(row.localId, { name: e.target.value })}
                         placeholder={defaultPeriodName}
                         aria-label={t("hr.workSchedule.form.periodName")}
-                        className="h-10 w-full min-w-[160px] rounded-lg border border-hr-border px-3 text-center outline-none focus:border-hr-primary"
+                        className="h-10 w-full min-w-0 rounded-lg border border-hr-border px-2 text-center outline-none focus:border-hr-primary"
                       />
                     </td>
                     <td className="px-3 py-3">
                       <select
-                        value={row.day}
+                        value={String(row.day)}
                         onChange={(e) =>
-                          updatePeriodRow(row.localId, { day: Number(e.target.value) })
+                          updatePeriodRow(row.localId, {
+                            day: resolveDayOfWeek(e.target.value),
+                          })
                         }
                         aria-label={t("hr.workSchedule.form.day")}
-                        className="h-10 w-full min-w-[120px] rounded-lg border border-hr-border bg-hr-surface px-3 text-center outline-none focus:border-hr-primary"
+                        className="h-10 w-full min-w-0 rounded-lg border border-hr-border bg-hr-surface px-2 text-center outline-none focus:border-hr-primary"
                       >
                         {dayOptions.map((day) => (
-                          <option key={day.id} value={day.id}>
+                          <option key={`day-${day.id}`} value={String(day.id)}>
                             {day.name}
                           </option>
                         ))}
@@ -609,15 +618,17 @@ export function WorkSchedulePanel({
                     </td>
                     <td className="px-3 py-3">
                       <select
-                        value={row.period}
+                        value={String(row.period)}
                         onChange={(e) =>
-                          updatePeriodRow(row.localId, { period: Number(e.target.value) })
+                          updatePeriodRow(row.localId, {
+                            period: resolvePeriodType(e.target.value),
+                          })
                         }
                         aria-label={t("hr.workSchedule.form.periodType")}
-                        className="h-10 w-full min-w-[120px] rounded-lg border border-hr-border bg-hr-surface px-3 text-center outline-none focus:border-hr-primary"
+                        className="h-10 w-full min-w-0 rounded-lg border border-hr-border bg-hr-surface px-2 text-center outline-none focus:border-hr-primary"
                       >
                         {periodOptions.map((period) => (
-                          <option key={period.id} value={period.id}>
+                          <option key={`period-${period.id}`} value={String(period.id)}>
                             {period.name}
                           </option>
                         ))}
@@ -636,7 +647,8 @@ export function WorkSchedulePanel({
                         onChange={(value) => updatePeriodRow(row.localId, { timeTo: value })}
                         aria-label={t("hr.workSchedule.form.toTime")}
                       />
-                    </td>                    <td className="px-3 py-3 text-center">
+                    </td>
+                    <td className="px-3 py-3 text-center">
                       <button
                         type="button"
                         onClick={() => removePeriodRow(row.localId)}
@@ -726,27 +738,44 @@ export function WorkSchedulePanel({
     <section className="rounded-xl border border-hr-border bg-hr-surface p-4 shadow-card sm:p-5">
       {listToolbar}
 
-      <div className="overflow-x-auto rounded-lg border border-hr-border">
-        <table className="min-w-[980px] w-full table-fixed text-sm">
+      <div className="overflow-hidden rounded-lg border border-hr-border">
+        <table className="w-full table-fixed border-collapse text-sm">
           <colgroup>
-            <col className="w-14" />
-            <col />
-            <col className="w-24" />
-            <col className="w-24" />
-            <col className="w-36" />
-            <col className="w-36" />
-            <col className="w-24" />
+            <col className="w-[6%]" />
+            <col className="w-[14%]" />
+            <col className="w-[20%]" />
+            <col className="w-[10%]" />
+            <col className="w-[12%]" />
+            <col className="w-[14%]" />
+            <col className="w-[14%]" />
+            <col className="w-[10%]" />
           </colgroup>
-          <thead className="bg-hr-table-head text-hr-muted">
+          <thead className="bg-hr-table-head text-xs text-hr-muted">
             <tr>
-              <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>
-              <th className="px-3 py-3 text-center font-medium">{t("table.columns.id")}</th>
-              <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.columns.scheduleName")}</th>
-              <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.columns.periodsCount")}</th>
-              <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.columns.workingDays")}</th>
-              <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.columns.weeklyHours")}</th>
-              <th className="px-3 py-3 text-center font-medium">{t("hr.workSchedule.columns.dailyHours")}</th>
-              <th className="px-3 py-3 text-center font-medium">{t("common.actions")}</th>
+              <th className="px-1.5 py-2.5 text-center font-medium">
+                {t("table.columns.index")}
+              </th>
+              <th className="px-1.5 py-2.5 text-center font-medium">
+                {t("table.columns.id")}
+              </th>
+              <th className="px-2 py-2.5 text-start font-medium">
+                {t("hr.workSchedule.columns.scheduleName")}
+              </th>
+              <th className="px-1.5 py-2.5 text-center font-medium">
+                {t("hr.workSchedule.columns.periodsCount")}
+              </th>
+              <th className="px-1.5 py-2.5 text-center font-medium">
+                {t("hr.workSchedule.columns.workingDays")}
+              </th>
+              <th className="px-1.5 py-2.5 text-center font-medium">
+                {t("hr.workSchedule.columns.weeklyHours")}
+              </th>
+              <th className="px-1.5 py-2.5 text-center font-medium">
+                {t("hr.workSchedule.columns.dailyHours")}
+              </th>
+              <th className="px-1.5 py-2.5 text-center font-medium">
+                {t("common.actions")}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -761,31 +790,35 @@ export function WorkSchedulePanel({
                 <tr
                   key={item.id}
                   className={[
-                    "cursor-pointer",
-                    idx % 2 ? "bg-hr-table-head" : "bg-hr-surface",
+                    "cursor-pointer align-middle",
+                    idx % 2 ? "bg-hr-table-alt" : "bg-hr-surface",
                     focusedScheduleId === item.id ? "ring-1 ring-inset ring-[#5BB8E8]" : "",
                   ].join(" ")}
                   onClick={() => openScheduleInUrl(item.id)}
                 >
-                  <td className="px-3 py-3 text-center text-hr-muted">
+                  <td className="px-2 py-2.5 text-center text-hr-muted">
                     <TableRowIndex index={idx} page={page} pageSize={PAGE_SIZE} />
                   </td>
-                  <td className="px-3 py-3 text-center">
+                  <td className="px-2 py-2.5 text-center">
                     <CopyableIdCell value={item.id} />
                   </td>
-                  <td className="truncate px-3 py-3 text-center font-medium text-hr-text">
+                  <td className="truncate px-3 py-2.5 text-start font-medium text-hr-text">
                     {item.name}
                   </td>
-                  <td className="px-3 py-3 text-center">{item.periodsCount}</td>
-                  <td className="px-3 py-3 text-center">{item.workingDaysCount}</td>
-                  <td className="px-3 py-3 text-center">
+                  <td className="whitespace-nowrap px-2 py-2.5 text-center">
+                    {item.periodsCount}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2.5 text-center">
+                    {item.workingDaysCount}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-2.5 text-center">
                     {formatHoursLabel(item.totalWorkingHoursWeekly, hoursSuffix)}
                   </td>
-                  <td className="px-3 py-3 text-center">
+                  <td className="whitespace-nowrap px-2 py-2.5 text-center">
                     {formatHoursLabel(item.averageWorkingHoursPerDay, hoursSuffix)}
                   </td>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center justify-center gap-2">
+                  <td className="px-2 py-2.5">
+                    <div className="flex items-center justify-center gap-3">
                       <button
                         type="button"
                         onClick={(event) => {

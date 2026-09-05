@@ -28,10 +28,9 @@ export function AccessManagementPage() {
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [stats, setStats] = useState({
-    membersCount: 0,
-    tasksCount: 0,
-    departmentsCount: 0,
-    pendingInvitationsCount: 0,
+    usersCount: 0,
+    rolesCount: 0,
+    permissionsCount: 0,
   });
 
   const loadStats = useCallback(async () => {

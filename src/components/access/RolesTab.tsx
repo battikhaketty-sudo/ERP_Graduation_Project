@@ -95,7 +95,7 @@ export function RolesTab({ search, onNotice, onDataChanged }: RolesTabProps) {
         />
 
         <div className={tableScrollClass}>
-          <table className="w-full min-w-[900px] border-collapse text-sm">
+          <table className="w-full table-fixed border-collapse text-sm">
             <thead className="bg-hr-table-head text-hr-muted">
               <tr>
                 <th className="px-3 py-3 text-center font-medium">{t("table.columns.index")}</th>

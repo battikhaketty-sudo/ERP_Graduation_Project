@@ -6,7 +6,6 @@ import { TableRowIndex } from "../ui/TableRowIndex";
 import { EntityLink } from "../ui/EntityLink";
 import { EmptyState } from "../EmptyState";
 import { ProjectStatusBadge } from "./ProjectBadges";
-import { getProjectListProgressPercent } from "./projectProgress";
 import type { Project } from "../../types/project";
 
 type ProjectsTableProps = {
@@ -22,20 +21,6 @@ type ProjectsTableProps = {
 };
 
 const PAGE_SIZE = 5;
-
-function ProgressCell({ percent }: { percent: number }) {
-  return (
-    <div className="mx-auto flex w-full max-w-[120px] flex-col items-center gap-1">
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-hr-border">
-        <div
-          className="h-full rounded-full bg-hr-primary transition-all"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-      <span className="text-[11px] font-medium text-hr-muted">{percent}%</span>
-    </div>
-  );
-}
 
 function isOverdue(endDate: string, status: Project["status"]) {
   if (!endDate || status === "completed") return false;
@@ -133,7 +118,6 @@ export function ProjectsTable({
       {/* Mobile: one card per project — what the user needs now */}
       <div className="space-y-3 p-3 md:hidden">
         {projects.map((project) => {
-          const percent = getProjectListProgressPercent(project);
           const overdue = isOverdue(project.endDate, project.status);
           return (
             <article
@@ -159,25 +143,17 @@ export function ProjectsTable({
               <button
                 type="button"
                 onClick={() => onProjectClick(project)}
-                className="mb-3 grid w-full grid-cols-2 gap-3 text-start text-xs"
+                className="mb-3 w-full text-start text-xs"
               >
-                <div>
-                  <p className="text-hr-muted">{t("projects.table.columns.progress")}</p>
-                  <div className="mt-1">
-                    <ProgressCell percent={percent} />
-                  </div>
-                </div>
-                <div>
-                  <p className="text-hr-muted">{t("projects.table.columns.endDate")}</p>
-                  <p
-                    className={[
-                      "mt-1 font-medium",
-                      overdue ? "text-red-500" : "text-hr-text",
-                    ].join(" ")}
-                  >
-                    {project.endDate || t("common.dash")}
-                  </p>
-                </div>
+                <p className="text-hr-muted">{t("projects.table.columns.endDate")}</p>
+                <p
+                  className={[
+                    "mt-1 font-medium",
+                    overdue ? "text-red-500" : "text-hr-text",
+                  ].join(" ")}
+                >
+                  {project.endDate || t("common.dash")}
+                </p>
               </button>
               <RowActions
                 project={project}
@@ -190,9 +166,9 @@ export function ProjectsTable({
         })}
       </div>
 
-      {/* Desktop table: name, status, progress, owner, deadline */}
-      <div className="hidden overflow-x-auto md:block">
-        <table className="w-full min-w-[720px] table-fixed border-collapse text-sm">
+      {/* Desktop table: name, status, owner, deadline */}
+      <div className="hidden overflow-hidden md:block">
+        <table className="w-full table-fixed border-collapse text-sm">
           <thead>
             <tr className="hr-table-head">
               <th className="w-12 px-3 py-3 text-center font-medium">
@@ -203,9 +179,6 @@ export function ProjectsTable({
               </th>
               <th className="w-[120px] px-3 py-3 text-center font-medium">
                 {t("projects.table.columns.status")}
-              </th>
-              <th className="w-[130px] px-3 py-3 text-center font-medium">
-                {t("projects.table.columns.progress")}
               </th>
               <th className="px-3 py-3 text-center font-medium">
                 {t("projects.table.columns.manager")}
@@ -238,9 +211,6 @@ export function ProjectsTable({
                   </td>
                   <td className="px-3 py-3 text-center">
                     <ProjectStatusBadge status={project.status} />
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    <ProgressCell percent={getProjectListProgressPercent(project)} />
                   </td>
                   <td className="truncate px-3 py-3 text-center">
                     <EntityLink to={employeePath(project.managerId)}>

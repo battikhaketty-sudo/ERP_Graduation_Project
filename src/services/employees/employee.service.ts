@@ -11,50 +11,11 @@ import {
 import { extractRowNumber } from "../../utils/tableRowNumber";
 import { buildEmployeeFormData } from "./employee.form";
 import { normalizeEmployee } from "./employee.mapper";
-import {
-  getArchivedEmployeeIds,
-  isLocallyArchived,
-} from "../../utils/archivedEmployeesStore";
 
-export const getEmployees = async (
-  page = 1,
-  limit = 10,
-  options?: { archived?: boolean; legalName?: string },
-) => {
-  const params: Record<string, string | number> = { Page: page, Limit: limit };
-  if (options?.legalName?.trim()) params.LegalName = options.legalName.trim();
-
-  const response = await api.get("/employees", { params });
-  const meta = unwrapPagedMeta(response.data);
-  let data = unwrapPage<Record<string, unknown>>(response.data).map((item) => {
-    const employee = normalizeEmployee(item);
-    return {
-      ...employee,
-      rowNumber: extractRowNumber(item),
-    };
-  });
-
-  if (options?.archived === true) {
-    data = data.filter(
-      (employee) => employee.isArchived || isLocallyArchived(employee.id),
-    );
-  } else {
-    const archivedIds = getArchivedEmployeeIds();
-    data = data.filter(
-      (employee) =>
-        !employee.isArchived &&
-        !archivedIds.has(employee.id) &&
-        !isLocallyArchived(employee.id),
-    );
-  }
-
-  return { data, totalPages: meta.totalPages, totalCount: meta.totalItems };
-};
-
-export const getEmployeeCount = async () => {
-  const { totalCount } = await getEmployees(1, 1);
-  return totalCount || 0;
-};
+const mapEmployeePage = (item: Record<string, unknown>): Employee => ({
+  ...normalizeEmployee(item),
+  rowNumber: extractRowNumber(item),
+});
 
 export const getEmployeeById = async (id: string) => {
   const response = await api.get(`/employees/${id}`);
@@ -62,6 +23,32 @@ export const getEmployeeById = async (id: string) => {
     unwrapEntity(response.data) as Record<string, unknown>,
     true,
   );
+};
+
+export const getEmployees = async (
+  page = 1,
+  limit = 10,
+  options?: { legalName?: string; archived?: boolean },
+) => {
+  const params: Record<string, string | number | boolean> = {
+    Page: page,
+    Limit: limit,
+  };
+  if (options?.legalName?.trim()) params.LegalName = options.legalName.trim();
+  if (options?.archived !== undefined) params.IsArchived = options.archived;
+
+  const response = await api.get("/employees", { params });
+  const meta = unwrapPagedMeta(response.data);
+  const data = unwrapPage<Record<string, unknown>>(response.data).map(
+    mapEmployeePage,
+  );
+
+  return { data, totalPages: meta.totalPages, totalCount: meta.totalItems };
+};
+
+export const getEmployeeCount = async () => {
+  const { totalCount } = await getEmployees(1, 1);
+  return totalCount || 0;
 };
 
 export const addEmployee = async (data: Omit<Employee, "id">) => {

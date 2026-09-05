@@ -3,6 +3,7 @@ import { usePreferences } from "../../context/PreferencesContext";
 import { useModalDismiss } from "../../hooks/useModalDismiss";
 import { useTranslation } from "../../i18n";
 import type { ProjectSection, SectionFormPayload } from "../../types/project";
+import { getThrownErrorMessage } from "../../utils/apiResponse";
 import { sanitizeIntegerInput } from "../../utils/inputConstraints";
 import {
   alertErrorClass,
@@ -72,9 +73,7 @@ export function AddSectionModal({
       onClose();
     } catch (err) {
       setError(
-        err && typeof err === "object" && "message" in err
-          ? String(err.message)
-          : t("projects.modals.addSection.errors.addFailed"),
+        getThrownErrorMessage(err, t("projects.modals.addSection.errors.addFailed")),
       );
     } finally {
       setSaving(false);

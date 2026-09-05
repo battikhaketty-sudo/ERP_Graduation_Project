@@ -60,6 +60,7 @@ type ProjectDetailViewProps = {
   onLeaveProject: () => void;
   /** Bump after sending an invite so the invitations tab reloads. */
   invitationsReloadKey?: number;
+  onRefresh?: () => Promise<void> | void;
 };
 
 type DetailTab =
@@ -86,6 +87,7 @@ export function ProjectDetailView({
   onDeleteMember,
   onLeaveProject,
   invitationsReloadKey = 0,
+  onRefresh,
 }: ProjectDetailViewProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -116,8 +118,8 @@ export function ProjectDetailView({
   const [invitationsLocalReload, setInvitationsLocalReload] = useState(0);
 
   const detailStats: ProjectDetailStats = useMemo(
-    () => buildProjectDetailStats(project, taskStats),
-    [project, taskStats],
+    () => buildProjectDetailStats(project),
+    [project],
   );
 
   const reloadMembers = useCallback(() => {
@@ -203,10 +205,6 @@ export function ProjectDetailView({
         setSelectedSection({
           ...match,
           ...fresh,
-          dependsOnSectionIds:
-            fresh.dependsOnSectionIds.length > 0
-              ? fresh.dependsOnSectionIds
-              : match.dependsOnSectionIds,
         });
       })
       .catch(() => {

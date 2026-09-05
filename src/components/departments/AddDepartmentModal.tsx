@@ -16,7 +16,7 @@ import { SearchableSelect } from "../ui/SearchableSelect";
 import {
   alertErrorClass,
   alertSuccessClass,
-  cancelBtnLgClass,
+  cancelBtnClass,
   modalBodyClass,
   modalFooterClass,
   ModalCloseButton,
@@ -239,7 +239,7 @@ export function AddDepartmentModal({
             type="submit"
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-hr-primary text-sm font-bold text-white transition hover:bg-hr-primary-hover disabled:opacity-60"
+            className="inline-flex h-11 min-w-[10rem] items-center justify-center gap-2 rounded-xl bg-hr-primary px-6 text-sm font-bold text-white transition hover:bg-hr-primary-hover disabled:opacity-60"
           >
             {isSubmitting && <Loader className="size-4 animate-spin" />}
             {isSubmitting ? t("departments.modal.submitting") : t("departments.modal.submit")}
@@ -248,7 +248,7 @@ export function AddDepartmentModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className={cancelBtnLgClass}
+            className={`${cancelBtnClass} inline-flex h-11 min-w-[10rem] items-center justify-center`}
           >
             {t("common.cancel")}
           </button>

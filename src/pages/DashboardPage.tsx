@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  AlertTriangle,
   Building2,
-  CheckCircle2,
   ClipboardList,
   FolderKanban,
   Plus,
@@ -11,8 +9,7 @@ import {
   Users,
 } from "lucide-react";
 import { useTranslation } from "../i18n";
-import { ROUTES } from "../constants/routes";
-import { projectTaskPath } from "../constants/entityPaths";
+import { hrDepartmentsPath, ROUTES } from "../constants/routes";
 import {
   getDashboardSummary,
   type DashboardSummary,
@@ -20,41 +17,26 @@ import {
 import { getThrownErrorMessage } from "../utils/apiResponse";
 import { StatusBanner } from "../components/ui/StatusBanner";
 import { cardSurfaceClass } from "../components/ui/formStyles";
-import { ProjectStatusBadge } from "../components/projects/ProjectBadges";
-import type { ProjectStatus } from "../types/project";
+import {
+  InvitationStatusBadge,
+  ProjectStatusBadge,
+} from "../components/projects/ProjectBadges";
 import { useProjectLabels } from "../hooks/useProjectLabels";
 
 const emptySummary = (): DashboardSummary => ({
-  activeProjects: 0,
-  overdueTasks: 0,
-  dueThisWeek: 0,
-  pendingFollowUps: 0,
-  completionRate: 0,
-  overdueProjects: 0,
-  projectProgress: [],
-  urgentTasks: [],
-  activities: [],
-  alerts: [],
+  projectsCount: 0,
+  tasksCount: 0,
+  employeesCount: 0,
+  invitationsCount: 0,
+  projects: [],
+  tasks: [],
+  invitations: [],
 });
-
-function ProgressBar({ value, overdue }: { value: number; overdue?: boolean }) {
-  return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-hr-border">
-      <div
-        className={[
-          "h-full rounded-full transition-all",
-          overdue ? "bg-red-500" : "bg-hr-primary",
-        ].join(" ")}
-        style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
-      />
-    </div>
-  );
-}
 
 export function DashboardPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { priorityLabel, projectStatusLabel } = useProjectLabels();
+  const { priorityLabel } = useProjectLabels();
   const [summary, setSummary] = useState<DashboardSummary>(emptySummary);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,36 +65,40 @@ export function DashboardPage() {
 
   const kpis = [
     {
-      key: "activeProjects",
-      label: t("dashboard.kpi.activeProjects"),
-      value: summary.activeProjects,
+      key: "projects",
+      label: t("dashboard.kpi.projects"),
+      value: summary.projectsCount,
       icon: FolderKanban,
       tone: "text-sky-600",
       ring: "border-sky-400",
+      href: ROUTES.projects,
     },
     {
-      key: "overdueTasks",
-      label: t("dashboard.kpi.overdueTasks"),
-      value: summary.overdueTasks,
-      icon: AlertTriangle,
-      tone: "text-red-500",
-      ring: "border-red-400",
-    },
-    {
-      key: "dueThisWeek",
-      label: t("dashboard.kpi.dueThisWeek"),
-      value: summary.dueThisWeek,
+      key: "tasks",
+      label: t("dashboard.kpi.tasks"),
+      value: summary.tasksCount,
       icon: ClipboardList,
       tone: "text-emerald-600",
       ring: "border-emerald-400",
+      href: ROUTES.projects,
     },
     {
-      key: "pendingFollowUps",
-      label: t("dashboard.kpi.pendingFollowUps"),
-      value: summary.pendingFollowUps,
+      key: "employees",
+      label: t("dashboard.kpi.employees"),
+      value: summary.employeesCount,
       icon: Users,
+      tone: "text-violet-600",
+      ring: "border-violet-400",
+      href: ROUTES.employees,
+    },
+    {
+      key: "invitations",
+      label: t("dashboard.kpi.invitations"),
+      value: summary.invitationsCount,
+      icon: ClipboardList,
       tone: "text-amber-600",
       ring: "border-amber-400",
+      href: `${ROUTES.projects}?tab=invitations`,
     },
   ];
 
@@ -145,7 +131,7 @@ export function DashboardPage() {
       key: "departments",
       label: t("dashboard.shortcuts.departments"),
       icon: FolderKanban,
-      onClick: () => navigate(ROUTES.departments),
+      onClick: () => navigate(hrDepartmentsPath),
     },
   ];
 
@@ -160,9 +146,6 @@ export function DashboardPage() {
             {t("dashboard.subtitle")}
           </p>
         </div>
-        <p className="rounded-xl bg-hr-surface px-3 py-2 text-xs font-medium text-hr-muted shadow-sm">
-          {t("dashboard.completionRate", { percent: summary.completionRate })}
-        </p>
       </div>
 
       {error ? (
@@ -177,48 +160,15 @@ export function DashboardPage() {
         </div>
       ) : (
         <div className="space-y-5">
-          {/* Alerts — what needs attention in 10 seconds */}
-          {summary.alerts.length ? (
-            <section className="flex flex-wrap gap-2">
-              {summary.alerts.includes("overdueProjects") ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600">
-                  <AlertTriangle className="size-3.5" />
-                  {t("dashboard.alerts.overdueProjects", {
-                    count: summary.overdueProjects,
-                  })}
-                </span>
-              ) : null}
-              {summary.alerts.includes("overdueTasks") ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600">
-                  <AlertTriangle className="size-3.5" />
-                  {t("dashboard.alerts.overdueTasks", {
-                    count: summary.overdueTasks,
-                  })}
-                </span>
-              ) : null}
-              {summary.alerts.includes("pendingInvites") ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-700">
-                  {t("dashboard.alerts.pendingInvites", {
-                    count: summary.pendingFollowUps,
-                  })}
-                </span>
-              ) : null}
-            </section>
-          ) : (
-            <section className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-700">
-              <CheckCircle2 className="size-3.5" />
-              {t("dashboard.alerts.allClear")}
-            </section>
-          )}
-
-          {/* KPI row */}
           <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {kpis.map((kpi) => {
               const Icon = kpi.icon;
               return (
-                <div
+                <button
                   key={kpi.key}
-                  className={`rounded-2xl border-b-4 bg-hr-surface p-4 shadow-card ${kpi.ring}`}
+                  type="button"
+                  onClick={() => navigate(kpi.href)}
+                  className={`rounded-2xl border-b-4 bg-hr-surface p-4 text-start shadow-card ${kpi.ring}`}
                 >
                   <div className="mb-2 flex items-center justify-between">
                     <Icon className={`size-5 ${kpi.tone}`} />
@@ -227,12 +177,11 @@ export function DashboardPage() {
                     {kpi.value}
                   </p>
                   <p className="mt-1 text-sm text-hr-muted">{kpi.label}</p>
-                </div>
+                </button>
               );
             })}
           </section>
 
-          {/* Quick shortcuts */}
           <section className={`${cardSurfaceClass} p-4`}>
             <h2 className="mb-3 text-sm font-bold text-hr-text">
               {t("dashboard.shortcuts.title")}
@@ -256,15 +205,14 @@ export function DashboardPage() {
           </section>
 
           <div className="grid gap-5 lg:grid-cols-2">
-            {/* Project progress — simple bars, not a heavy chart */}
             <section className={`${cardSurfaceClass} p-4 sm:p-5`}>
               <div className="mb-4 flex items-center justify-between gap-2">
                 <div>
                   <h2 className="text-sm font-bold text-hr-text">
-                    {t("dashboard.progress.title")}
+                    {t("dashboard.projects.title")}
                   </h2>
                   <p className="mt-0.5 text-xs text-hr-muted">
-                    {t("dashboard.progress.subtitle")}
+                    {t("dashboard.projects.subtitle")}
                   </p>
                 </div>
                 <Link
@@ -274,9 +222,9 @@ export function DashboardPage() {
                   {t("dashboard.viewAll")}
                 </Link>
               </div>
-              {summary.projectProgress.length ? (
-                <ul className="space-y-4">
-                  {summary.projectProgress.map((project) => (
+              {summary.projects.length ? (
+                <ul className="divide-y divide-hr-border">
+                  {summary.projects.map((project) => (
                     <li key={project.id}>
                       <button
                         type="button"
@@ -285,89 +233,20 @@ export function DashboardPage() {
                             `${ROUTES.projects}?id=${encodeURIComponent(project.id)}`,
                           )
                         }
-                        className="w-full text-start"
-                      >
-                        <div className="mb-1.5 flex items-center justify-between gap-2">
-                          <span className="truncate text-sm font-semibold text-hr-text">
-                            {project.name}
-                          </span>
-                          <span className="shrink-0 text-xs font-medium text-hr-muted">
-                            {project.progress}%
-                          </span>
-                        </div>
-                        <ProgressBar
-                          value={project.progress}
-                          overdue={project.overdue}
-                        />
-                        <div className="mt-1.5 flex items-center justify-between gap-2">
-                          <ProjectStatusBadge status={project.status} />
-                          <span
-                            className={[
-                              "text-[11px]",
-                              project.overdue
-                                ? "font-semibold text-red-500"
-                                : "text-hr-muted",
-                            ].join(" ")}
-                          >
-                            {project.endDate
-                              ? t("dashboard.progress.deadline", {
-                                  date: project.endDate,
-                                })
-                              : t("common.dash")}
-                          </span>
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="py-8 text-center text-sm text-hr-muted">
-                  {t("dashboard.progress.empty")}
-                </p>
-              )}
-            </section>
-
-            {/* Urgent tasks today */}
-            <section className={`${cardSurfaceClass} p-4 sm:p-5`}>
-              <div className="mb-4">
-                <h2 className="text-sm font-bold text-hr-text">
-                  {t("dashboard.urgent.title")}
-                </h2>
-                <p className="mt-0.5 text-xs text-hr-muted">
-                  {t("dashboard.urgent.subtitle")}
-                </p>
-              </div>
-              {summary.urgentTasks.length ? (
-                <ul className="divide-y divide-hr-border">
-                  {summary.urgentTasks.map((task) => (
-                    <li key={task.id}>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          navigate(
-                            projectTaskPath(task.projectId, task.id) ||
-                              `${ROUTES.projects}?id=${encodeURIComponent(task.projectId)}`,
-                          )
-                        }
                         className="flex w-full items-start justify-between gap-3 py-3 text-start transition hover:bg-hr-hover/60"
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-hr-text">
-                            {task.title}
+                            {project.name}
                           </p>
                           <p className="mt-0.5 truncate text-xs text-hr-muted">
-                            {task.projectName}
-                            {task.assigneeNames[0]
-                              ? ` · ${task.assigneeNames[0]}`
-                              : ""}
+                            {project.managerName}
                           </p>
                         </div>
                         <div className="shrink-0 text-end">
-                          <p className="text-[11px] font-medium text-hr-muted">
-                            {task.dueDate || t("common.dash")}
-                          </p>
-                          <p className="mt-0.5 text-[11px] font-semibold text-hr-primary">
-                            {priorityLabel(task.priority)}
+                          <ProjectStatusBadge status={project.status} />
+                          <p className="mt-1 text-[11px] text-hr-muted">
+                            {project.endDate || t("common.dash")}
                           </p>
                         </div>
                       </button>
@@ -376,61 +255,100 @@ export function DashboardPage() {
                 </ul>
               ) : (
                 <p className="py-8 text-center text-sm text-hr-muted">
-                  {t("dashboard.urgent.empty")}
+                  {t("dashboard.projects.empty")}
+                </p>
+              )}
+            </section>
+
+            <section className={`${cardSurfaceClass} p-4 sm:p-5`}>
+              <div className="mb-4">
+                <h2 className="text-sm font-bold text-hr-text">
+                  {t("dashboard.tasks.title")}
+                </h2>
+                <p className="mt-0.5 text-xs text-hr-muted">
+                  {t("dashboard.tasks.subtitle")}
+                </p>
+              </div>
+              {summary.tasks.length ? (
+                <ul className="divide-y divide-hr-border">
+                  {summary.tasks.map((task) => (
+                    <li
+                      key={task.id}
+                      className="flex items-start justify-between gap-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-hr-text">
+                          {task.title}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-hr-muted">
+                          {task.sectionName || t("common.dash")}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-end">
+                        <p className="text-[11px] font-medium text-hr-muted">
+                          {task.dueDate || t("common.dash")}
+                        </p>
+                        <p className="mt-0.5 text-[11px] font-semibold text-hr-primary">
+                          {priorityLabel(task.priority)}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="py-8 text-center text-sm text-hr-muted">
+                  {t("dashboard.tasks.empty")}
                 </p>
               )}
             </section>
           </div>
 
-          {/* Recent activity — compact list, not a table */}
           <section className={`${cardSurfaceClass} p-4 sm:p-5`}>
             <div className="mb-3 flex items-center justify-between gap-2">
               <div>
                 <h2 className="text-sm font-bold text-hr-text">
-                  {t("dashboard.activity.title")}
+                  {t("dashboard.invitations.title")}
                 </h2>
                 <p className="mt-0.5 text-xs text-hr-muted">
-                  {t("dashboard.activity.subtitle")}
+                  {t("dashboard.invitations.subtitle")}
                 </p>
               </div>
+              <Link
+                to={`${ROUTES.projects}?tab=invitations`}
+                className="text-xs font-semibold text-hr-primary hover:underline"
+              >
+                {t("dashboard.viewAll")}
+              </Link>
             </div>
-            {summary.activities.length ? (
+            {summary.invitations.length ? (
               <ul className="divide-y divide-hr-border">
-                {summary.activities.map((item) => (
-                  <li key={item.id}>
+                {summary.invitations.map((invitation) => (
+                  <li key={invitation.id}>
                     <button
                       type="button"
-                      onClick={() => item.href && navigate(item.href)}
+                      onClick={() =>
+                        navigate(
+                          `${ROUTES.projects}?id=${encodeURIComponent(invitation.projectId)}`,
+                        )
+                      }
                       className="flex w-full items-center justify-between gap-3 py-3 text-start transition hover:bg-hr-hover/60"
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-hr-text">
-                          {item.title}
+                          {invitation.projectName}
                         </p>
                         <p className="mt-0.5 truncate text-xs text-hr-muted">
-                          {item.kind === "invitation"
-                            ? t("dashboard.activity.invitation", {
-                                detail: item.detail,
-                              })
-                            : t("dashboard.activity.project", {
-                                detail: projectStatusLabel(
-                                  item.detail as ProjectStatus,
-                                ),
-                              })}
+                          {invitation.role}
                         </p>
                       </div>
-                      <span className="shrink-0 text-[11px] text-hr-muted">
-                        {item.at
-                          ? String(item.at).slice(0, 10)
-                          : t("common.dash")}
-                      </span>
+                      <InvitationStatusBadge status={invitation.status} />
                     </button>
                   </li>
                 ))}
               </ul>
             ) : (
               <p className="py-8 text-center text-sm text-hr-muted">
-                {t("dashboard.activity.empty")}
+                {t("dashboard.invitations.empty")}
               </p>
             )}
           </section>
