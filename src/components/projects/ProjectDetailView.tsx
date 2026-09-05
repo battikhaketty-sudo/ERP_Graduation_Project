@@ -87,7 +87,7 @@ export function ProjectDetailView({
   onDeleteMember,
   onLeaveProject,
   invitationsReloadKey = 0,
-  onRefresh,
+  onRefresh: _onRefresh,
 }: ProjectDetailViewProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();

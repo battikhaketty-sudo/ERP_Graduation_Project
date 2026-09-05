@@ -202,11 +202,11 @@ export const layoutSectionDependencyGraph = (
     layers.forEach((layer) => {
       const scored = layer.map((id) => {
         const section = byId.get(id);
-        const parents = (section?.dependsOnSectionIds ?? []).filter((depId) =>
+        const parents = (section?.dependsOnSectionIds ?? []).filter((depId: string) =>
           yOf.has(depId),
         );
         const desired = parents.length
-          ? parents.reduce((sum, depId) => sum + (yOf.get(depId) ?? 0), 0) /
+          ? parents.reduce((sum: number, depId: string) => sum + (yOf.get(depId) ?? 0), 0) /
             parents.length
           : (yOf.get(id) ?? 0);
         return { id, desired };
@@ -225,14 +225,14 @@ export const layoutSectionDependencyGraph = (
   }
 
   sections.forEach((section) => {
-    const parents = (section.dependsOnSectionIds ?? []).filter((id) =>
+    const parents = (section.dependsOnSectionIds ?? []).filter((id: string) =>
       yOf.has(id),
     );
     if (parents.length < 2) return;
-    const rounded = parents.map((id) => Math.round((yOf.get(id) ?? 0) / 10));
+    const rounded = parents.map((id: string) => Math.round((yOf.get(id) ?? 0) / 10));
     if (new Set(rounded).size === parents.length) {
       const avg =
-        parents.reduce((sum, id) => sum + (yOf.get(id) ?? 0), 0) /
+        parents.reduce((sum: number, id: string) => sum + (yOf.get(id) ?? 0), 0) /
         parents.length;
       yOf.set(section.id, avg);
       return;
@@ -241,7 +241,7 @@ export const layoutSectionDependencyGraph = (
     const ys = spread(ordered.length);
     ordered.forEach((id, index) => yOf.set(id, ys[index] ?? 0));
     const avg =
-      ordered.reduce((sum, id) => sum + (yOf.get(id) ?? 0), 0) / ordered.length;
+      ordered.reduce((sum: number, id: string) => sum + (yOf.get(id) ?? 0), 0) / ordered.length;
     yOf.set(section.id, avg);
   });
 
@@ -260,11 +260,11 @@ export const layoutSectionDependencyGraph = (
     const id = layer[0];
     const section = byId.get(id);
     if (!section) return;
-    const parents = (section.dependsOnSectionIds ?? []).filter((depId) =>
+    const parents = (section.dependsOnSectionIds ?? []).filter((depId: string) =>
       layerOf.has(depId),
     );
     const hasSkip = parents.some(
-      (depId) => (layerOf.get(id) ?? 0) - (layerOf.get(depId) ?? 0) > 1,
+      (depId: string) => (layerOf.get(id) ?? 0) - (layerOf.get(depId) ?? 0) > 1,
     );
     if (!hasSkip || Math.abs(yOf.get(id) ?? 0) > 8) return;
     yOf.set(id, LAYER_GAP_Y * 0.35);
@@ -379,7 +379,7 @@ export const buildAutoSectionTerminalEdges = (
   const edges: Array<{ id: string; source: string; target: string }> = [];
 
   sections.forEach((section) => {
-    const deps = (section.dependsOnSectionIds ?? []).filter((id) => ids.has(id));
+    const deps = (section.dependsOnSectionIds ?? []).filter((id: string) => ids.has(id));
     if (!deps.length) {
       edges.push({
         id: `${startId}->${section.id}`,

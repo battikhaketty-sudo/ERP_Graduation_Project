@@ -54,6 +54,7 @@ export type ProjectSection = {
    * A project may have more than one final section.
    */
   isFinalSection: boolean;
+  dependsOnSectionIds?: string[];
 };
 
 export type ProjectMember = {
@@ -207,6 +208,8 @@ export type ProjectStats = {
 
 export type TaskStats = {
   total: number;
+  inProgress?: number;
+  completed?: number;
   late: number;
 };
 

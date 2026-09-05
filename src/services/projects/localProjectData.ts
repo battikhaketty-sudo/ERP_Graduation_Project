@@ -1,5 +1,10 @@
 /** Client cache for GET /projects/{id}/sections leak filtering. */
 export const PROJECT_SECTION_IDS_KEY = "hr_project_section_ids";
+export const PROJECT_TASK_TRANSITIONS_KEY = "hr_project_task_transitions";
+export const PROJECT_TASKS_KEY = "hr_project_tasks";
+export const PROJECT_FLOW_ANCHORS_KEY = "hr_project_flow_anchors";
+export const PROJECT_SECTION_DEPS_KEY = "hr_project_section_deps";
+export const PROJECT_SECTION_EDGE_LABELS_KEY = "hr_project_section_edge_labels";
 
 /** Clear project client caches (call on logout). */
 export const clearAllLocalProjectData = () => {

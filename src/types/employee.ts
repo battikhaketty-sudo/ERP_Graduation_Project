@@ -72,3 +72,5 @@ export type Employee = {
 };
 
 export type EmployeeFormData = Omit<Employee, "id">;
+
+export type WorkRole = "Test" | "Front_end" | "UI_UX" | "Back_end";

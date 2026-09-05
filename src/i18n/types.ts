@@ -20,4 +20,4 @@ type Paths<T, D extends number = 5> = [D] extends [never]
 
 type Prev = [never, 0, 1, 2, 3, 4, 5];
 
-export type TranslationKey = Paths<TranslationTree>;
+export type TranslationKey = Paths<TranslationTree> | (string & {});

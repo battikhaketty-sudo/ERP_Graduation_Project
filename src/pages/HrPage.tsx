@@ -779,7 +779,7 @@ export function HrPage() {
     if (!name) return;
 
     try {
-      const created = await addContractType(name);
+      await addContractType(name);
       setContracts(await getContractTypes());
       setApiNotice(null);
       showToast(t("hr.contracts.toasts.addSuccess"), "success");

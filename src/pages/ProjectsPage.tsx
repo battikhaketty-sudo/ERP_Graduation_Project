@@ -563,7 +563,9 @@ export function ProjectsPage() {
           }}
           onDeleteMember={(member) => void handleDeleteMember(member)}
           invitationsReloadKey={invitationsReloadKey}
-          onRefresh={() => refreshSelectedProject(selectedProject.id)}
+          onRefresh={async () => {
+            await refreshSelectedProject(selectedProject.id);
+          }}
         />
 
         <AddProjectModal
